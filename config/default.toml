@@ -1,2 +1,18 @@
-# 检测规则阈值配置。所有阈值都放在这里，代码中不要写死。
-# 具体条目在实现规则时（下一步）再添加。
+# 检测规则阈值。只用于标注“候选复核项”，不作为职业标准或作弊判定。
+[analysis]
+# 补枪窗口：同一回合内的秒数。
+trade_window_seconds = 5.0
+
+# 移动开火候选线：相邻 tick 区间平均速度 / 当前 max_speed。
+# 34% 是字段调研中引用的既有指标起点；需要产品样本校准。
+stop_speed_ratio = 0.34
+crouch_amount_threshold = 0.5
+
+# 闪光报告的有效时长门槛，短擦边闪仍会保留在原始字段，不做严重程度判断。
+min_flash_duration_seconds = 0.5
+
+# 决定性瞬间跳转目标提前的秒数。
+pre_event_seconds = 3.0
+
+# 至少达到此样本数才生成重复模式提示。
+min_pattern_samples = 3
