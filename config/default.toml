@@ -1,2 +1,13 @@
 # 检测规则阈值配置。所有阈值都放在这里，代码中不要写死。
-# 具体条目在实现规则时（下一步）再添加。
+# 用户配置（--config）只需写要覆盖的条目，其余沿用这里的默认值。
+
+[parsing]
+# 支持的 tick rate（由 game_time 估算）；估算结果不在其中时报错
+supported_tick_rates = [64, 128]
+# 目标玩家数据完整性：回合进行中（冻结期结束 → 回合结束）坐标非空的 tick 占比下限
+# 低于此值说明 demoparser2 没读到该玩家（docs/fields.md 陷阱 12），直接报错
+min_target_coverage = 0.95
+# 其他玩家低于此占比时只记警告（影响与其相关的指标）
+min_other_coverage = 0.95
+# demo 中没有 mp_buytime 设置时使用的购买时间（秒）；官方竞技模式为 20
+default_buytime_seconds = 20

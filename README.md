@@ -4,9 +4,10 @@ CS2 demo 赛后复盘分析工具：找出玩家的决定性瞬间，用数据�
 
 - 产品定位与待定事项：[docs/product.md](docs/product.md)
 - demo 字段调研（哪些数据准确、哪些只能近似）：[docs/fields.md](docs/fields.md)
+- 解析层的输出格式：[docs/parsing.md](docs/parsing.md)
 - 开发约定与架构原则：[CLAUDE.md](CLAUDE.md)
 
-当前阶段：字段调研完成，分析流程尚未实现（`analyze` 命令目前只解压 demo）。
+当前阶段：解析层完成（回合、击杀、伤害、开枪、致盲、投掷物、经济与背包都已与 demo 中的独立数据核对，覆盖 ESL、5E、完美共 24 场），决定性瞬间识别与 AI 诊断尚未实现。
 
 ## 环境搭建
 
@@ -32,10 +33,11 @@ uv pip install -e ".[dev]"
 # 3a. 安装修复版 demoparser2（方式一：使用下载的 wheel）
 uv pip install --reinstall --no-deps path\to\demoparser2-0.42.0-cp312-cp312-win_amd64.whl
 
-# 3b. 或者（方式二：本地编译）
-#   - Rust：安装 https://rustup.rs 的 rustup-init.exe；它提示安装 Visual Studio C++ Build Tools 时选择同意
-#   - protoc：从 https://github.com/protocolbuffers/protobuf/releases 下载 protoc-*-win64.zip，
-#     解压后把其中的 bin 目录加入 PATH
+# 3b. 或者（方式二：本地编译）。用 winget 安装工具链（Build Tools 有几个 GB，需要较长时间）：
+winget install --id Microsoft.VisualStudio.2022.BuildTools --exact --override "--quiet --wait --norestart --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended"
+winget install --id Rustlang.Rustup --exact
+winget install --id Google.Protobuf --exact
+#   安装后重新打开 PowerShell（让 PATH 生效），再编译：
 python scripts\build_demoparser.py --install
 
 # 4. 验证
@@ -71,6 +73,14 @@ python scripts/verify_semantics.py data/demos/xxx.dem
 
 # 压缩包内有多个 demo 时，用 --demo-member 指定
 python scripts/explore_demo.py data/demos/xxx.rar --demo-member some-map.dem
+
+# 核对解析结果（回合、记分板、致盲、开枪）。新来源的 demo 先跑这个
+python scripts/check_parsing.py data/demos/xxx.dem
+
+# 解析并输出目标玩家每回合的击杀和死亡（分析流程开发中）
+python -m cs2coach analyze data/demos/xxx.dem --player <SteamID64>
 ```
+
+运行 `pytest` 时设置环境变量 `CS2COACH_TEST_DEMO=<.dem 路径>`，会额外用这个 demo 跑端到端测试。
 
 运行脚本时建议明确写出 demo 路径：不写路径时，脚本会取 `data/demos/` 下按文件名排序的第一个文件。

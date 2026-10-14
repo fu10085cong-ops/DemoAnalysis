@@ -168,6 +168,10 @@ def find_rar_tool() -> tuple[str, str] | None:
     if tar and _is_bsdtar(tar):
         return "bsdtar", tar
     if sys.platform == "win32":
+        # Git Bash 等环境会把 GNU tar 排在 PATH 前面，系统自带的 bsdtar 要按绝对路径找
+        system_tar = Path(os.environ.get("SystemRoot", r"C:\Windows")) / "System32" / "tar.exe"
+        if system_tar.is_file() and _is_bsdtar(str(system_tar)):
+            return "bsdtar", str(system_tar)
         for base in (os.environ.get("ProgramFiles"), os.environ.get("ProgramFiles(x86)")):
             if base and (exe := Path(base) / "7-Zip" / "7z.exe").is_file():
                 return "7z", str(exe)

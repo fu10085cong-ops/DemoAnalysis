@@ -30,6 +30,7 @@
 ## 工作方式
 - **不要凭记忆假设 demoparser2 的字段名和事件名**，以实际解析结果为准；不确定就先写脚本验证
 - 字段调研结论（哪些数据准确、哪些只能近似）见 `docs/fields.md`；复现方法：`scripts/explore_demo.py`、`scripts/verify_semantics.py`
+- 解析层（`parsing/match.py`）改动后，或拿到新来源的 demo 时，跑 `scripts/check_parsing.py` 与 demo 中的独立数据逐项核对
 - 分步推进，每一步完成后停下来等用户确认；遇到重要的设计取舍时，先列出选项和利弊，再动手
 
 ## demoparser2 关键陷阱（详见 docs/fields.md §0、§1）

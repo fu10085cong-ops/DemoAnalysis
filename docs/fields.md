@@ -32,6 +32,12 @@
 | 12 | **demoparser2 0.42.0（PyPI 版）的 bug：实体编号 > 2047 的角色读不出数据（已确认并已解决）**。C（完美）中 10 人里有 2 人的角色实体字段全部为空（坐标、视角、血量、背包、`flash_duration`；`is_alive` 显示为 False），事件附带的 `user_X` 等也为空，但在 CS2 游戏中回放时他们**正常出现**（产品负责人实测）。根因：0.42.0 把实体句柄按 `& 0x7FF`（11 位）解码，而 CS2 的网络句柄有 14 位编号（`& 0x3FFF`），编号超过 2047 的角色被映射到错误的实体（2397→349、2981→933，都差 2048）。完美服务器上的实体编号普遍偏高，其他来源都在 230 以内。**武器句柄同样按 `0x7FF` 解码**，实体编号偏高时背包和手持武器也可能被读错。上游 [issue #362](https://github.com/LaihoE/demoparser/issues/362) 已在主分支修复，但截至 2026-10-14 尚未发布到 PyPI | **用 `scripts/build_demoparser.py` 从锁定的上游提交编译修复版**（demoparser `45ca85ae`；GameTracking-CS2 锁定在 `10f3693c`，因为更新的 .proto 无法编译）。回归验证：A、B（三张图）、D 的 explore/verify 结果除 `usercmd_*` 的非空率略有上升外完全一致；C 的两名玩家数据恢复。官方发布修复版后改回 PyPI 版本。解析层仍要逐个玩家检查数据完整性 |
 | 13 | 完美 demo 事件里的 `user_name` 前面**多一个空格**（如 `" 某玩家"`） | 一律按 steamid 匹配，名字只用于显示（去掉首尾空格） |
 | 14 | 5E 有热身回合：tick 35 的 `round_start`/`round_end`（winner/reason 为空）和 tick 163 的 `round_freeze_end` 都发生在热身期；`round_officially_ended` 有 40 条（有重复） | 回合切分要过滤 `is_warmup_period`；不依赖 `round_officially_ended` |
+| 15 | **5E 的 demo 在比赛前后都有额外内容**：比赛开始前有带击杀的热身（`is_warmup_period` 为 True，记分板在第 1 回合开始时清零）；最后一回合结束后服务器还在录制，可能还有击杀，记分板会把它算进去 | 事件只保留属于某个回合的；记分板对照取**最后一回合的 last_tick**，不能取 demo 最后一个 tick |
+| 16 | **玩家掉线后由 bot 顶替，队友死后可以接管这个 bot**（5E 样本）。bot 在 `parse_player_info` 里的 steamid 是很小的数（如 11），逐 tick 表里没有它的行；击杀 bot 的 `player_death` 中受害者 steamid 为空。接管期间 `CCSPlayerController.m_bControllingBot` 为 True，此时：玩家自己的坐标停在死亡位置、`is_alive` 为 False；击杀事件记在**玩家**名下，记分板却记在 **bot** 名下；这期间的 `weapon_fire` 对不上 `fire_bullets` | 名单只保留真实的 SteamID64；击杀表保留"受害者未知"的记录（`victim_unknown`）；接管 bot 期间的击杀和开枪分别标记 `by_bot_control`、`controlling_bot`，**不参与对该玩家的分析** |
+| 17 | **同一 tick 可能有两颗闪同时爆开**（5E 1 次、完美 2 次）。一个人可能同时被两颗闪致盲，`player_blind` 会各记一条（时长略有不同），而 `flash_duration` 只有一个值，§2.2 的重建方法分不出是哪颗闪的。按距离取最近的那颗也不可靠：完美样本中 4 名受害者有 2 名判错（其中 1 人只被较远的那颗致盲） | **有 `player_blind` 时直接用它**（Valve、完美、5E）；只有 ESL 用重建，同 tick 多颗闪时投掷者留空并标记 `thrower_ambiguous`，宁可少算也不记错 |
+| 18 | **冻结期内的自杀**（weapon 为 `world`，推测是控制台 `kill` 或换队）：完美 3 次、5E 2 次。记分板 `deaths_total` 当时都会加 1，但**完美会在约 25 秒后扣回**（仍在冻结期内），5E 不扣 | 击杀表标记 `in_freeze_time`，不参与分析；核对记分板时两种口径都接受 |
+| 19 | **`player_death` 的武器名不统一**：5E 的 13 个样本中有 5 个带平台皮肤前缀（`5e_tyloo2025_ak47`、`5ExTEAMSPIRIT_awp`、`5e_fazesr2026004_knife_karambit`）；完美的 8 个样本中有 5 个带后缀（`ak47_vip`、`m4a1_silencer_txz08`、`awp_ace_vip`）。`player_hurt` 和 `weapon_fire`（去掉 `weapon_` 前缀后）的写法是干净的 | `parsing/weapons.py` 按 `_` 切开、取其中最长的已知武器名。核对：击杀的武器与致命一击 `player_hurt` 的武器逐条一致 |
+| 20 | **5E 的 `player_hurt` 把 USP-S 记成 `hkp2000`、M4A1-S 记成 `m4a1`**（共用栏位的基础型号）；同一 demo 的 `player_death`、`weapon_fire` 是对的，完美的 `player_hurt` 也是对的。已用攻击者当时的 `active_weapon_name` 确认 | 伤害表的武器名是基础型号、而攻击者手持的是同栏位另一把枪时，改成手持的那把 |
 | 11 | `parse_grenades()` 返回所有投掷物实体的逐 tick 轨迹（A 有 51.7 万行，B 有 252 万行），其中还混有 `CWeaponGlock`、`CKnife` 等非投掷物 | MVP 不用它 |
 
 ## 1. 不同来源的差异（重要）
@@ -83,7 +89,7 @@
 
 | 检测项 | 实现方式 | 字段 | 状态 |
 |---|---|---|---|
-| 闪光致盲敌人和队友的次数与时长 | **从 tick 字段重建（两种 demo 通用）**：在每个 `flashbang_detonate` 的 tick t，`flash_duration[t] > 0` 且与 `flash_duration[t-1]` 不同的玩家，就是被这颗闪致盲的人，投掷者取 `flashbang_detonate.user_steamid`，敌我按 tick t 时的 `team_num` 判断 | `flashbang_detonate`；tick 字段 `flash_duration`、`team_num` | ✅ |
+| 闪光致盲敌人和队友的次数与时长 | **有 `player_blind` 时直接用它；没有时（ESL）从 tick 字段重建**（同 tick 多颗闪的情况见陷阱 17）：在每个 `flashbang_detonate` 的 tick t，`flash_duration[t] > 0` 且与 `flash_duration[t-1]` 不同的玩家，就是被这颗闪致盲的人，投掷者取 `flashbang_detonate.user_steamid`，敌我按 tick t 时的 `team_num` 判断 | `flashbang_detonate`；tick 字段 `flash_duration`、`team_num` | ✅ |
 |  | **重建方法已用三种来源的 `player_blind` 验证**：A 为 72/72，D 为 84/84，没有多也没有少，投掷者全部一致，时长误差 < 0.0001s。C 为 252/252（用 PyPI 0.42.0 时只有 199 条对上，漏掉的 53 条都属于陷阱 12 中读不出数据的两名玩家；当时曾误判为"被致盲者已死亡"，已更正）。B 重建出 204 条 | `player_blind`（A、C、D 有）只作对照 | ✅ |
 | 死亡时身上未用的道具 | 取 `player_death` 的 tick - 1 时的 `inventory`，筛出投掷物名称 | `inventory`（如 `['M9 Bayonet','Glock-18','Smoke Grenade']`） | ✅（取 tick-1） |
 | 道具伤害 | 筛选 `player_hurt` 中 weapon 为 `hegrenade`、`inferno`、`smokegrenade` 的记录，按 tick 时的阵营区分敌我 | `player_hurt` | ✅ |
@@ -99,6 +105,8 @@
 | 自己阵亡后是否被队友补回 | 反过来：目标玩家被 K 击杀后，检查 N 秒内是否有队友击杀了 K | 同上 | ✅ |
 
 `player_death` 还有 `assister_steamid`、`assistedflash`、`headshot`、`thrusmoke`、`attackerblind`、`penetrated`、`distance`（两种 demo 都有）。
+
+**助攻的口径**：`assister_steamid` 可能是**受害者的队友**（他打过自己人），记分板 `assists_total` 不算这种助攻；而队友误杀中，**敌方**的助攻者照样算。规则是"助攻者与受害者阵营不同（按击杀 tick 取阵营）才算"。按这个规则统计，ESL 三张图 30 名玩家的击杀、死亡、助攻与记分板全部一致（`scripts/check_parsing.py`）。
 
 ### 2.4 经济
 
@@ -229,6 +237,37 @@
 
 可以进一步挖掘的：B 有 `usercmd_mouse_dx/dy`（原始鼠标输入），可以直接观察下拉动作。但鼠标位移与视角变化的比例取决于玩家的灵敏度，尚未验证。
 
-## 10. 局限
+## 10. 解析层的核对结果
+
+`parsing/match.py` 的 `parse_match` 把整场比赛的逐 tick 玩家状态一次读入内存（每张图约 10–15 秒，逐 tick 表约 120 MB；输出格式见 `docs/parsing.md`），所有事件表都按 tick 附加了阵营和回合号。`scripts/check_parsing.py` 把它的结果与 demo 中的独立来源逐项对照，拿到新来源的 demo 时先跑一遍：
+
+| | m1-cache | m2-inferno | m3-dust2（含加时） |
+|---|---|---|---|
+| 回合切分 vs `round_end` | 21/21 | 20/20 | 28/28 |
+| 击杀/死亡/助攻 vs 记分板 | 10/10 人 | 10/10 人 | 10/10 人 |
+| 枪械 `weapon_fire` 对上 `fire_bullets` | 2440/2440 | 2729/2729 | 3071/3071 |
+| 重建的致盲条数（与 §7 一致） | 204 | 256 | 567 |
+
+**更多来源（2026-10-14）**：
+
+| 来源 | demo 数 | 全部一致 | 说明 |
+|---|---|---|---|
+| 5E | 13（mirage、dust2、inferno） | 13 | 处理了陷阱 15–18 后全部一致；其中 12 个有 `player_blind`，重建的致盲与之逐条一致（同 tick 多颗闪的投掷者除外，见陷阱 17） |
+| 完美 | 8（inferno、dust2、mirage、ancient；天梯和约战） | 8 | 用 PyPI 版 demoparser2 时 7 个触发陷阱 12（每场 1–9 名玩家的坐标为 0%）；换成修复版后玩家数据全部恢复。另外处理了陷阱 17、18 |
+| ESL | 3 | 3 | 修改后复查，仍然全部一致 |
+
+**第二轮补充（经济、背包、投掷物、武器名）**，24 个 demo 的结果：
+
+| 核对项 | 结果 |
+|---|---|
+| 击杀的武器 vs 致命一击 `player_hurt` 的武器（规范化后，陷阱 19、20） | 全部一致；每场有 0–5 次击杀找不到对应的致命伤害（如摔死、炸弹） |
+| 购买结束：推算公式 vs `buytime_ended` | 20 个有该事件的 demo 全部逐回合一致；ESL 和 1 个 5E 没有该事件，用推算 |
+| 经济快照 | 没有缺失。存活玩家 `balance = start_balance - cash_spent_this_round` 的占比 82%–98%（购买期间有击杀奖励、队友给钱等，不是错误） |
+| 死亡前一 tick 手持的武器在背包里 | 3691/3691 |
+| 投掷物生效次数 vs 投出次数 | 闪、烟、雷基本 1:1（个别 ±1，发生在回合交界）；燃烧弹生效略少（没起火的燃烧瓶）。烟和火有 2%–8% 配不上结束事件，推测是回合结束时还在燃烧 / 未散去，被直接清除 |
+
+Valve 匹配的样本不在当前机器上，尚未用解析层核对。
+
+## 11. 局限
 
 - 已验证 4 个 demo：1 个 Valve 匹配，3 个同一场 ESL 赛事。FACEIT 和 128 tick 的 demo 还没验证。
