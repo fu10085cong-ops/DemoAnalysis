@@ -1,0 +1,4 @@
+* text=auto eol=lf
+*.dem binary
+*.rar binary
+*.whl binary

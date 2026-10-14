@@ -1,0 +1,23 @@
+# demo 文件与分析输出
+data/
+
+# 本地编译的 demoparser2（scripts/build_demoparser.py 生成，与平台相关）
+vendor/wheels/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+.pytest_cache/
+build/
+dist/
+
+# 环境与密钥
+.env
+
+# 编辑器 / 系统
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
