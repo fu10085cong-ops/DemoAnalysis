@@ -69,7 +69,7 @@ player = match.require_player(steamid, cfg["parsing"]["min_target_coverage"])  #
 | `by_bot_control`、`victim_bot_control` | 击杀者 / 受害者当时在接管 bot，**不参与对该玩家的分析** |
 
 #### `damages`：伤害
-`tick`、`round`、`attacker`、`victim`、`weapon`、`dmg_health`、`dmg_armor`、`health`（受伤后剩余血量，0 即致命一击）、`hitgroup`、`attacker_team_num`、`victim_team_num`。道具伤害的 `weapon` 为 `hegrenade`、`inferno`；摔伤为空字符串。
+`tick`、`round`、`attacker`、`victim`、`weapon`、`dmg_health`（武器原始伤害，不受剩余血量限制，满血被 AWP 爆头可达 400+）、`dmg_effective`（实际扣掉的血量，统计伤害时用这个）、`dmg_armor`、`health`（受伤后剩余血量，0 即致命一击）、`hitgroup`、`attacker_team_num`、`victim_team_num`。道具伤害的 `weapon` 为 `hegrenade`、`inferno`；摔伤为空字符串。5E 的原始事件把 USP-S、M4A1-S 记成同栏位的基础型号，已按攻击者手持的武器纠正（fields.md 陷阱 20）。
 
 #### `shots`：开枪与投掷（所有 `weapon_fire`，含刀）
 `tick`、`round`、`steamid`、`weapon`、`is_gun`、`is_grenade`、`controlling_bot`；枪械另有 `fire_bullets` 的字段：`aim_pitch`、`aim_yaw`（子弹实际方向，已叠加后坐力，不含随机散布）、`inaccuracy`、`spread`、`recoil_index`（连射第几发，从 0 开始）。

@@ -52,6 +52,7 @@ RULE_PROPS = {
     _GR + "m_eRoundWinReason": "win_reason",
 }
 _CATEGORICAL = ["active_weapon_name", "last_place_name"]
+_BOOL_PROPS = ["is_alive", "is_airborne", "is_walking", "is_scoped", "controlling_bot"]
 
 
 class DemoParseError(Exception):
@@ -79,6 +80,7 @@ class MatchData:
     warnings: list[str] = field(default_factory=list)
     _spans: dict[int, tuple[int, int]] = field(default_factory=dict, repr=False)
     _bits: dict[int, int] = field(default_factory=dict, repr=False)
+    _tick_arr: np.ndarray | None = field(default=None, repr=False)  # ticks["tick"] 的缓存，按 (steamid, tick) 排序
 
     def round_of(self, tick: int) -> Round | None:
         i = bisect.bisect_right([r.start_tick for r in self.rounds], tick) - 1
@@ -89,20 +91,24 @@ class MatchData:
     def round(self, number: int) -> Round | None:
         return next((r for r in self.rounds if r.number == number), None)
 
+    def _range(self, steamid: int, start: int | None, end: int | None) -> tuple[int, int]:
+        """steamid 在 [start, end] 内的行号范围（ticks 表中的位置）。"""
+        a, b = self._spans.get(int(steamid), (0, 0))
+        if self._tick_arr is None:
+            self._tick_arr = self.ticks["tick"].to_numpy()
+        t = self._tick_arr[a:b]
+        lo = a if start is None else a + int(np.searchsorted(t, start, side="left"))
+        hi = b if end is None else a + int(np.searchsorted(t, end, side="right"))
+        return lo, hi
+
     def player_ticks(self, steamid: int, start: int | None = None, end: int | None = None) -> pd.DataFrame:
         """某个玩家在 [start, end] 内的逐 tick 状态（含两端）。"""
-        a, b = self._spans.get(int(steamid), (0, 0))
-        sub = self.ticks.iloc[a:b]
-        if start is None and end is None:
-            return sub
-        t = sub["tick"].to_numpy()
-        lo = 0 if start is None else int(np.searchsorted(t, start, side="left"))
-        hi = len(t) if end is None else int(np.searchsorted(t, end, side="right"))
-        return sub.iloc[lo:hi]
+        lo, hi = self._range(steamid, start, end)
+        return self.ticks.iloc[lo:hi]
 
     def state_at(self, steamid: int, tick: int) -> pd.Series | None:
-        rows = self.player_ticks(steamid, tick, tick)
-        return rows.iloc[0] if len(rows) else None
+        lo, hi = self._range(steamid, tick, tick)
+        return self.ticks.iloc[lo] if hi > lo else None
 
     def spotted_bit(self, steamid: int) -> int | None:
         return self._bits.get(int(steamid))
@@ -236,7 +242,10 @@ def estimate_tick_rate(rules: pd.DataFrame) -> int:
 
 def _player_ticks(raw: pd.DataFrame, tick_rate: int) -> pd.DataFrame:
     df = raw[["tick", "steamid", *PLAYER_PROPS]].rename(columns=_PLAYER_RENAME)
-    df["controlling_bot"] = df["controlling_bot"].fillna(False).astype(bool)
+    # 玩家掉线期间这些行的字段全部为空（5E、完美样本）。数值保留 NaN；布尔字段补 False，
+    # 否则整列会变成 object，混入 None
+    for c in _BOOL_PROPS:
+        df[c] = df[c].fillna(False).astype(bool)
     df["steamid"] = df["steamid"].astype("int64")
     df = df[df["steamid"] != 0].sort_values(["steamid", "tick"], kind="stable").reset_index(drop=True)
     for c in _CATEGORICAL:
@@ -381,7 +390,7 @@ def build_kills(ev: pd.DataFrame, match: MatchData) -> pd.DataFrame:
 def build_damages(ev: pd.DataFrame, match: MatchData) -> pd.DataFrame:
     cols = ["tick", "attacker", "victim", "weapon", "dmg_health", "dmg_armor", "health", "hitgroup"]
     if ev.empty:
-        return pd.DataFrame(columns=cols + ["round"])
+        return pd.DataFrame(columns=cols + ["round", "dmg_effective"])
     df = pd.DataFrame({
         "tick": ev["tick"].astype("int64"),
         "attacker": to_steamid(ev["attacker_steamid"]),
@@ -396,7 +405,29 @@ def build_damages(ev: pd.DataFrame, match: MatchData) -> pd.DataFrame:
     df = attach_state(df, match, "victim", "victim_", ["team_num"])
     df = attach_state(df, match, "attacker", "attacker_", ["team_num", "active_weapon_name"])
     df["weapon"] = [fix_slot_sibling(w, a) for w, a in zip(df["weapon"], df.pop("attacker_active_weapon_name"))]
-    return _finish(df, match)
+    df = attach_state(df, match, "victim", "victim_prev_", ["health"], tick_offset=-1)
+    df = _finish(df, match)
+    df["dmg_effective"] = effective_damage(df)
+    return df.drop(columns=["victim_prev_health"])
+
+
+def effective_damage(df: pd.DataFrame) -> list[int]:
+    """实际扣掉的血量。dmg_health 是武器的原始伤害，不受剩余血量限制（满血被 AWP 爆头记 400+）。
+
+    同一回合内按事件顺序，用受害者上一次受伤后的剩余血量（第一次受伤取前一 tick 的血量）减去这次受伤后的血量。
+    df 须已按 tick 排序，且有 round、victim、health、dmg_health、victim_prev_health 列。
+    """
+    prev: dict[tuple[int, int], int] = {}
+    out = []
+    for rnd, victim, health, dmg, before in zip(df["round"], df["victim"], df["health"], df["dmg_health"],
+                                                df["victim_prev_health"]):
+        key = (int(rnd), int(victim))
+        start = prev.get(key)
+        if start is None:
+            start = int(before) if pd.notna(before) else int(health) + int(dmg)
+        out.append(max(0, min(int(dmg), start - int(health))))
+        prev[key] = int(health)
+    return out
 
 
 _BULLET_COLS = {

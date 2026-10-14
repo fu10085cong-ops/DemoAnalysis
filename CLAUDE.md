@@ -18,7 +18,9 @@
 2. **程序负责确定性的部分，AI 负责判断和表达**：解析、找出决定性瞬间、计算指标、与职业基准对比都由程序完成，结果可复核。AI 通过工具查数据，再判断轻重、做分析并写成报告。AI 的每个结论都必须引用具体的回合和 tick，程序会检查这些引用是否真实存在
 3. **每条结论都必须能回溯到具体的回合和 tick**
 4. **AI 模型可替换**：分析引擎与具体模型解耦（以后会按用户档位通过路由中转调用不同模型）。便宜的模型也要能用好，所以尽量事先算好，工具设计要简单、不容易用错
-5. 为后续阶段预留扩展空间，但**现在不要实现**：回合胜率模型（用胜率变化 ΔWP 定位关键失误）、基于地图几何的视野计算与信息集重建、账号与计费服务端
+5. 为后续阶段预留扩展空间，但**现在不要实现**：回合胜率模型（用胜率变化 ΔWP 定位关键失误）、信息集重建、账号与计费服务端
+6. **基于地图几何的视野计算已提前到 MVP**（2026-10-14 产品负责人决定）：Time to Damage、Crosshair Placement 等指标需要准确的"第一次看见敌人"时刻，雷达 spotted 精度不够（docs/fields.md §8、docs/metrics_research.md）
+7. **枪法指标沿用 Leetify 的名称和口径**（Time to Damage、Crosshair Placement、Counter-Strafing、Spray Accuracy、Spotted Accuracy、Headshot Accuracy），定义见 docs/metrics_research.md；与 Leetify 不同的地方必须在 docs/features.md 中写明
 
 ## 技术约定
 - Python 3.11+，demoparser2 解析，pydantic 定义数据结构，pytest 测试，**每个指标计算和决定性瞬间识别都要有单元测试**
@@ -31,6 +33,7 @@
 - **不要凭记忆假设 demoparser2 的字段名和事件名**，以实际解析结果为准；不确定就先写脚本验证
 - 字段调研结论（哪些数据准确、哪些只能近似）见 `docs/fields.md`；复现方法：`scripts/explore_demo.py`、`scripts/verify_semantics.py`
 - 解析层（`parsing/match.py`）改动后，或拿到新来源的 demo 时，跑 `scripts/check_parsing.py` 与 demo 中的独立数据逐项核对
+- 解析层输出格式见 `docs/parsing.md`；决定性瞬间与各指标的定义、准确度见 `docs/features.md`
 - 分步推进，每一步完成后停下来等用户确认；遇到重要的设计取舍时，先列出选项和利弊，再动手
 
 ## demoparser2 关键陷阱（详见 docs/fields.md §0、§1）

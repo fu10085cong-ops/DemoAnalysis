@@ -7,7 +7,7 @@ CS2 demo 赛后复盘分析工具：找出玩家的决定性瞬间，用数据�
 - 解析层的输出格式：[docs/parsing.md](docs/parsing.md)
 - 开发约定与架构原则：[CLAUDE.md](CLAUDE.md)
 
-当前阶段：解析层完成（回合、击杀、伤害、开枪、致盲、投掷物、经济与背包都已与 demo 中的独立数据核对，覆盖 ESL、5E、完美共 24 场），决定性瞬间识别与 AI 诊断尚未实现。
+当前阶段：解析层完成（回合、击杀、伤害、开枪、致盲、投掷物、经济与背包都已与 demo 中的独立数据核对，覆盖 ESL、5E、完美共 24 场）；决定性瞬间与指标已实现，包括基于地图几何的视野计算和 Leetify 口径的枪法统计（见 [docs/features.md](docs/features.md)）；AI 诊断尚未实现。
 
 ## 环境搭建
 
@@ -77,9 +77,11 @@ python scripts/explore_demo.py data/demos/xxx.rar --demo-member some-map.dem
 # 核对解析结果（回合、记分板、致盲、开枪）。新来源的 demo 先跑这个
 python scripts/check_parsing.py data/demos/xxx.dem
 
-# 解析并输出目标玩家每回合的击杀和死亡（分析流程开发中）
+# 找出目标玩家的决定性瞬间及指标，结果写入 data/output/（AI 诊断开发中）
 python -m cs2coach analyze data/demos/xxx.dem --player <SteamID64>
 ```
+
+视野计算首次运行时会从 GitHub 下载 awpy-data 的地图网格（约 150 MB，缓存在 `~/.awpy`）；下载不了时视野相关指标留空，其余分析照常。
 
 运行 `pytest` 时设置环境变量 `CS2COACH_TEST_DEMO=<.dem 路径>`，会额外用这个 demo 跑端到端测试。
 

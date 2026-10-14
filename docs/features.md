@@ -1,0 +1,122 @@
+# 特征层：决定性瞬间与指标
+
+> 入口：`features/moments.py` 的 `find_moments(match, steamid, cfg) -> MatchMoments`；数据结构见 `features/models.py`。
+> 所有阈值在 `config/default.toml` 的 `[moments]`、`[counter_strafe]`、`[aim]`、`[aim_stats]`、`[visibility]` 段。
+> 命令行：`python -m cs2coach analyze <demo> --player <steamid64>` 打印列表，并把完整结果写入 `data/output/<demo>_<steamid>_moments.json`。
+
+## 决定性瞬间
+
+**全部列出，由 AI 判断轻重**（2026-10-14 产品负责人确定）。程序只打确定性的标签。
+
+| 类型 | 范围 |
+|---|---|
+| 击杀 `kill` | 目标玩家的击杀（含误杀队友、击杀 bot，分别打标签） |
+| 死亡 `death` | 目标玩家的死亡（含摔死、炸死） |
+| 关键助攻 `assist` | 记分板算数的助攻中，**闪光助攻**，或本回合对被击杀者造成的实际伤害 ≥ `key_assist_min_damage` |
+
+不参与分析、列在 `excluded` 里的：接管 bot 时的击杀 / 死亡、冻结期内的自杀、自杀。
+
+编号 `id`：`R<回合>-kill<n>`、`R<回合>-death`、`R<回合>-assist<n>`，一场比赛内唯一。AI 的结论引用 `id`（或回合 + tick），程序会检查是否存在。
+
+## 每个瞬间的内容
+
+### 局势 `context`（瞬间前一 tick）
+双方存活人数、回合已进行的秒数、是否已下包、双方购买结束时的装备价值、双方手持武器、交火开始前双方血量、击杀距离、双方所在区域。
+
+### 交火 `engagement`（击杀、死亡）
+**范围**（动态回溯，2026-10-14 确定）：从瞬间往前，把**双方互相瞄准的开枪**和**互相造成的伤害**串起来，相邻两次间隔不超过 `engagement_gap_seconds` 就算同一次交火，整段不超过 `engagement_max_seconds`，也不早于目标玩家本回合上一次击杀。
+
+**开枪打向谁**（近似，`features/aim.py`）：取开枪前一 tick 的存活敌人，子弹方向与"眼睛 → 身体中心"夹角最小的那个；超过 `max_target_angle` 视为没瞄准任何人。命中了对方的那一枪一律算。用命中子弹核对，5 个样本 demo 中 96%–99% 判对。
+
+| 指标 | 定义 | 准确度 |
+|---|---|---|
+| `shots_fired` / `shots_hit` / `first_shot_hit` | 这次交火中瞄准对手的开枪数、同一 tick 对对手造成伤害的开枪数、第一枪是否命中 | 命中准确；开枪数依赖目标判断（近似） |
+| `damage_dealt` / `damage_taken` | 这次交火中双方实际扣掉的血量（不是武器原始伤害） | 准确（与记分板总伤害相差约 1%，原因未查明，见下） |
+| `first_shot_lead_s` | 对手第一枪的 tick 减去自己第一枪的 tick（秒）；正数表示自己先开枪 | 近似（依赖目标判断） |
+| 急停 `shots[].stopped` | 开枪时水平速度 < 武器最高速度 × `accurate_speed_ratio`（34%，Leetify 口径）；开镜按开镜速度 | 速度准确（坐标差分）；各武器最高速度已用样本核对 |
+| `counter_strafe_shots` / `counter_strafe_stopped` / `first_shot_stopped` | 急停统计，不含下蹲（`duck_amount ≥ crouch_duck_amount`）和空中的射击 | 同上 |
+| `shots[].aim_error_deg` | 子弹方向与对手身体中心的夹角 | 近似（眼睛、身体高度是估计值） |
+
+### 视野（击杀、死亡的 `engagement` 中，2026-10-14 起）
+"看见"用地图几何判断（`features/visibility.py`）：awpy 的地图碰撞网格做射线检测，从眼睛到对手身上的 6 个点（头、胸口及左右两侧、膝、脚），任一条没被挡住、且对手在屏幕范围内（水平 ±53°、垂直 ±37°），就算看见。不用雷达 spotted（约 0.5 秒更新一次，`docs/fields.md` §8）。
+
+| 指标 | 定义 | 准确度 |
+|---|---|---|
+| `player_first_seen_tick` / `opponent_first_seen_tick` | 双方各自这段连续可见期的起点（往前最多回溯 3 秒；中断 ≤ 2 tick 不算中断） | 几何视线准确（普通击杀 94%–99% 判为可见）；不含烟雾、门等动态遮挡 |
+| `seen_first_lead_s` | 对手看见自己的时刻减去自己看见对手的时刻；正数表示自己先看见 | 同上 |
+| `time_to_damage_s`（Leetify 同名） | 看见对手 → 第一次对他造成伤害 | 同上 |
+| `seen_to_first_shot_s` / `first_shot_to_damage_s` / `damage_to_kill_s` | Time to Damage 拆成三段（Leetify 没有）：看见 → 第一枪（负数表示看见前就开枪）、第一枪 → 第一次命中、第一次命中 → 击杀 | 同上 |
+| `crosshair_placement_deg`（Leetify 同名） | 从看见对手到第一次造成伤害，准星转过的角度 | 视角数据准确 |
+| `visibility_note` | 上述指标为空的原因：`not_seen`（事件发生时看不到对手，如穿墙、背身）、`seen_before_window`（回溯 3 秒内一直可见，起点未知）、`smoke`、`no_map_data` | — |
+
+**烟雾**：CS2 的烟是体素，会被雷和子弹打散，无法精确建模。只用来排除："第一次看见"那一刻视线经过烟雾附近（球体近似，半径 144、展开后 1–18 秒有效）时，起点可能偏早，不计算 Time to Damage、Crosshair Placement。校准：被排除的 3%–5% 样本 Time to Damage 中位数 0.9–1.4 秒，保留样本的中位数几乎不变。
+
+**核对**（6 个 demo、736 次击杀）：雷达 spotted 比我们的"第一次看见"晚 0.23–0.28 秒（中位数），85%–88% 在 0–0.55 秒之间，与雷达的更新周期一致。击杀者的 Time to Damage 中位数：ESL 职业 375 ms、5E 469 ms、完美 516 ms（Leetify：400–500 ms 已经"非常快"）。
+
+### 补枪 `trade`
+- 死亡：击杀者是否在 `trade_window_seconds` 内被队友击杀（`traded`、`traded_by`、`trade_delay_s`）；死亡时最近存活队友的直线距离。
+- 击杀：这名对手是否在窗口内刚击杀了自己的队友（`is_trade_kill`）。
+
+### 死亡状态 `death`
+- `unused_grenades`：死亡前一 tick 背包里的投掷物。
+- `blinded`：死亡时仍处于致盲中，且这次致盲时长 ≥ `min_blind_seconds`；附剩余时长、投掷者、是否队友闪的。
+
+### 跳转
+`jump_command` = `demo_gototick <交火开始前 jump_lead_seconds 秒的 tick>`。**命令写法尚未在 CS2 中实测。**
+
+## 整场枪法统计 `aim_stats`（Leetify 口径）
+
+名称和口径沿用 Leetify（`docs/metrics_research.md`），样本数低于 `min_samples` 时数值为空。
+
+| 指标 | 定义 | 与 Leetify 的差别 |
+|---|---|---|
+| `time_to_damage_ms` | 每次遭遇（同一回合对同一敌人，伤害间隔超过 3 秒算新的一次）从看见到第一次伤害，≥ 1 秒的排除，取中位数 | "看见"用地图几何；按遭遇统计 |
+| `crosshair_placement_deg` | 同上的遭遇中，从看见到第一次伤害准星转过的角度，取中位数 | 同上 |
+| `counter_strafing_pct` | 步枪、看见敌人时、未下蹲的射击中，速度 < 34% 武器最高速度的比例 | "看见"用地图几何 |
+| `spray_accuracy_pct` | 步枪连续 3 发以上（相邻两枪间隔 ≤ 0.2 秒）的扫射中，看见敌人时开的枪命中敌人的比例 | 同上；"连续"的间隔是我们定的 |
+| `spotted_accuracy_pct` | 看见敌人时开枪的命中率（同一 tick 对敌人造成伤害即命中） | 同上 |
+| `headshot_accuracy_pct` | 枪械命中中命中头部的比例，不含 AWP | 无 |
+
+步枪：AK-47、M4A4、M4A1-S、Galil、FAMAS、AUG、SG 553。
+
+**全量核对**（2026-10-15，24 场 demo 的全部 240 人次，无报错，每人六项都有数值）。每人一场的数值，按来源取中位数（括号内为四分位 p25–p75）：
+
+| | ESL 职业（30） | 5E（130） | 完美（80） |
+|---|---|---|---|
+| Time to Damage | **375 ms**（354–406） | 484 ms（453–523） | 500 ms（453–564） |
+| Crosshair Placement | **3.9°**（2.8–4.6） | 4.5°（3.6–5.7） | 5.0°（3.9–6.5） |
+| Spotted Accuracy | **34.3%** | 29.6% | 28.4% |
+| Headshot Accuracy | **21.2%** | 18.8% | 14.8% |
+| Spray Accuracy | 33.6% | 31.8% | 29.6% |
+| Counter-Strafing | 81.1% | 79.2% | 80.0% |
+
+职业选手六项都更好。Time to Damage、Crosshair Placement 区分度最明显（四分位几乎不重叠）；Counter-Strafing、Spray Accuracy 在单场层面差别很小，需要多场汇总才能看出趋势。每人每场的样本数中位数：遭遇约 20 次、看见敌人时的射击约 170 发、步枪急停射击约 70 发。
+
+决定性瞬间中的交火有约 79% 能算出视野指标；其余：事件发生时看不到对手 9.5%（穿墙、背身等）、回溯范围内一直可见 4.7%、首次看见时经过烟雾 7.0%。
+
+## 标签
+
+| 标签 | 含义 |
+|---|---|
+| `opening_kill` / `opening_death` | 本回合第一个击杀 |
+| `trade_kill` / `traded` / `not_traded` | 补枪 / 被补回 / 未被补 |
+| `clutch_1vN` | 瞬间发生时自己是队伍最后一人，对面 N 人 |
+| `man_advantage` / `man_disadvantage` | 瞬间前存活人数多于 / 少于对面 |
+| `post_plant` | 已下包 |
+| `after_round_end` | 胜负判定之后 |
+| `shot_first` / `opponent_shot_first` / `shot_same_tick` | 交火中谁先开枪（近似） |
+| `no_shots_fired` | 死亡前这次交火中没有朝对手开枪 |
+| `died_blind` / `unused_utility` | 被闪致死 / 死时道具没用 |
+| `saw_opponent_first` / `opponent_saw_first` | 谁先看见谁（地图几何视野） |
+| `died_without_seeing` | 死亡时看不到击杀者（被背身、侧身或穿点打死） |
+| `flash_assist` / `damage_assist` | 关键助攻的类型 |
+| `teamkill` / `victim_is_bot` / `world_damage` | 误杀队友 / 击杀 bot / 非玩家伤害致死 |
+
+## 漏补 `missed_trades`
+不是目标玩家自己的击杀 / 死亡，单独列出：队友阵亡时目标玩家存活、与阵亡队友的直线距离 ≤ `missed_trade_max_distance`、窗口内在雷达上发现过击杀者，但没在窗口内击杀他。距离不考虑视线，"发现"是雷达状态（约 0.5 秒更新一次），**只是近似**，给 AI 作参考。
+
+## 已知局限
+- 实际扣血的总和比记分板的伤害统计（`m_iDamage`）系统性地低约 1%（每人每场 7–27 点）。试过几种算法都对不上，原因未查明；单次交火的伤害按事件中的剩余血量计算，是自洽的。
+- 交火中开枪的目标、谁先开枪、瞄准偏差、视野都基于估计的眼睛 / 身体高度，没有 hitbox。
+- 视野只有静态地图几何：烟雾只用于排除，门、可破坏物体不考虑；awpy-data 的地图网格版本可能与 demo 录制时的地图版本不同（输出中记录了 `visibility_data_version`）。
+- 与职业基准的对比还没做（MVP 不含完整基准库）。

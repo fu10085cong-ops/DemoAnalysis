@@ -245,3 +245,22 @@ def test_build_bomb():
     b = build_bomb(events, make_match())
     assert b["event"].tolist() == ["planted", "exploded"] and b["round"].tolist() == [1, 1]
     assert build_bomb({}, make_match()).empty
+
+
+def test_player_ticks_bool_columns_survive_disconnected_rows():
+    # 玩家掉线期间这一行所有字段为空（5E、完美样本）：布尔列不能因此变成 object
+    from cs2coach.parsing.match import PLAYER_PROPS, _player_ticks
+
+    rows = []
+    for t, alive in ((1, True), (2, None)):
+        row = {p: None for p in PLAYER_PROPS}
+        row.update({"tick": t, "steamid": A, "X": 0.0 if alive else np.nan, "Y": 0.0 if alive else np.nan})
+        if alive:
+            row.update({"is_alive": True, "is_airborne": False, "is_walking": True, "is_scoped": False,
+                        "CCSPlayerController.m_bControllingBot": False})
+        rows.append(row)
+    df = _player_ticks(pd.DataFrame(rows), 64)
+    for c in ("is_alive", "is_airborne", "is_walking", "is_scoped", "controlling_bot"):
+        assert df[c].dtype == bool, c
+    assert df["is_walking"].tolist() == [True, False]
+    assert np.isnan(df["X"].iloc[1])

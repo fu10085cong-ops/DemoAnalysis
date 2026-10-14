@@ -1,0 +1,199 @@
+"""特征层的输出：决定性瞬间及其指标。
+
+这些结构会原样交给 AI（通过工具层），所以字段名要自解释，单位写在名字或注释里。
+每个瞬间都有 round 和 tick，AI 的结论必须引用它们，程序会检查引用是否真实存在。
+"""
+
+from __future__ import annotations
+
+from typing import Literal
+
+from pydantic import BaseModel
+
+MomentKind = Literal["kill", "death", "assist"]
+
+
+class Shot(BaseModel):
+    """交火中目标玩家的一发枪械射击。"""
+
+    tick: int
+    weapon: str
+    speed: float | None  # 开枪时的水平速度（u/s）
+    max_speed: float | None  # 该武器（开镜时按开镜速度）的最高速度；未知武器为 None
+    speed_ratio: float | None  # speed / max_speed
+    stopped: bool | None  # speed_ratio 低于阈值（已停稳）；未知武器为 None
+    crouched: bool
+    airborne: bool
+    scoped: bool
+    recoil_index: float | None  # 连射第几发，从 0 开始
+    hit: bool  # 同一 tick 对这次交火的对手造成了伤害
+    # 子弹方向与"眼睛 → 对手身体中心"的夹角（度，近似，见 features/aim.py）；没判定为瞄准对手时为 None
+    aim_error_deg: float | None = None
+
+
+class Engagement(BaseModel):
+    """一次交火：从击杀 / 死亡往前，双方互相瞄准的开枪和互相伤害连续发生的那一段。
+
+    开枪的目标按子弹方向判断（近似，命中子弹上 96%–99% 判对），所以开枪数、谁先开枪都是近似值。
+    """
+
+    start_tick: int
+    end_tick: int
+    duration_s: float
+    shots: list[Shot]
+    shots_fired: int
+    shots_hit: int
+    first_shot_hit: bool | None  # 没开枪时为 None
+    damage_dealt: int  # 这次交火中对对手造成的伤害
+    damage_taken: int  # 这次交火中受到对手的伤害
+    player_first_shot_tick: int | None
+    opponent_first_shot_tick: int | None
+    # 正数表示目标玩家先开枪（领先的秒数），负数表示对手先开枪；有一方没开枪时为 None
+    first_shot_lead_s: float | None
+    # 急停统计：不含下蹲、空中的射击（Leetify 口径）
+    counter_strafe_shots: int
+    counter_strafe_stopped: int
+    first_shot_stopped: bool | None
+    # —— 视野（地图几何射线检测，见 features/visibility.py）——
+    player_first_seen_tick: int | None = None  # 目标玩家第一次看见对手（这段连续可见期的起点）
+    opponent_first_seen_tick: int | None = None  # 对手第一次看见目标玩家
+    seen_first_lead_s: float | None = None  # 正数表示目标玩家先看见对手（领先的秒数）
+    # Leetify 同名指标：从看见对手到第一次对他造成伤害；对手的同一指标
+    time_to_damage_s: float | None = None
+    opponent_time_to_damage_s: float | None = None
+    # Time to Damage 拆成三段（Leetify 没有）：看见 → 第一枪（负数表示看见之前就开枪，如预瞄穿点）、
+    # 第一枪 → 第一次命中、第一次命中 → 击杀（只有击杀）
+    seen_to_first_shot_s: float | None = None
+    first_shot_to_damage_s: float | None = None
+    damage_to_kill_s: float | None = None
+    # Leetify 同名指标：从看见对手到第一次造成伤害，准星转过的角度（度）
+    crosshair_placement_deg: float | None = None
+    # 视野指标为空的原因：no_map_data / not_seen（事件发生时看不到对手）/ seen_before_window（回溯范围内一直可见）/ smoke
+    visibility_note: str | None = None
+
+
+class Context(BaseModel):
+    """瞬间发生时的局势（取瞬间前一个 tick）。"""
+
+    side: Literal["T", "CT"]
+    alive_own: int  # 含目标玩家
+    alive_enemy: int
+    round_time_s: float  # 冻结期结束后经过的秒数
+    bomb_planted: bool
+    own_equip_value: int | None  # 购买时间结束时的装备价值
+    opponent_equip_value: int | None
+    own_weapon: str | None  # 手持武器（显示名）
+    opponent_weapon: str | None
+    own_health_before: int | None  # 交火开始前的血量
+    opponent_health_before: int | None
+    distance: float | None  # 击杀距离（游戏单位，事件原始值）
+    place: str | None
+    opponent_place: str | None
+
+
+class Trade(BaseModel):
+    # 死亡：击杀者是否在窗口内被队友击杀
+    traded: bool | None = None
+    traded_by: int | None = None
+    trade_delay_s: float | None = None
+    nearest_teammate_distance: float | None = None  # 死亡时最近的存活队友距离（游戏单位）
+    # 击杀：是否替刚被这名对手击杀的队友报仇
+    is_trade_kill: bool | None = None
+    avenged_teammate: int | None = None
+    avenge_delay_s: float | None = None
+
+
+class DeathState(BaseModel):
+    unused_grenades: list[str]  # 死亡时身上没用掉的投掷物（规范名，重复保留）
+    blinded: bool  # 死亡时处于致盲中（致盲时长不低于阈值）
+    blind_remaining_s: float | None
+    blinded_by: int | None
+    blinded_by_teammate: bool | None
+
+
+class AssistInfo(BaseModel):
+    flash_assist: bool
+    damage_to_victim: int  # 本回合对被击杀者造成的伤害
+    killer: int | None
+
+
+class Moment(BaseModel):
+    id: str  # 如 "R5-death"、"R5-kill2"，在一场比赛内唯一
+    kind: MomentKind
+    round: int
+    tick: int
+    player: int
+    opponent: int | None  # 击杀：受害者；死亡：击杀者；助攻：受害者。bot 或世界伤害时为 None
+    opponent_name: str | None
+    weapon: str  # 击杀所用武器（规范名）
+    headshot: bool
+    through_smoke: bool
+    wallbang: bool
+    noscope: bool
+    attacker_blind: bool  # 击杀者当时处于致盲中（事件原始字段）
+    tags: list[str]
+    context: Context
+    engagement: Engagement | None  # 助攻、世界伤害没有交火
+    trade: Trade | None
+    death: DeathState | None  # 只有死亡有
+    assist: AssistInfo | None  # 只有助攻有
+    jump_tick: int
+    jump_command: str  # CS2 控制台命令，跳到交火开始前几秒（写法待在游戏内实测）
+
+
+class MissedTrade(BaseModel):
+    """队友阵亡时目标玩家存活且在附近、窗口内在雷达上发现过击杀者，但没在窗口内击杀他。
+
+    距离是直线距离；"发现"是雷达状态（约 0.5 秒更新一次，docs/fields.md §8），都只是近似。
+    """
+
+    round: int
+    tick: int
+    teammate: int
+    killer: int
+    distance: float  # 目标玩家与阵亡队友的直线距离（游戏单位）
+    killer_traded_by_other: bool  # 击杀者在窗口内被别的队友击杀
+
+
+class Excluded(BaseModel):
+    round: int
+    tick: int
+    kind: str
+    reason: str
+
+
+class AimStats(BaseModel):
+    """整场的枪法统计，名称和口径沿用 Leetify（docs/metrics_research.md），不同之处写在每个字段后面。
+
+    "看见敌人"一律用地图几何视野（Leetify 用自己的位置重放，方法未公开）。样本数不足时数值为 None。
+    """
+
+    time_to_damage_ms: float | None  # 中位数；≥ 1 秒的样本排除（Leetify 口径）
+    time_to_damage_samples: int
+    crosshair_placement_deg: float | None  # 中位数
+    crosshair_placement_samples: int
+    counter_strafing_pct: float | None  # 步枪、看见敌人时、未下蹲的射击中，速度 < 34% 最高速度的比例
+    counter_strafing_shots: int
+    spray_accuracy_pct: float | None  # 步枪连续 3 发以上的扫射中，命中敌人的比例（只算看见敌人时）
+    spray_shots: int
+    spotted_accuracy_pct: float | None  # 看见敌人时的开枪命中率
+    spotted_shots: int
+    headshot_accuracy_pct: float | None  # 命中头部 ÷ 命中总数（枪械，不含 AWP）
+    hits: int
+
+
+class MatchMoments(BaseModel):
+    demo: str
+    map_name: str
+    tick_rate: int
+    player: int
+    player_name: str
+    rounds: int
+    moments: list[Moment]
+    # 队友阵亡、自己就在附近且存活、却没在窗口内补枪（不是自己的击杀 / 死亡，单独列出）
+    missed_trades: list[MissedTrade]
+    excluded: list[Excluded]  # 不参与分析的记录（接管 bot、冻结期自杀等）及原因
+    aim_stats: AimStats | None = None
+    # 视野计算用的 awpy-data 版本；为 None 时视野相关指标全部为空，原因见 visibility_unavailable
+    visibility_data_version: str | None = None
+    visibility_unavailable: str | None = None

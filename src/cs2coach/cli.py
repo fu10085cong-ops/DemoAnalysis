@@ -51,21 +51,18 @@ def _analyze(args: argparse.Namespace) -> int:
 
     for w in match.warnings:
         print(f"警告: {w}", file=sys.stderr)
-    _print_summary(match, player.steamid)
-    print("\n决定性瞬间识别与诊断尚未实现（当前处于第二步：解析层）")
-    return 0
 
+    from cs2coach.features.moments import find_moments
+    from cs2coach.report.console import format_moments
 
-def _print_summary(match, steamid: int) -> None:
     m = match.meta
-    print(f"地图 {m.map_name}，{m.tick_rate} tick，{len(match.rounds)} 个回合，服务器 {m.server_name}")
-    k = match.kills
-    kills = k[(k["attacker"] == steamid) & k["is_enemy_kill"] & ~k["by_bot_control"]]
-    deaths = k[(k["victim"] == steamid) & ~k["in_freeze_time"]]
-    assists = k[(k["assister"] == steamid) & k["assist_counts"]]
-    print(f"玩家 {match.name_of(steamid)}：击杀 {len(kills)}，死亡 {len(deaths)}，助攻 {len(assists)}")
-    print("\n回合  胜方  击杀  死亡")
-    for r in match.rounds:
-        nk = int((kills["round"] == r.number).sum())
-        nd = int((deaths["round"] == r.number).sum())
-        print(f"{r.number:>4}  {r.winner.name:>4}  {nk:>4}  {nd:>4}")
+    print(f"地图 {m.map_name}，{m.tick_rate} tick，{len(match.rounds)} 个回合，服务器 {m.server_name}\n")
+    moments = find_moments(match, player.steamid, cfg)
+    print(format_moments(moments))
+
+    args.out.mkdir(parents=True, exist_ok=True)
+    out = args.out / f"{demo.stem}_{player.steamid}_moments.json"
+    out.write_text(moments.model_dump_json(indent=2), encoding="utf-8")
+    print(f"\n已写入 {out}")
+    print("AI 诊断尚未实现（当前处于第三步：决定性瞬间与指标）")
+    return 0

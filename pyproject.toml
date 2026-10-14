@@ -9,6 +9,8 @@ dependencies = [
     "pandas>=2.2",
     "pydantic>=2.7",
     "rarfile>=4.2",
+    # 视野计算：地图碰撞网格 + 射线检测（awpy-data 发布的 .mesh）
+    "awpy>=3.0,<4",
 ]
 
 [project.optional-dependencies]

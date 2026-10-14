@@ -21,6 +21,8 @@ GUNS = {
     # 样本中没出现过，按 CS2 武器类名补全
     "cz75a", "g3sg1", "m249", "mp5sd", "sawedoff", "scar20", "sg556",
 }
+# Leetify 的 Counter-Strafing、Spray Accuracy 只统计步枪（不含狙击枪）
+RIFLES = {"ak47", "m4a1", "m4a1_silencer", "galilar", "famas", "aug", "sg556"}
 GRENADES = {"hegrenade", "flashbang", "smokegrenade", "molotov", "incgrenade", "decoy"}
 # 刀的具体型号只影响外观；统一归为 knife 家族判断
 KNIVES = {

@@ -11,3 +11,122 @@ min_target_coverage = 0.95
 min_other_coverage = 0.95
 # demo 中没有 mp_buytime 设置时使用的购买时间（秒）；官方竞技模式为 20
 default_buytime_seconds = 20
+
+[moments]
+# 交火窗口（动态回溯）：从击杀 / 死亡往前，把双方的开枪和互相伤害串起来，
+# 相邻两次间隔不超过 gap 秒就算同一次交火；整段最长不超过 max 秒
+engagement_gap_seconds = 1.0
+engagement_max_seconds = 5.0
+# 补枪：被击杀后多少秒内击杀者被队友击杀，算"被补回"；反之亦然
+trade_window_seconds = 3.0
+# 漏补：队友阵亡时目标玩家与他的直线距离不超过此值（游戏单位）才算"在附近"。不考虑视线，只是近似
+missed_trade_max_distance = 800
+# 关键助攻：闪光助攻，或本回合对被击杀者造成的伤害不低于此值（记分板的伤害助攻本身要求 > 40）
+key_assist_min_damage = 60
+# 死亡时算"被闪中"的最短致盲时长（秒）。不到 1 秒的多是擦边闪（docs/fields.md §7）
+min_blind_seconds = 1.0
+# 游戏内跳转：跳到交火开始前多少秒
+jump_lead_seconds = 5.0
+
+[aim]
+# 判断一发子弹打向哪个敌人：取子弹方向与"眼睛 → 敌人身体中心"夹角最小的存活敌人（取开枪前一 tick 的位置）。
+# 用命中的子弹核对，5 个样本 demo 中 96%–99% 判对；命中子弹的夹角 99 分位约 10°
+# 最近的敌人也超过这个角度（度）时，认为这发子弹没有瞄准任何人
+max_target_angle = 20.0
+# 高度都是相对脚底（Z）的估计值，站立与下蹲之间按 duck_amount 插值
+eye_height_standing = 64.0
+eye_height_crouched = 46.0
+body_height_standing = 40.0
+body_height_crouched = 28.0
+
+[aim_stats]
+# 整场枪法统计（沿用 Leetify 的名称和口径）
+# Time to Damage 不低于此值（秒）的样本排除，视为有意等待（Leetify 口径）
+time_to_damage_max_seconds = 1.0
+# 同一回合对同一敌人的伤害间隔超过此值（秒）才算新的一次遭遇
+encounter_gap_seconds = 3.0
+# 扫射：同一把武器、相邻两枪间隔不超过此值（秒），连续这么多发以上（Leetify：3 发以上）
+spray_max_gap_seconds = 0.2
+spray_min_shots = 3
+# 样本数低于此值时不给出数值
+min_samples = 5
+
+[visibility]
+# 视野计算：awpy 的地图碰撞网格做射线检测（只有静态几何，不含烟雾、门等动态物体）。
+# 核对：普通击杀（非穿墙、非穿烟）前一 tick 击杀者能看到受害者的比例为 94%–99%（8 个样本 demo）
+# 判断"看得到"时检查对手身上的这些点，任一点没被挡住即算看到（Leetify：能看到身体的任何部分）。
+# 高度相对脚底，[站立, 下蹲]，按 duck_amount 插值；胸口另取左右两侧
+body_points_standing = [64.0, 40.0, 20.0, 6.0]
+body_points_crouched = [46.0, 28.0, 14.0, 6.0]
+body_side_offset = 14.0
+# 视野范围（度，相对准星）：16:9 屏幕的水平半角约 53°、垂直半角约 37°
+fov_horizontal_half = 53.0
+fov_vertical_half = 37.0
+# 往前找"第一次看见"最多回溯多少秒；视线中断不超过 gap 个 tick 视为没有中断（几何网格的缝隙）
+first_seen_lookback_seconds = 3.0
+first_seen_gap_ticks = 2
+# 烟雾：不能精确建模（CS2 的烟是体素，会被雷和子弹打散），只用来排除："第一次看见"那一刻视线经过烟雾附近时，
+# 真正看见的时刻可能更晚，这次交火不计算 Time to Damage、Crosshair Placement。烟雾按球体近似，
+# 中心在展开点上方 smoke_center_height，只在展开后 smoke_active_seconds 之间算有效。
+# 校准（6 个 demo、736 次击杀）：被排除的 3%–5% 样本 Time to Damage 中位数 0.9–1.4 秒（确实被烟挡住），
+# 保留样本的中位数几乎不变；半径 170、全程有效时会排除 20%–28%，过多
+smoke_radius = 144.0
+smoke_center_height = 40.0
+smoke_active_seconds = [1.0, 18.0]
+
+[counter_strafe]
+# 开枪时水平速度低于武器最高速度的这个比例，算"已停稳"（Leetify 公开的口径）
+accurate_speed_ratio = 0.34
+# duck_amount 不低于此值算下蹲开枪；下蹲开枪不计入急停统计（Leetify 口径）
+crouch_duck_amount = 0.5
+
+# 各武器最高移动速度（u/s，规范名）。标"实测"的已用 24 个样本 demo 的速度分布核对（95/99 分位恰好等于该值），
+# 其余样本量不够，取游戏数值
+[counter_strafe.max_speed]
+# 实测
+ak47 = 215
+galilar = 215
+m4a1 = 225
+m4a1_silencer = 225
+famas = 220
+aug = 220
+awp = 200
+ssg08 = 230
+deagle = 230
+glock = 240
+usp_silencer = 240
+p250 = 240
+fiveseven = 240
+tec9 = 240
+elite = 240
+mac10 = 240
+mp9 = 240
+mp7 = 220
+p90 = 230
+xm1014 = 215
+negev = 150
+# 游戏数值，未实测
+sg556 = 210
+ump45 = 230
+bizon = 240
+mp5sd = 235
+nova = 220
+mag7 = 225
+sawedoff = 210
+m249 = 195
+scar20 = 215
+g3sg1 = 215
+hkp2000 = 240
+cz75a = 240
+revolver = 220
+
+# 开镜时的最高速度
+[counter_strafe.max_speed_scoped]
+# 实测
+awp = 100
+ssg08 = 230
+aug = 150
+# 游戏数值，未实测
+sg556 = 150
+scar20 = 120
+g3sg1 = 120

@@ -59,3 +59,24 @@ def make_match(ticks: pd.DataFrame | None = None, rounds: list[Round] | None = N
 def sid(v: int | None) -> object:
     """模拟事件中的 steamid：字符串，缺失时为 NaN（陷阱 5）。"""
     return str(v) if v is not None else np.nan
+
+
+class AlwaysVisible:
+    """假的视线检测：没有任何遮挡（测试用，不需要地图数据）。"""
+
+    def is_visible(self, a, b) -> bool:
+        return True
+
+
+class WallChecker:
+    """假的视线检测：x = wall_x 处有一堵墙，覆盖 y < wall_y_max 的部分。"""
+
+    def __init__(self, wall_x: float = 500.0, wall_y_max: float = -100.0):
+        self.wall_x, self.wall_y_max = wall_x, wall_y_max
+
+    def is_visible(self, a, b) -> bool:
+        (ax, ay, _), (bx, by, _) = a, b
+        if (ax - self.wall_x) * (bx - self.wall_x) > 0 or ax == bx:
+            return True  # 两点在墙的同一侧
+        y = ay + (by - ay) * (self.wall_x - ax) / (bx - ax)
+        return y >= self.wall_y_max
