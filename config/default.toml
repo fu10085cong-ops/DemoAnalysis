@@ -165,10 +165,10 @@ g3sg1 = 120
 disabled = ["died_without_seeing", "turned_into_flash", "weapon_not_ready", "spray_while_moving", "awp_unscoped_shot"]
 # 整场同一发数段难以积累足够子弹，暂时关闭；不影响单次交火，待用数据校准
 spray_match_enabled = false
-# 至少命中几次才可能成为突出问题，待用数据校准
-frequency_min_hits = 2
-# 本场每十回合频率达到职业的多少倍才突出，待用数据校准
-frequency_prominent_ratio = 1.5
+# 假设真实频率与职业相同，单场碰巧出现至少本场次数的最大概率
+frequency_max_chance = 0.05
+# 相比职业频率预期至少多出几次才算突出
+frequency_min_excess = 2
 # AWP 超过此距离的未开镜射击参与检测（米，待用数据校准）
 awp_noscope_max_distance_m = 5.0
 # 单次交火压枪评价从第 4 发开始，recoil_index 从 0 起算
@@ -219,6 +219,8 @@ max_training_plan_item_length = 600
 number_relative_tolerance = 0.10
 # 近似数值比较的绝对容差，仅用于消除浮点运算误差
 number_absolute_tolerance = 0.000000001
+# 常见分位数标签，不把“75 分位”或“p90”当成比赛事实数字
+quantile_labels = [25, 50, 75, 90]
 
 # 每项 pattern 为敏感说法正则，require 为必须具备的数据谓词；谓词名称严格校验
 [[checker.phrases]]

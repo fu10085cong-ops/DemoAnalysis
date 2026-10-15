@@ -2,8 +2,8 @@
 
 > 入口：`features/moments.py` 的 `find_moments(match, steamid, cfg) -> MatchMoments`；数据结构见 `features/models.py`。
 > 所有阈值在 `config/default.toml` 的 `[moments]`、`[counter_strafe]`、`[aim]`、`[aim_stats]`、`[visibility]` 段。
-> 命令行：`python -m cs2coach analyze <demo> --player <steamid64>` 打印列表，并把完整结果写入 `data/output/<demo>_<steamid>_moments.json`。
-> 同时输出 `<demo>_<steamid>_facts.md`：由 `report/facts.py` 按固定句式生成全部瞬间与漏补枪的中文事实卡，不调用 AI；缺失字段省略，投掷者未知时明确说明。击杀距离按米、队友距离按游戏单位、速度按单位/秒显示。
+> 命令行：`python -m cs2coach analyze <demo> --player <steamid64>` 打印列表，并把完整结果写入 `data/output/<比赛名>/<玩家名>_<steamid>/moments.json`。
+> 同时输出该目录的 `facts.md`：由 `report/facts.py` 按固定句式生成全部瞬间与漏补枪的中文事实卡，不调用 AI；缺失字段省略，投掷者未知时明确说明。击杀距离按米、队友距离按游戏单位、速度按单位/秒显示。
 
 ## 决定性瞬间
 
@@ -136,8 +136,8 @@
 - 单次压枪只取交火武器的后段子弹，逐发匹配职业连射段命中率后求平均；混合武器不合并。整场则复用基准 `spray_stats`，按每发实际武器、相同发数段分别比较，默认由 `spray_match_enabled=false` 关闭。两者都要求足够子弹，差值使用百分点；等于差值阈值不命中。移动扫射排除首枪，停稳数据不完整时不推断。
 - `[problems]` 集中保存阈值和停用列表。默认停用 `died_without_seeing`、`turned_into_flash`、`weapon_not_ready`、`spray_while_moving`、`awp_unscoped_shot`。前者仍有视野误判，后两项及整场压枪待数据校准；被闪后阵亡、拉栓期间交火按目录降为背景，事实卡照常显示。`awp_moving_shot` 由通用移动首枪规则覆盖。目录待开发项、`awp_close_range_duel`、`other` 仅登记，不检测；AWP 未开镜规则仅检测死亡。检测条件和原有阈值不变。
 - 每条 `ProblemHit` 保留 target、交火武器、判断所用的 evidence 和 thresholds（数值与来源）；子弹序列和道具列表因证据字典只允许标量，编码为 JSON 字符串。`ProblemReport` 同时记录职业来源、停用编号及缺少数据的计数；不满足条件和样本不足不计作缺少数据。
-- `problem_frequency()` 对已实现、启用的非亮点问题计算本场次数和每十回合频率，零命中也列出，排除 `match` 目标。倍数为本场频率除以职业同类频率；职业为零或缺失时无倍数。命中次数 ≥ `frequency_min_hits`（默认 2）且倍数 ≥ `frequency_prominent_ratio`（默认 1.5）才突出，等于阈值算突出；按突出项优先、组内倍数降序、缺失倍数最后排序。
-- `analyze` 无需 `--ai` 即生成 `_problems.md`，开头为频率对比表，突出项加粗；随后按问题分组列出编号、证据和阈值，末尾列出停用和 skipped。背景项登记于 `CONTEXT_ONLY`，不单独报为问题；不改变事实卡和原始指标。
+- `problem_frequency()` 对已实现、启用的非亮点问题计算本场次数，零命中也列出，排除 `match` 目标。职业频率从基准原始 `hits / rounds` 计算，预期次数 λ 为职业频率乘以本场回合数；多出次数为本场次数减 λ，偶然概率为泊松分布 P(X ≥ 本场次数 | λ)。偶然概率 < `frequency_max_chance`（默认 0.05）且多出次数 ≥ `frequency_min_excess`（默认 2）才突出；职业频率缺失或为零时不判突出。倍数仅作展示。突出项在前，各组按多出次数降序排序。
+- `analyze` 无需 `--ai` 即在 `<输出根目录>/<比赛名>/<玩家名>_<SteamID64>/` 生成 `moments.json`、`facts.md` 和 `problems.md`。频率表展示本场、预期、多出、偶然概率和倍数，突出项加粗；多出次数大于 0 但不突出的标为“次数较少，需要更多比赛确认”，多出次数小于或等于 0 的标为“不高于职业水平”，不作为问题提出。其后列出命中证据、停用项和 skipped。重新运行会把旧 `report.md` 与 `submission.json` 按文件修改时间移入 `历史版本/`。背景项登记于 `CONTEXT_ONLY`，不单独报为问题；不改变事实卡和原始指标。
 
 ## 结构化诊断与报告
 
@@ -145,12 +145,12 @@
 
 - “检测到的问题”开头固定说明出枪慢和准星问题只在打中过对手的交火中可判断，不能据击杀/死亡的分布推断心理压力；TTD 是看见到首次命中，频率按每十回合整体比较。
 - finding 最多关联两个代表性 target，同一问题编号只能有一条 finding；pattern 可再列出该问题的全部相关瞬间，分析共同原因。
-- finding、pattern、highlight 的分析可引用程序从整场枪法、职业对比、问题频率和比分收集的数字；逐次瞬间的数字仍只由本条 targets 提供。overview 继续使用摘要数字。
+- finding、pattern、highlight 的分析可引用程序从整场枪法、职业对比、问题频率（含预期次数、多出次数和偶然概率百分比）及比分收集的数字；逐次瞬间的数字仍只由本条 targets 提供。overview 继续使用摘要数字。检查器把配置中的 25、50、75、90 等分位标签识别为名称；数值与事实的差距小于文字最后一位的一个单位时视为匹配。
 
 - 解析失败或内容违规会按字段路径返回中文错误；调用流程还在本地核对工具 schema 已声明的编号枚举、数量、长度和 targets 格式，以兼容没有强制 schema 的服务。默认允许两轮修改；第三次仍不合格时，删除有违规的整条 finding/pattern/highlight，保留原文、路径及原因。没有可检查对象或删除后一条 finding 都不剩时抛出 DiagnosisError。查询错误不计入结论修正次数，原服务的拒绝、截断和异常处理保留。
 - 总览违规时由程序按目标玩家比分、击杀数和死亡数生成替换句，并明确标注“AI 总览未通过检查，已替换”。删条和替换后再次检查最终对象，通过后才排版。
 - `report/render.py` 将程序事实卡、检测证据与阈值、突出频率、比分和跳转命令，与 AI 的分析及训练建议分别展示；other 标明“AI 判断，无程序依据”。旧的自由文本引用检查模块已删除，结构化检查器用于拒绝文本编号的正则保持原样。
-- `submit_report` 只有一个顶层包装对象时，如 `{"report": {提交字段...}}`，程序识别并检查内层内容，原始参数和拆开的键名仍写入审计。连续两次真正的空提交会收到“提交内容为空，请提交完整对象”，不占用修正次数；第三次起按普通格式错误计数。诊断保留最终 submission、每轮 violations_history、dropped、ProblemReport、FrequencyRow、usage、tool_calls、raw_calls 和 repairs。CLI 保存 `_report.md` 及 `_submission.json`，后者包含提交、违规历史、删除/替换记录及每次 submit_report 的原始参数和解析结果，便于核对。
+- `submit_report` 只有一个顶层包装对象时，如 `{"report": {提交字段...}}`，程序识别并检查内层内容，原始参数和拆开的键名仍写入审计。连续两次真正的空提交会收到“提交内容为空，请提交完整对象”，不占用修正次数；第三次起按普通格式错误计数。诊断保留最终 submission、每轮 violations_history、dropped、ProblemReport、FrequencyRow、usage、tool_calls、raw_calls 和 repairs。CLI 保存 `report.md` 及 `submission.json`，后者包含提交、违规历史、删除/替换记录及每次 submit_report 的原始参数和解析结果，便于核对。
 
 ## 标签
 

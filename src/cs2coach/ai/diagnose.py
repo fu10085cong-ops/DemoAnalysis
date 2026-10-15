@@ -150,7 +150,7 @@ def diagnose(match: MatchData, mm: MatchMoments, cfg: dict[str, Any], baseline: 
     ac = cfg["ai"]
     problems = detect_problems(mm, baseline, cfg)
     frequency = problem_frequency(problems, mm, baseline, cfg)
-    digest = build_digest(match, mm, baseline, problems, frequency)
+    digest = build_digest(match, mm, baseline, problems, frequency, cfg)
     score = match_score(match, mm.player)
     whole_numbers = whole_match_numbers(mm, baseline, frequency, score)
     provider = provider or make_provider(cfg)

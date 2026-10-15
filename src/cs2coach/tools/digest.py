@@ -8,10 +8,12 @@ from __future__ import annotations
 from typing import Any
 
 from cs2coach.baseline import METRICS, compare
+from cs2coach.config import load_config
 from cs2coach.features.labels import GRENADE_LABELS, KIND_LABELS, ROUND_END_REASONS, tag_label
 from cs2coach.features.models import AimStats, BlindInfo, MatchMoments, Moment
 from cs2coach.features.problems import PROBLEMS, FrequencyRow, ProblemReport
 from cs2coach.report.evidence import evidence_sentence
+from cs2coach.report.problems import frequency_table
 from cs2coach.parsing.match import MatchData
 from cs2coach.parsing.models import Team
 
@@ -39,15 +41,17 @@ def player_side(match: MatchData, steamid: int, round_number: int) -> str | None
 
 
 def build_digest(match: MatchData, mm: MatchMoments, baseline: dict[str, Any] | None,
-                 problems: ProblemReport | None = None, frequency: list[FrequencyRow] | None = None) -> str:
+                 problems: ProblemReport | None = None, frequency: list[FrequencyRow] | None = None,
+                 cfg: dict[str, Any] | None = None) -> str:
     lines = [_header(match, mm), "", _aim_section(mm.aim_stats, baseline), "", summary_section(mm)]
     if frequency is not None:
-        lines.extend(["", "## 问题频率", "报告应优先讲突出问题；单条命中不说明问题。"])
-        for row in frequency:
-            pro = f"{row.pro_per_10_rounds:.2f}" if row.pro_per_10_rounds is not None else "缺失"
-            ratio = f"{row.ratio:.2f} 倍" if row.ratio is not None else "无可用倍数"
-            lines.append(f"- {row.label}（{row.problem}）：{row.hits} 次，每 10 回合 {row.per_10_rounds:.2f} / 职业 {pro}，"
-                         f"{ratio}" + ("，**突出问题**" if row.prominent else ""))
+        rules = (cfg or load_config())["problems"]
+        lines.extend(["", "## 问题频率",
+            f"突出问题需偶然概率低于 {rules['frequency_max_chance'] * 100:g}%，"
+            f"且比职业频率预期至少多 {float(rules['frequency_min_excess']):g} 次。"
+            "报告应优先讲突出问题；多出次数大于 0 但不突出的情况需要更多比赛确认。",
+            "标为“不高于职业水平”的项目不是问题，不要作为问题提出。", ""])
+        lines.extend(frequency_table(frequency))
     if problems is not None:
         lines.extend(["", "## 检测到的问题", "只能从以下命中中选择问题和亮点；other 除外。编号只放在 targets 中。",
             "检测口径：slow_reaction 和 poor_crosshair_placement 只能在打中过对手的交火中判断；死亡时如果没打中对手就无法判断。"
@@ -96,6 +100,11 @@ def whole_match_numbers(mm: MatchMoments, baseline: dict[str, Any] | None,
             values.append(row.pro_per_10_rounds)
         if row.ratio is not None:
             values.append(row.ratio)
+        for value in (row.expected_hits, row.excess_hits):
+            if value is not None:
+                values.append(value)
+        if row.chance is not None:
+            values.append(row.chance * 100)
     return values
 
 

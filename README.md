@@ -77,12 +77,14 @@ python scripts/explore_demo.py data/demos/xxx.rar --demo-member some-map.dem
 # 核对解析结果（回合、记分板、致盲、开枪）。新来源的 demo 先跑这个
 python scripts/check_parsing.py data/demos/xxx.dem
 
-# 找出目标玩家的决定性瞬间及指标，结果写入 data/output/
+# 找出目标玩家的决定性瞬间及指标，结果写入 data/output/<比赛名>/<玩家名>_<SteamID64>/
 python -m cs2coach analyze data/demos/xxx.dem --player <SteamID64>
 
-# 加上 --ai：调用 AI 生成中文复盘报告（data/output/<demo>_<steamid>_report.md）
+# 加上 --ai：调用 AI 生成中文复盘报告（同一目录下的 report.md 和 submission.json）
 python -m cs2coach analyze data/demos/xxx.dem --player <SteamID64> --ai
 ```
+
+不加 `--ai` 时生成 `moments.json`、`facts.md`、`problems.md`。重新分析同一玩家时，原有的 `report.md` 和 `submission.json` 会按修改时间移入同目录的 `历史版本/`。
 
 `--ai` 用哪个模型由 `config/default.toml` 的 `[ai] provider` 决定（默认 `deepseek`），各模型的设置在 `[ai.deepseek]`、`[ai.claude]`。凭据：
 - DeepSeek：环境变量 `DEEPSEEK_API_KEY`（Windows PowerShell：`$env:DEEPSEEK_API_KEY = "sk-..."`）

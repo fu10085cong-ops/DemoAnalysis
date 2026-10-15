@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import math
 import re
-from decimal import Decimal, InvalidOperation, ROUND_HALF_UP, localcontext
+from decimal import Decimal
 from typing import TYPE_CHECKING, Callable
 
 from pydantic import BaseModel
@@ -51,6 +51,8 @@ _MOMENT_ID = re.compile(r"(?<![A-Za-z0-9_])R\d+-(?:kill\d+|death|assist\d+)(?![A
 _WEAPONS = re.compile("|".join(re.escape(s) for s in sorted(WEAPON_LABELS.values(), key=len, reverse=True)), re.I)
 _APPROX_BEFORE = re.compile(r"(?:约|大约|接近|左右)\s*$")
 _APPROX_AFTER = re.compile(r"^\s*(?:%|毫秒|秒|度|米|发|次|人)?\s*左右")
+_QUANTILE_BEFORE = re.compile(r"(?<![A-Za-z0-9_])[pP]$")
+_QUANTILE_AFTER = re.compile(r"^\s*分位")
 
 
 def _numeric_leaves(value, path="") -> list[float]:
@@ -79,14 +81,9 @@ def _numeric_leaves(value, path="") -> list[float]:
 
 
 def _rounded_matches(value: float, token: str) -> bool:
-    """按文字的小数位做四舍五入，避免 Python 的偶数舍入和二进制误差。"""
+    """数字只要与数据相差不到文字最后一位的一个单位就匹配。"""
     digits = len(token.partition(".")[2])
-    try:
-        with localcontext() as ctx:
-            ctx.prec = max(ctx.prec, len(str(value)) + len(token) + digits)
-            return Decimal(str(value)).quantize(Decimal(1).scaleb(-digits), rounding=ROUND_HALF_UP) == Decimal(token)
-    except InvalidOperation:
-        return False
+    return abs(Decimal(str(value)) - Decimal(token)) < Decimal(1).scaleb(-digits)
 
 
 def _number_violations(text: str, path: str, allowed: list[float], people: set[tuple[int, int]],
@@ -102,6 +99,10 @@ def _number_violations(text: str, path: str, allowed: list[float], people: set[t
     clean = _PEOPLE.sub(" ", clean)
     for match in _NUMBER.finditer(clean):
         token = match.group()
+        if (int(float(token)) in cfg["quantile_labels"] and float(token).is_integer()
+                and (_QUANTILE_BEFORE.search(clean[:match.start()])
+                     or _QUANTILE_AFTER.match(clean[match.end():]))):
+            continue
         x = float(token)
         near = bool(_APPROX_BEFORE.search(clean[:match.start()]) or _APPROX_AFTER.search(clean[match.end():]))
         ok = any(_rounded_matches(v, token) or (near and abs(x - v) <=

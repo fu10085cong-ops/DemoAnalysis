@@ -25,8 +25,9 @@ def sample():
     baseline = {"source": "手工样本", "weapons": {
         "ak47": {"time_to_damage_ms": {"p75": 250}},
         "m4a1_silencer": {"time_to_damage_ms": {"p75": 484}}},
-        "problem_rates": {"slow_reaction": {"per_10_rounds": .5}}}
+        "problem_rates": {"slow_reaction": {"hits": 5, "rounds": 100}}}
     cfg = load_config()
+    cfg["problems"]["frequency_min_excess"] = 1
     problems = detect_problems(mm, baseline, cfg)
     frequency = problem_frequency(problems, mm, baseline, cfg)
     args = payload(findings=[
@@ -48,6 +49,8 @@ def test_render_has_all_sections_program_facts_evidence_and_unique_jumps():
     for section in ("总览", "突出问题", "关键问题", "反复出现的问题", "亮点", "训练计划", "跳转命令"):
         assert f"## {section}" in text
     assert "### 出枪慢 · 中" in text and "AI 判断，无程序依据" in text
+    assert "| 问题 | 本场次数 | 按职业频率预期 | 多出的次数 | 偶然概率 | 倍数 |" in text
+    assert "| **出枪慢** |" in text
     assert "你在 Mid" in text and "812 毫秒" in text and "高于职业同武器 75 分位 484 毫秒" in text
     assert "队友 bob 阵亡时离你 200 单位" in text
     assert "涉及：〔R1-death〕、〔R2-kill1〕" in text
@@ -60,7 +63,11 @@ def test_render_has_all_sections_program_facts_evidence_and_unique_jumps():
 def test_digest_contains_prominence_and_human_evidence_before_moments():
     d, mm, _ = sample()
     text = build_digest(scenario(), mm, None, d.problems, d.frequency)
-    assert "**突出问题**" in text and "R2-kill1：TTD 812 毫秒" in text
+    assert "**出枪慢**" in text and "R2-kill1：TTD 812 毫秒" in text
+    assert "偶然概率低于 5%" in text and "至少多 2 次" in text
+    assert "多出次数大于 0 但不突出的情况需要更多比赛确认" in text
+    assert "标为“不高于职业水平”的项目不是问题，不要作为问题提出" in text
+    assert "标为“不高于职业水平”的项目不是问题，不要作为问题提出" in SYSTEM_PROMPT
     assert "75 分位 484 毫秒" in text
     assert text.index("## 问题频率") < text.index("## 检测到的问题") < text.index("## 决定性瞬间")
     assert "只能在打中过对手的交火中判断" in text
@@ -101,10 +108,10 @@ def test_cli_writes_report_and_submission_audit_with_fake_diagnosis(tmp_path, mo
     monkeypatch.setattr("cs2coach.ai.diagnose.diagnose", lambda *a, **kw: d)
     # 直接测输出路径，凭据加载替换为空操作，不读取真实 .env，也不运行 --ai。
     monkeypatch.setattr("cs2coach.env.load_env_file", lambda *a: [])
-    out = tmp_path / "test_player_report.md"
+    out = tmp_path / "report.md"
     assert _diagnose(match, mm, cfg, out) == 0
     assert out.read_text(encoding="utf-8") == d.report
-    audit = json.loads((tmp_path / "test_player_submission.json").read_text(encoding="utf-8"))
+    audit = json.loads((tmp_path / "submission.json").read_text(encoding="utf-8"))
     assert audit == {"submission": d.submission.model_dump(), "violations_history": [[]], "dropped": [],
                      "raw_calls": d.raw_calls}
 

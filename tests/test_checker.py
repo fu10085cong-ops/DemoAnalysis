@@ -128,10 +128,13 @@ def test_whole_match_numbers_allowed_in_all_analysis_but_other_moment_blocked():
                    "headshot_accuracy_pct": None, "hits": 0})
     baseline = build_baseline({"time_to_damage_ms": [350, 400]}, "测试")
     frequency = [FrequencyRow(problem="slow_reaction", label="出枪慢", hits=7,
-        per_10_rounds=2.5, pro_per_10_rounds=2.5 / 1.81, ratio=1.81, prominent=True)]
+        per_10_rounds=2.5, pro_per_10_rounds=2.5 / 1.81, ratio=1.81, prominent=True,
+        expected_hits=4.86, excess_hits=2.14, chance=.002)]
     numbers = whole_match_numbers(mm, baseline, frequency, (12, 16))
+    assert 4.86 in numbers and 2.14 in numbers and .2 in numbers
     rep = report([hit(target="R1-death"), hit(target="R2-death"), hit("good_trade", "R1-death")])
-    text = "整场 Time to Damage 469毫秒，职业中位数375毫秒；每10回合2.5次，是职业的1.81倍，比分12:16。"
+    text = ("整场 Time to Damage 469毫秒，职业中位数375毫秒；每10回合2.5次，"
+            "是职业的1.81倍，预期4.86次、多出2.14次，偶然概率0.2%，比分12:16。")
     s = submit([finding(analysis=text)],
         patterns=[dict(problem="slow_reaction", targets=["R1-death", "R2-death"], analysis=text)],
         highlights=[dict(problem="good_trade", targets=["R1-death"], analysis=text)])
@@ -247,6 +250,30 @@ def test_approximate_tolerance_can_be_configured():
 def test_half_up_rounding():
     m = make_moment(engagement={"time_to_damage_s": .785})
     assert check(submit([finding(analysis="0.79秒")]), make_mm([m])) == []
+
+
+@pytest.mark.parametrize("text,valid", [("0.12秒", True), ("0.13秒", True), ("0.11秒", False)])
+def test_last_decimal_place_accepts_truncation_and_rounding(text, valid):
+    m = make_moment(engagement={"time_to_damage_s": .125})
+    violations = check(submit([finding(analysis=text)]), make_mm([m]))
+    assert ("number_not_found" not in codes(violations)) == valid
+
+
+@pytest.mark.parametrize("text,valid", [("75 分位", True), ("p90", True), ("P25", True),
+                                         ("85 分位", False), ("p85", False)])
+def test_quantile_labels_are_exempt_only_when_configured(text, valid):
+    mm = make_mm([make_moment(engagement=None)])
+    violations = check(submit([finding(analysis=f"职业参考 {text}。")]), mm)
+    assert ("number_not_found" not in codes(violations)) == valid
+
+
+def test_quantile_labels_follow_configuration(tmp_path):
+    override = tmp_path / "quantiles.toml"
+    override.write_text("[checker]\nquantile_labels = [85]\n", encoding="utf-8")
+    cfg = load_config(override)
+    mm = make_mm([make_moment(engagement=None)])
+    assert check(submit([finding(analysis="85 分位。")]), mm=mm, cfg=cfg) == []
+    assert "number_not_found" in codes(check(submit([finding(analysis="75 分位。")]), mm=mm, cfg=cfg))
 
 
 def test_weapon_numbers_are_ignored():

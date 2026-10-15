@@ -26,6 +26,9 @@ def _validate_checker(cfg: dict[str, Any]) -> None:
     """敏感说法允许配置扩展，但谓词名称和正则必须能被检查器执行。"""
     from cs2coach.tools.checker import PREDICATES
 
+    labels = cfg["quantile_labels"]
+    if not isinstance(labels, list) or any(type(value) is not int or value < 0 for value in labels):
+        raise ConfigError("配置项 checker.quantile_labels 应为非负整数数组")
     phrases = cfg["phrases"]
     if not isinstance(phrases, list):
         raise ConfigError("配置项 checker.phrases 应为表数组")

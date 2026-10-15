@@ -5,18 +5,30 @@ import json
 from cs2coach.features.problems import PROBLEMS, FrequencyRow, ProblemReport
 
 
+def frequency_table(rows: list[FrequencyRow]) -> list[str]:
+    """摘要、程序检测和 AI 报告共用同一组频率列。"""
+    lines = ["| 问题 | 本场次数 | 按职业频率预期 | 多出的次数 | 偶然概率 | 倍数 |",
+             "|---|---:|---:|---:|---:|---:|"]
+    for row in rows:
+        name = f"**{row.label}**" if row.prominent else row.label
+        if row.needs_more_matches:
+            name += "（次数较少，需要更多比赛确认）"
+        elif row.excess_hits is not None and row.excess_hits <= 0:
+            name += "（不高于职业水平）"
+        expected = f"{row.expected_hits:.2f}" if row.expected_hits is not None else "—"
+        excess = f"{row.excess_hits:.2f}" if row.excess_hits is not None else "—"
+        chance = f"{row.chance * 100:.1f}%" if row.chance is not None else "—"
+        ratio = f"{row.ratio:.2f}×" if row.ratio is not None else "—"
+        lines.append(f"| {name} | {row.hits} | {expected} | {excess} | {chance} | {ratio} |")
+    return lines
+
+
 def render_problem_report(report: ProblemReport, frequencies: list[FrequencyRow] | None = None) -> str:
     lines = ["# 问题检测", "", "命中表示满足目录的必要条件，是否属于失误及其轻重仍需结合情境判断。", "",
              f"职业基准：{report.baseline_source or '无，仅检测不依赖基准的问题'}", ""]
     if frequencies is not None:
-        lines.extend(["## 频率对比", "", "问题是否突出看频率；单条命中不等于失误。加粗项达到配置的次数和职业倍数阈值。", "",
-                      "| 问题 | 本场次数 | 每 10 回合（本场 / 职业） | 倍数 |",
-                      "|---|---:|---:|---:|"])
-        for row in frequencies:
-            name = f"**{row.label}**" if row.prominent else row.label
-            pro = f"{row.pro_per_10_rounds:.2f}" if row.pro_per_10_rounds is not None else "—"
-            ratio = f"{row.ratio:.2f}×" if row.ratio is not None else "—"
-            lines.append(f"| {name} | {row.hits} | {row.per_10_rounds:.2f} / {pro} | {ratio} |")
+        lines.extend(["## 频率对比", "", "加粗项的偶然概率和多出次数均达到配置条件；命中不等于失误。", ""])
+        lines.extend(frequency_table(frequencies))
         lines.append("")
     for pid, spec in PROBLEMS.items():
         hits = [h for h in report.hits if h.problem == pid]

@@ -202,10 +202,11 @@ def test_cli_writes_moments_and_facts_without_ai(tmp_path, monkeypatch):
     monkeypatch.setattr("cs2coach.parsing.match.parse_match", lambda path, cfg: m)
     monkeypatch.setattr("cs2coach.features.moments.find_moments", lambda match, sid, cfg: mm)
     assert main(["analyze", "test.dem", "--player", str(A), "--out", str(tmp_path)]) == 0
-    expected = tmp_path / f"test_{A}_facts.md"
+    folder = tmp_path / "test" / f"alice_{A}"
+    expected = folder / "facts.md"
     assert expected.read_text(encoding="utf-8") == render_facts_file(mm, NAMES)
-    assert json.loads((tmp_path / f"test_{A}_moments.json").read_text(encoding="utf-8")) == json.loads(mm.model_dump_json())
-    assert not list(tmp_path.glob("*_report.md"))
+    assert json.loads((folder / "moments.json").read_text(encoding="utf-8")) == json.loads(mm.model_dump_json())
+    assert {p.name for p in folder.iterdir()} == {"moments.json", "facts.md", "problems.md"}
 
 
 @pytest.mark.parametrize("subject,field", [("你", "player_blind"), ("对手", "opponent_blind")])

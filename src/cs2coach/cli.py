@@ -4,12 +4,36 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
+from datetime import datetime
 from pathlib import Path
 
 from cs2coach.config import ConfigError, load_config
 from cs2coach.console import ensure_utf8_stdio
 from cs2coach.parsing.loader import DemoLoadError, resolve_demo
+
+
+def _output_folder(root: Path, demo: Path, name: str, steamid: int) -> Path:
+    safe_name = re.sub(r'[\\/:*?"<>|]', "_", name.strip())
+    return root / demo.stem / f"{safe_name}_{steamid}"
+
+
+def _archive_reports(folder: Path) -> None:
+    """重跑前保存已有的 AI 报告；同一分钟内重跑也不覆盖历史版本。"""
+    for name in ("report.md", "submission.json"):
+        old = folder / name
+        if not old.is_file():
+            continue
+        archive = folder / "历史版本"
+        archive.mkdir(parents=True, exist_ok=True)
+        stamp = datetime.fromtimestamp(old.stat().st_mtime).strftime("%Y%m%d-%H%M")
+        target = archive / f"{old.stem}_{stamp}{old.suffix}"
+        n = 2
+        while target.exists():
+            target = archive / f"{old.stem}_{stamp}_{n}{old.suffix}"
+            n += 1
+        old.replace(target)
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -66,14 +90,16 @@ def _analyze(args: argparse.Namespace) -> int:
     moments = find_moments(match, player.steamid, cfg)
     print(format_moments(moments))
 
-    args.out.mkdir(parents=True, exist_ok=True)
-    out = args.out / f"{demo.stem}_{player.steamid}_moments.json"
+    folder = _output_folder(args.out, demo, player.name, player.steamid)
+    folder.mkdir(parents=True, exist_ok=True)
+    _archive_reports(folder)
+    out = folder / "moments.json"
     out.write_text(moments.model_dump_json(indent=2), encoding="utf-8")
     print(f"\n已写入 {out}")
-    facts = args.out / f"{demo.stem}_{player.steamid}_facts.md"
+    facts = folder / "facts.md"
     facts.write_text(render_facts_file(moments, {sid: p.name for sid, p in match.players.items()}), encoding="utf-8")
     print(f"已写入 {facts}")
-    problems = args.out / f"{demo.stem}_{player.steamid}_problems.md"
+    problems = folder / "problems.md"
     baseline = load_baseline()
     detected = detect_problems(moments, baseline, cfg)
     frequencies = problem_frequency(detected, moments, baseline, cfg)
@@ -81,8 +107,11 @@ def _analyze(args: argparse.Namespace) -> int:
     print(f"已写入 {problems}")
     if not args.ai:
         print("加上 --ai 生成 AI 复盘报告")
+        print(f"输出目录：{folder}")
         return 0
-    return _diagnose(match, moments, cfg, args.out / f"{demo.stem}_{player.steamid}_report.md")
+    result = _diagnose(match, moments, cfg, folder / "report.md")
+    print(f"输出目录：{folder}")
+    return result
 
 
 def _diagnose(match, moments, cfg, out: Path) -> int:
@@ -109,7 +138,7 @@ def _diagnose(match, moments, cfg, out: Path) -> int:
         return 1
 
     out.write_text(d.report, encoding="utf-8")
-    audit = out.with_name(out.stem.removesuffix("_report") + "_submission.json")
+    audit = out.with_name("submission.json")
     audit.write_text(json.dumps({
         "submission": d.submission.model_dump(),
         "violations_history": [[v.model_dump() for v in group] for group in d.violations_history],

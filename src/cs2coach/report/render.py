@@ -8,6 +8,7 @@ from cs2coach.features.models import MatchMoments
 from cs2coach.features.problems import PROBLEMS
 from cs2coach.report.evidence import evidence_sentence, match_fact
 from cs2coach.report.facts import missed_trade_facts, render_moment_card
+from cs2coach.report.problems import frequency_table
 
 if TYPE_CHECKING:
     from cs2coach.ai.diagnose import Diagnosis
@@ -23,10 +24,9 @@ def render_diagnosis(d: Diagnosis, mm: MatchMoments, names: Mapping[int, str]) -
              "## 总览", "", sub.overview, "", "## 突出问题", ""]
     prominent = [row for row in d.frequency if row.prominent]
     if prominent:
-        lines.extend(["| 问题 | 本场次数 | 每 10 回合（本场 / 职业） | 倍数 |", "|---|---:|---:|---:|"])
-        lines.extend(f"| {r.label} | {r.hits} | {r.per_10_rounds:.2f} / {r.pro_per_10_rounds:.2f} | {r.ratio:.2f}× |" for r in prominent)
+        lines.extend(frequency_table(prominent))
     else:
-        lines.append("没有同时达到次数和职业倍数阈值的突出问题。")
+        lines.append("没有同时达到偶然概率和多出次数条件的突出问题。")
 
     def label(pid):
         return "其他（AI 判断，无程序依据）" if pid == "other" else PROBLEMS[pid].label

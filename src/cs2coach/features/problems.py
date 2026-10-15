@@ -44,6 +44,10 @@ class FrequencyRow(BaseModel):
     pro_per_10_rounds: float | None
     ratio: float | None
     prominent: bool
+    expected_hits: float | None = None
+    excess_hits: float | None = None
+    chance: float | None = None
+    needs_more_matches: bool = False
 
 
 # 登记目录的全部编号；仅下方 detect_problems 中明确实现的规则参与检测。
@@ -299,6 +303,27 @@ def detect_problems(mm: MatchMoments, baseline: dict | None, cfg: dict) -> Probl
                          baseline_source=baseline.get("source") if baseline is not None else None)
 
 
+def _poisson_tail(count: int, expected: float) -> float:
+    """泊松分布右尾 P(X >= count)，用对数概率避免大参数下阶乘溢出。"""
+    if count <= 0:
+        return 1.0
+    if expected == 0:
+        return 0.0
+    log_expected = math.log(expected)
+    if count <= expected:
+        cdf = math.fsum(math.exp(-expected + i * log_expected - math.lgamma(i + 1))
+                        for i in range(count))
+        return max(0.0, min(1.0, 1.0 - cdf))
+    term = math.exp(-expected + count * log_expected - math.lgamma(count + 1))
+    total = term
+    i = count
+    while term > 1e-15 * total:
+        i += 1
+        term *= expected / i
+        total += term
+    return min(1.0, total)
+
+
 def problem_frequency(report: ProblemReport, mm: MatchMoments, baseline: dict | None,
                       cfg: dict) -> list[FrequencyRow]:
     """每十回合的问题频率与职业对比；不含整场目标、停用项和亮点。"""
@@ -312,11 +337,21 @@ def problem_frequency(report: ProblemReport, mm: MatchMoments, baseline: dict | 
             continue
         hits = counts[pid]
         frequency = 10 * hits / mm.rounds if mm.rounds > 0 else 0.0
-        pro = rates.get(pid, {}).get("per_10_rounds")
-        if not _finite(pro) or pro < 0:
-            pro = None
+        rate = rates.get(pid, {})
+        pro_hits, pro_rounds = rate.get("hits"), rate.get("rounds")
+        valid_rate = (_finite(pro_hits) and _finite(pro_rounds) and
+                      pro_hits >= 0 and pro_rounds > 0)
+        pro = 10 * pro_hits / pro_rounds if valid_rate else None
+        expected = mm.rounds * pro_hits / pro_rounds if valid_rate else None
+        excess = hits - expected if expected is not None else None
+        chance = (_poisson_tail(hits, expected) if expected is not None and expected > 0
+                  and mm.rounds > 0 else None)
         ratio = frequency / pro if pro is not None and pro > 0 else None
+        prominent = (chance is not None and chance < cfg["problems"]["frequency_max_chance"]
+                     and excess >= cfg["problems"]["frequency_min_excess"])
         rows.append(FrequencyRow(problem=pid, label=spec.label, hits=hits, per_10_rounds=frequency,
-            pro_per_10_rounds=pro, ratio=ratio, prominent=hits >= cfg["problems"]["frequency_min_hits"]
-            and ratio is not None and ratio >= cfg["problems"]["frequency_prominent_ratio"]))
-    return sorted(rows, key=lambda row: (not row.prominent, row.ratio is None, -(row.ratio or 0)))
+            pro_per_10_rounds=pro, ratio=ratio, prominent=prominent,
+            expected_hits=expected, excess_hits=excess, chance=chance,
+            needs_more_matches=excess is not None and excess > 0 and not prominent))
+    return sorted(rows, key=lambda row: (not row.prominent,
+                  -row.excess_hits if row.excess_hits is not None else math.inf))
