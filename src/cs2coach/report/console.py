@@ -2,40 +2,8 @@
 
 from __future__ import annotations
 
+from cs2coach.features.labels import KIND_LABELS, tag_label
 from cs2coach.features.models import MatchMoments, Moment
-
-TAG_LABELS = {
-    "opening_kill": "首杀",
-    "opening_death": "首死",
-    "trade_kill": "补枪",
-    "traded": "被补回",
-    "not_traded": "未被补",
-    "man_advantage": "人数优势",
-    "man_disadvantage": "人数劣势",
-    "post_plant": "下包后",
-    "after_round_end": "回合已结束",
-    "teamkill": "误杀队友",
-    "victim_is_bot": "击杀 bot",
-    "world_damage": "非玩家伤害",
-    "no_shots_fired": "没开枪",
-    "shot_first": "先开枪",
-    "opponent_shot_first": "对手先开枪",
-    "shot_same_tick": "同时开枪",
-    "died_blind": "被闪致死",
-    "unused_utility": "道具没用",
-    "saw_opponent_first": "先看见对手",
-    "opponent_saw_first": "对手先看见",
-    "died_without_seeing": "没看见就被打死",
-    "flash_assist": "闪光助攻",
-    "damage_assist": "伤害助攻",
-}
-KIND_LABELS = {"kill": "击杀", "death": "死亡", "assist": "助攻"}
-
-
-def tag_label(tag: str) -> str:
-    if tag.startswith("clutch_"):
-        return "残局" + tag.removeprefix("clutch_")
-    return TAG_LABELS.get(tag, tag)
 
 
 def format_moments(mm: MatchMoments) -> str:

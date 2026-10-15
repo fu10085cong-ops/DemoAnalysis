@@ -27,6 +27,20 @@ key_assist_min_damage = 60
 min_blind_seconds = 1.0
 # 游戏内跳转：跳到交火开始前多少秒
 jump_lead_seconds = 5.0
+# 接触时刻（双方中较早看见对方的那一 tick）前这么多秒内的平均速度，用来判断谁在移动、谁在架点
+contact_speed_window_seconds = 0.25
+# 平均速度低于 still 算"几乎静止"（架点），不低于 moving 算"在移动"（跑动、静步），中间（减速、急停中）不下结论。
+# 依据：3 个 demo、878 个样本的速度分布有两个峰（0–10 和 200–220），中间 20–120 是过渡状态
+contact_still_speed = 40.0
+contact_moving_speed = 120.0
+
+[weapons.min_shot_interval_seconds]
+# 同一把枪两次开枪的最短间隔（秒）。用 10 个 5E / 完美 demo 中同一玩家同一把枪相邻两次开枪的间隔实测（1 分位），
+# 与游戏设定一致（AWP 拉栓约 1.45 秒）。用来判断阵亡时是否来得及再开一枪；只列开枪间隔长、会影响判断且样本足够实测的武器
+awp = 1.45
+ssg08 = 1.25
+mag7 = 0.84
+deagle = 0.22
 
 [aim]
 # 判断一发子弹打向哪个敌人：取子弹方向与"眼睛 → 敌人身体中心"夹角最小的存活敌人（取开枪前一 tick 的位置）。
@@ -130,3 +144,31 @@ aug = 150
 sg556 = 150
 scar20 = 120
 g3sg1 = 120
+
+[ai]
+# 用哪个模型服务：deepseek / claude（各自的设置在下面对应的表里）
+provider = "deepseek"
+# 一次诊断最多请求几轮（含工具调用和引用修正）
+max_turns = 10
+# 引用对不上时最多要求修正几次
+max_repairs = 1
+
+[ai.deepseek]
+# OpenAI 兼容接口。凭据：环境变量 DEEPSEEK_API_KEY
+base_url = "https://api.deepseek.com"
+api_key_env = "DEEPSEEK_API_KEY"
+# deepseek-v4-pro（推理更强）或 deepseek-flash（更便宜）
+model = "deepseek-v4-pro"
+# 思考模式（DeepSeek 默认开启）；推理深度：low / high / max
+thinking = true
+reasoning_effort = "high"
+max_tokens = 32000
+
+[ai.claude]
+# 凭据：环境变量 ANTHROPIC_API_KEY，或 `ant auth login` 登录后的配置
+model = "claude-opus-5-5"
+# 推理深度：low / medium / high / xhigh / max。诊断要求准确，默认 high
+effort = "high"
+max_tokens = 16000
+# 模型因安全策略拒绝时，由服务端自动换推荐的备用模型重试
+server_fallback = true

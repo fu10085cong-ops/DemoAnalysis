@@ -21,6 +21,7 @@ def _build_parser() -> argparse.ArgumentParser:
     analyze.add_argument("--player", required=True, help="目标玩家 SteamID64")
     analyze.add_argument("--out", type=Path, default=Path("data/output"), help="输出目录")
     analyze.add_argument("--config", type=Path, default=None, help="阈值配置文件（TOML），只需写要覆盖的条目")
+    analyze.add_argument("--ai", action="store_true", help="调用 AI 生成中文复盘报告（模型在配置的 [ai] 段，需要对应的 API 凭据）")
     return parser
 
 
@@ -64,5 +65,60 @@ def _analyze(args: argparse.Namespace) -> int:
     out = args.out / f"{demo.stem}_{player.steamid}_moments.json"
     out.write_text(moments.model_dump_json(indent=2), encoding="utf-8")
     print(f"\n已写入 {out}")
-    print("AI 诊断尚未实现（当前处于第三步：决定性瞬间与指标）")
+    if not args.ai:
+        print("加上 --ai 生成 AI 复盘报告")
+        return 0
+    return _diagnose(match, moments, cfg, args.out / f"{demo.stem}_{player.steamid}_report.md")
+
+
+def _diagnose(match, moments, cfg, out: Path) -> int:
+    from cs2coach.ai.diagnose import DiagnosisError, diagnose
+    from cs2coach.ai.providers import ProviderError
+    from cs2coach.baseline import load_baseline
+    from cs2coach.env import load_env_file
+
+    load_env_file(Path(".env"))  # API key 可以写在当前目录的 .env 里（已在 .gitignore 中）
+
+    name = cfg["ai"]["provider"]
+    model = cfg["ai"].get(name, {}).get("model", "?")
+    print(f"\n正在生成 AI 复盘报告（{name} / {model}）……", flush=True)
+    try:
+        d = diagnose(match, moments, cfg, load_baseline())
+    except (DiagnosisError, ProviderError) as e:
+        print(f"错误: {e}", file=sys.stderr)
+        return 1
+    except Exception as e:  # 各家 SDK 的网络、认证、限流错误
+        msg = _api_error_message(e)
+        if msg is None:
+            raise
+        print(f"错误: {msg}", file=sys.stderr)
+        return 1
+
+    out.write_text(d.report, encoding="utf-8")
+    print("\n" + d.report)
+    u = d.usage
+    print(f"已写入 {out}")
+    print(f"{d.provider} / {d.model}，工具调用 {len(d.tool_calls)} 次，引用修正 {d.repairs} 次；"
+          f"输入 {u.input_tokens} tokens（其中缓存命中 {u.cache_read_tokens}），输出 {u.output_tokens} tokens")
+    if d.citations.invalid:
+        print(f"警告: 报告中有无法对应的引用：{'、'.join(d.citations.invalid)}", file=sys.stderr)
     return 0
+
+
+def _api_error_message(e: Exception) -> str | None:
+    """把 anthropic / openai SDK 的常见错误转成中文提示；不认识的错误返回 None（原样抛出）。"""
+    import anthropic
+    import openai
+
+    if isinstance(e, TypeError) and "authentication" in str(e):
+        # Claude：没有任何凭据时，SDK 在发请求前抛出 TypeError（"Could not resolve authentication method"）
+        return "没有找到 Claude API 凭据。请设置环境变量 ANTHROPIC_API_KEY，或运行 `ant auth login`"
+    if isinstance(e, (anthropic.AuthenticationError, openai.AuthenticationError)):
+        return "API 认证失败，请检查 API key"
+    if isinstance(e, (anthropic.RateLimitError, openai.RateLimitError)):
+        return "请求过于频繁或额度不足，请稍后再试"
+    if isinstance(e, (anthropic.APIStatusError, openai.APIStatusError)):
+        return f"模型服务返回 {e.status_code}：{e.message}"
+    if isinstance(e, (anthropic.APIConnectionError, openai.APIConnectionError)):
+        return "无法连接模型服务，请检查网络"
+    return None

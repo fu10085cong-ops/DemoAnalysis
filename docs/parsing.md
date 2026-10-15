@@ -56,7 +56,7 @@ player = match.require_player(steamid, cfg["parsing"]["min_target_coverage"])  #
 | 列 | 说明 |
 |---|---|
 | `tick`、`round`、`attacker`、`victim`、`assister`、`weapon` | `victim` 为空表示被击杀的是 bot（`victim_unknown`） |
-| `headshot`、`thrusmoke`、`penetrated`、`attackerblind`、`noscope`、`assistedflash`、`attackerinair`、`hitgroup`、`distance` | 事件原始字段（`attackerinair` 部分来源没有） |
+| `headshot`、`thrusmoke`、`penetrated`、`attackerblind`、`noscope`、`assistedflash`、`attackerinair`、`hitgroup`、`distance` | 事件原始字段（`attackerinair` 部分来源没有）。`distance` 单位为米（双方坐标距离 ÷ distance ≈ 39.37，游戏单位约等于英寸） |
 | `attacker_` / `victim_` + `team_num`、`X`、`Y`、`Z`、`last_place_name` | 双方在击杀 tick 的状态 |
 | `assister_team_num` | |
 | `victim_prev_active_weapon_name`、`victim_prev_health` | 受害者死亡前一 tick 的手持武器、血量 |

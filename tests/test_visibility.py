@@ -144,3 +144,50 @@ def test_without_map_data_visibility_metrics_are_empty():
     mm = find_moments(m, A, CFG, sight=s)
     assert mm.moments[0].engagement.visibility_note == "no_map_data"
     assert mm.aim_stats is None and mm.visibility_unavailable.startswith("FileNotFoundError")
+
+
+def test_shots_before_seen_are_split_out():
+    # A 在 tick 70（还被墙挡着）就朝 C 的方向开了一枪：TTD 的两段只从看见后的第一枪算
+    m = make_match(ticks(a_yaw={80: 10.0}), rounds=[make_round(freeze_end=10, end=110, last=120)])
+    m.kills = build_kills(pd.DataFrame([death(100, A, C)]), m)
+    m.damages = build_damages(pd.DataFrame([hurt(95, A, C, 30, 70), hurt(100, A, C, 120, 0)]), m)
+    fires = [fire(70, A), fire(90, A), fire(95, A), fire(100, A)]
+    m.shots = build_shots(pd.DataFrame(fires), pd.DataFrame([bullet(f["tick"], A) for f in fires]), m)
+    e = find_moments(m, A, CFG, sight=Sight(m, CFG, checker=WallChecker(500.0, -50.0))).moments[0].engagement
+    assert e.shots_fired == 4 and e.shots_before_seen == 1
+    assert e.seen_to_first_shot_s == pytest.approx(10 / 64, abs=1e-3)
+    assert e.first_shot_to_damage_s == pytest.approx(5 / 64, abs=1e-3)
+    assert e.seen_to_first_shot_s + e.first_shot_to_damage_s == pytest.approx(e.time_to_damage_s, abs=1e-3)
+
+
+def test_contact_speed_marks_peek():
+    # A 在 tick 80 从墙后走出来（这一 tick 位移 200），C 一直站着：A 主动拉出，C 架点
+    mm = duel(c_yaw={t: 0.0 for t in range(1, 88)})
+    e = mm.moments[0].engagement
+    assert e.contact_tick == 80
+    assert e.player_speed_at_contact > 120 and e.opponent_speed_at_contact < 40
+    assert e.contact_type == "peek" and "peeked_held_angle" in mm.moments[0].tags
+
+
+def test_first_seen_stops_at_floor_is_reported():
+    # 回溯停在调用方给的下限（如上一次击杀）时，limit 为 floor，而不是"超过回溯时长"
+    m = make_match(ticks(a_pos={t: 0.0 for t in range(1, 121)}))
+    fs = sight(m).first_seen(A, C, 95, floor=60)
+    assert fs.seen_at_limit and fs.limit == "floor"
+    fs = sight(m).first_seen(A, C, 95, floor=1)
+    assert fs.seen_at_limit and fs.limit == "floor"  # 回溯 3 秒超过了回合开始，下限仍是 floor
+    long = make_match(make_ticks(last=400, overrides={(C, t): {"X": 1000.0} for t in range(1, 401)}))
+    fs = sight(long).first_seen(A, C, 390, floor=1)
+    assert fs.seen_at_limit and fs.limit == "lookback"
+
+
+def test_grenade_damage_does_not_count_for_time_to_damage():
+    m = make_match(ticks(a_yaw={80: 10.0}), rounds=[make_round(freeze_end=10, end=110, last=120)])
+    m.kills = build_kills(pd.DataFrame([death(100, A, C)]), m)
+    # 85 先被 A 的燃烧瓶烧到 1 点血，95 才第一次被枪打中
+    m.damages = build_damages(pd.DataFrame([hurt(85, A, C, 1, 99, weapon="inferno"), hurt(95, A, C, 30, 69),
+                                            hurt(100, A, C, 120, 0)]), m)
+    fires = [fire(90, A), fire(95, A), fire(100, A)]
+    m.shots = build_shots(pd.DataFrame(fires), pd.DataFrame([bullet(f["tick"], A) for f in fires]), m)
+    e = find_moments(m, A, CFG, sight=Sight(m, CFG, checker=WallChecker(500.0, -50.0))).moments[0].engagement
+    assert e.time_to_damage_s == pytest.approx(15 / 64, abs=1e-3)  # 80 看见 → 95 第一次枪械伤害

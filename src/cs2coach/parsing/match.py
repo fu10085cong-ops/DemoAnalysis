@@ -138,7 +138,7 @@ def parse_match(demo: Path, cfg: dict[str, Any]) -> MatchData:
     header = parser.parse_header()
 
     raw = parser.parse_ticks(PLAYER_PROPS + list(RULE_PROPS))
-    missing = [c for c in [*PLAYER_PROPS, *RULE_PROPS, "tick", "steamid"] if c not in raw.columns]
+    missing = [c for c in [*PLAYER_PROPS, *RULE_PROPS, "tick", "steamid", "name"] if c not in raw.columns]
     if missing:  # parse_ticks 对不存在的字段静默丢弃（陷阱 1）
         raise DemoParseError(f"demo 缺少必需的 tick 字段: {missing}")
     if raw.empty:
@@ -154,12 +154,9 @@ def parse_match(demo: Path, cfg: dict[str, Any]) -> MatchData:
     if not rounds:
         raise DemoParseError("demo 中没有完整的回合")
 
+    names = roster_names(parser.parse_player_info(), raw)
     ticks = _player_ticks(raw, tick_rate)
     del raw
-
-    info = parser.parse_player_info()
-    roster = info[info["team_number"].isin([Team.T, Team.CT])]
-    names = {int(s): str(n).strip() for s, n in zip(roster["steamid"], roster["name"]) if is_real_steamid(int(s))}
     ticks["spotted_by_mask"] = spotted_masks(ticks.pop("approximate_spotted_by"), spotted_bits(ticks))
 
     meta = MatchMeta(
@@ -238,6 +235,22 @@ def estimate_tick_rate(rules: pd.DataFrame) -> int:
     if dt.empty:
         return 0
     return int(round(1.0 / float(dt.median())))
+
+
+def roster_names(info: pd.DataFrame, raw: pd.DataFrame) -> dict[int, str]:
+    """参赛玩家 steamid → 名字。
+
+    通常取 parse_player_info；但中途被截断的 demo（如服务器重启后拆成 p1、p2 的 ESL demo）里它是空表，
+    这时改用逐 tick 数据中出现在 T / CT 的玩家（名字取最后一次出现的）。
+    """
+    if not info.empty:
+        roster = info[info["team_number"].isin([Team.T, Team.CT])]
+        pairs = zip(roster["steamid"], roster["name"])
+    else:
+        seen = raw.loc[raw["team_num"].isin([Team.T, Team.CT]), ["tick", "steamid", "name"]].dropna()
+        last = seen.sort_values("tick", kind="stable").drop_duplicates("steamid", keep="last")
+        pairs = zip(last["steamid"], last["name"])
+    return {int(s): str(n).strip() for s, n in pairs if is_real_steamid(int(s))}
 
 
 def _player_ticks(raw: pd.DataFrame, tick_rate: int) -> pd.DataFrame:

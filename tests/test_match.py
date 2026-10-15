@@ -14,6 +14,7 @@ from cs2coach.parsing.match import (
     live_mask,
     build_blinds,
     reconstruct_blinds,
+    roster_names,
     spotted_masks,
 )
 from tests.helpers.synthetic import A, B, C, D, make_match, make_round, make_ticks, sid
@@ -264,3 +265,17 @@ def test_player_ticks_bool_columns_survive_disconnected_rows():
         assert df[c].dtype == bool, c
     assert df["is_walking"].tolist() == [True, False]
     assert np.isnan(df["X"].iloc[1])
+
+
+def test_roster_names_from_player_info():
+    info = pd.DataFrame({"steamid": [A, B, 0, 76561190000000000 + 5], "name": [" a", "b", "bot", "spec"],
+                         "team_number": [2, 3, 2, 1]})
+    assert roster_names(info, pd.DataFrame()) == {A: "a", B: "b"}
+
+
+def test_roster_names_fall_back_to_ticks_when_player_info_is_empty():
+    # 中途截断的 demo（服务器重启后拆成两段）parse_player_info 为空，从逐 tick 数据取名字和队伍
+    info = pd.DataFrame(columns=["steamid", "name", "team_number"])
+    raw = pd.DataFrame({"tick": [1, 1, 2, 2, 2], "steamid": [A, C, A, C, 0],
+                        "name": ["old", "c", "new", "c", "bot"], "team_num": [2, 1, 2, 3, 3]})
+    assert roster_names(info, raw) == {A: "new", C: "c"}

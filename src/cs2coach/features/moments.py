@@ -27,6 +27,7 @@ from cs2coach.features.aim import shot_targets
 from cs2coach.features.aim_stats import aim_stats
 from cs2coach.features.visibility import Sight, angle_between
 from cs2coach.parsing.match import MatchData
+from cs2coach.parsing.weapons import is_gun
 from cs2coach.parsing.models import Round, Team
 
 
@@ -79,6 +80,10 @@ class _Params:
         self.key_assist_damage = int(mc["key_assist_min_damage"])
         self.min_blind = float(mc["min_blind_seconds"])
         self.jump_lead = round(mc["jump_lead_seconds"] * self.rate)
+        self.still_speed = float(mc["contact_still_speed"])
+        self.min_shot_interval: dict[str, float] = cfg["weapons"]["min_shot_interval_seconds"]
+        self.moving_speed = float(mc["contact_moving_speed"])
+        self.contact_window = round(mc["contact_speed_window_seconds"] * self.rate)
         self.stop_ratio = float(cs["accurate_speed_ratio"])
         self.crouch = float(cs["crouch_duck_amount"])
         self.max_speed: dict[str, float] = cs["max_speed"]
@@ -193,7 +198,8 @@ def add_visibility(match: MatchData, p: _Params, sid: int, opponent: int, tick: 
     if sight is None or not sight.available:
         return eng.model_copy(update={"visibility_note": "no_map_data"})
     d = match.damages
-    win = d["tick"].between(eng.start_tick, tick)
+    # Time to Damage、Crosshair Placement 只看枪械伤害（手雷、燃烧弹的伤害与枪法无关）
+    win = d["tick"].between(eng.start_tick, tick) & d["weapon"].map(is_gun)
     dealt = d[win & (d["attacker"] == sid).fillna(False) & (d["victim"] == opponent).fillna(False)]
     taken = d[win & (d["attacker"] == opponent).fillna(False) & (d["victim"] == sid).fillna(False)]
     my_dmg = int(dealt["tick"].min()) if len(dealt) else None
@@ -207,7 +213,18 @@ def add_visibility(match: MatchData, p: _Params, sid: int, opponent: int, tick: 
 
     note = None
     if not valid(me):
-        note = "smoke" if me.smoke else "seen_before_window" if me.seen_at_limit else "not_seen"
+        if me.smoke:
+            note = "smoke"
+        elif me.seen_at_limit:
+            # 回溯停在下限：下限是本回合上一次击杀（之后的才属于这次交火）或冻结期结束，不是"超过 3 秒"
+            rnd = match.round_of(tick)
+            round_floor = (rnd.freeze_end_tick if rnd.freeze_end_tick is not None else rnd.start_tick) if rnd else None
+            if me.limit == "floor":
+                note = "seen_since_round_start" if floor == round_floor else "seen_since_previous_kill"
+            else:
+                note = "seen_before_window"
+        else:
+            note = "not_seen"
     upd: dict[str, Any] = {
         "player_first_seen_tick": me.tick if valid(me) else None,
         "opponent_first_seen_tick": opp.tick if valid(opp) else None,
@@ -215,18 +232,51 @@ def add_visibility(match: MatchData, p: _Params, sid: int, opponent: int, tick: 
     }
     if valid(me) and valid(opp):
         upd["seen_first_lead_s"] = p.secs(opp.tick - me.tick)
+    seen_ticks = [fs.tick for fs in (me, opp) if valid(fs)]
+    if seen_ticks:
+        contact = min(seen_ticks)
+        mine, theirs = _avg_speed(match, sid, contact, p.contact_window), _avg_speed(match, opponent, contact, p.contact_window)
+        upd["contact_tick"] = contact
+        upd["player_speed_at_contact"] = mine
+        upd["opponent_speed_at_contact"] = theirs
+        upd["contact_type"] = contact_type(mine, theirs, p.still_speed, p.moving_speed)
     if valid(me) and my_dmg is not None:
         upd["time_to_damage_s"] = p.secs(my_dmg - me.tick)
         upd["crosshair_placement_deg"] = angle_between(sight.view_vector(sid, me.tick), sight.view_vector(sid, my_dmg))
     if valid(opp) and opp_dmg is not None:
         upd["opponent_time_to_damage_s"] = p.secs(opp_dmg - opp.tick)
-    if valid(me) and eng.player_first_shot_tick is not None:
-        upd["seen_to_first_shot_s"] = p.secs(eng.player_first_shot_tick - me.tick)
-    if eng.player_first_shot_tick is not None and my_dmg is not None:
-        upd["first_shot_to_damage_s"] = p.secs(my_dmg - eng.player_first_shot_tick)
+    if valid(me):
+        shot_ticks = [s.tick for s in eng.shots]
+        after = [t for t in shot_ticks if t >= me.tick]
+        upd["shots_before_seen"] = len(shot_ticks) - len(after)
+        if after:
+            upd["seen_to_first_shot_s"] = p.secs(after[0] - me.tick)
+            if my_dmg is not None and my_dmg >= after[0]:
+                upd["first_shot_to_damage_s"] = p.secs(my_dmg - after[0])
     if kind == "kill" and my_dmg is not None:
         upd["damage_to_kill_s"] = p.secs(tick - my_dmg)
     return eng.model_copy(update=upd)
+
+
+def _avg_speed(match: MatchData, sid: int, tick: int, window: int) -> float | None:
+    """[tick - window, tick] 内的平均水平速度。"""
+    v = match.player_ticks(sid, tick - window, tick)["speed_xy"].dropna()
+    return round(float(v.mean()), 1) if len(v) else None
+
+
+def contact_type(mine: float | None, theirs: float | None, still: float, moving: float) -> str | None:
+    """接触时谁在移动：只在双方状态都明确（静止或移动）时下结论，处在减速、急停等过渡状态时为 unclear。"""
+    if mine is None or theirs is None:
+        return None
+
+    def state(v: float) -> str | None:
+        return "still" if v < still else "moving" if v >= moving else None
+
+    a, b = state(mine), state(theirs)
+    if a is None or b is None:
+        return "unclear"
+    return {("moving", "still"): "peek", ("still", "moving"): "held",
+            ("moving", "moving"): "both_moving", ("still", "still"): "both_still"}[(a, b)]
 
 
 def _shot(p: _Params, r: pd.Series, states: pd.DataFrame, hit_ticks: set[int]) -> Shot:
@@ -330,11 +380,28 @@ def death_state(match: MatchData, p: _Params, sid: int, tick: int, row: pd.Serie
     if best is not None:
         by_mate = bool(best[1]["thrower_team_num"] == best[1]["victim_team_num"]) if blinded_by is not None else None
     grenades = row.get("victim_prev_grenades")
+    ready = weapon_readiness(p, sid, tick)
     return DeathState(
+        **ready,
         unused_grenades=list(grenades) if isinstance(grenades, list) else [],
         blinded=best is not None, blind_remaining_s=round(best[0], 2) if best else None,
         blinded_by=blinded_by, blinded_by_teammate=by_mate,
     )
+
+
+def weapon_readiness(p: _Params, sid: int, tick: int) -> dict[str, Any]:
+    """阵亡时手里的枪是否来得及再开一枪：看本人最后一枪（任何目标）到阵亡的间隔。"""
+    s = p.shots
+    mine = s[(s["steamid"] == sid).fillna(False) & s["is_gun"] & (s["tick"] < tick)]
+    if mine.empty:
+        return {}
+    last = mine.sort_values("tick").iloc[-1]
+    interval = p.min_shot_interval.get(last["weapon"])
+    gap = (tick - int(last["tick"])) / p.rate
+    if interval is None or gap > 2 * interval:
+        return {}
+    return {"weapon_ready": gap >= interval, "last_shot_weapon": last["weapon"],
+            "last_shot_gap_s": round(gap, 3), "min_shot_interval_s": interval}
 
 
 def _tags(match: MatchData, row: pd.Series, kind: str, ctx: Context, eng: Engagement | None,
@@ -369,11 +436,15 @@ def _tags(match: MatchData, row: pd.Series, kind: str, ctx: Context, eng: Engage
         tags.append("no_shots_fired")
     if eng is not None and eng.seen_first_lead_s is not None and eng.seen_first_lead_s != 0:
         tags.append("saw_opponent_first" if eng.seen_first_lead_s > 0 else "opponent_saw_first")
+    if eng is not None and eng.contact_type in ("peek", "held"):
+        tags.append("peeked_held_angle" if eng.contact_type == "peek" else "held_angle")
     if kind == "death" and eng is not None and eng.visibility_note == "not_seen":
         tags.append("died_without_seeing")
     if eng is not None and eng.first_shot_lead_s is not None:
         tags.append("shot_first" if eng.first_shot_lead_s > 0 else "opponent_shot_first" if eng.first_shot_lead_s < 0 else "shot_same_tick")
     if death is not None:
+        if death.weapon_ready is False:
+            tags.append("weapon_not_ready")
         if death.blinded:
             tags.append("died_blind")
         if death.unused_grenades:

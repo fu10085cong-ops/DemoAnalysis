@@ -31,3 +31,17 @@ def test_missing_and_malformed_config(tmp_path):
     bad.write_text("[parsing\n", encoding="utf-8")
     with pytest.raises(ConfigError, match="格式错误"):
         load_config(bad)
+
+
+def test_env_file_does_not_override_existing(tmp_path, monkeypatch):
+    from cs2coach.env import load_env_file
+
+    env = tmp_path / ".env"
+    env.write_text('# 注释\nDEEPSEEK_API_KEY="sk-test"\nexport OTHER_KEY=abc\nEXISTING=new\nnot a pair\n', encoding="utf-8")
+    import os
+
+    fake_environ = {"EXISTING": "old"}  # 不碰真实的环境变量
+    monkeypatch.setattr(os, "environ", fake_environ)
+    assert load_env_file(env) == ["DEEPSEEK_API_KEY", "OTHER_KEY"]
+    assert fake_environ == {"EXISTING": "old", "DEEPSEEK_API_KEY": "sk-test", "OTHER_KEY": "abc"}
+    assert load_env_file(tmp_path / "missing") == []

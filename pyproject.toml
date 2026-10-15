@@ -11,6 +11,9 @@ dependencies = [
     "rarfile>=4.2",
     # 视野计算：地图碰撞网格 + 射线检测（awpy-data 发布的 .mesh）
     "awpy>=3.0,<4",
+    # AI 诊断：Claude 用官方 SDK；DeepSeek 等 OpenAI 兼容接口用 openai SDK
+    "anthropic>=1.0",
+    "openai>=1.0",
 ]
 
 [project.optional-dependencies]

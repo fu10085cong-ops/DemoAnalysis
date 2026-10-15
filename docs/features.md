@@ -47,6 +47,8 @@
 | `time_to_damage_s`（Leetify 同名） | 看见对手 → 第一次对他造成伤害 | 同上 |
 | `seen_to_first_shot_s` / `first_shot_to_damage_s` / `damage_to_kill_s` | Time to Damage 拆成三段（Leetify 没有）：看见 → 第一枪（负数表示看见前就开枪）、第一枪 → 第一次命中、第一次命中 → 击杀 | 同上 |
 | `crosshair_placement_deg`（Leetify 同名） | 从看见对手到第一次造成伤害，准星转过的角度 | 视角数据准确 |
+| `shots_before_seen` | 看见对手之前就朝他开的枪数（预瞄穿点、隔着掩体扫射、上一次露头时的射击）；`seen_to_first_shot_s` 只从看见后的第一枪算，前两段相加等于 Time to Damage | 同上 |
+| `contact_tick` / `player_speed_at_contact` / `opponent_speed_at_contact` / `contact_type` | 接触时刻（双方中较早看见对方的 tick）前 0.25 秒内双方的平均速度；低于 40 u/s 算几乎静止，不低于 120 算在移动，中间（减速、急停中）不下结论。`peek` 自己移动、对手静止（主动拉出，对手架点）；`held` 反过来；`unclear` 有一方处在过渡状态。用来支撑"干拉""架点"这类判断 | 速度准确；阈值依据 3 个 demo、878 个样本的速度分布（两个峰 0–10 和 200–220） |
 | `visibility_note` | 上述指标为空的原因：`not_seen`（事件发生时看不到对手，如穿墙、背身）、`seen_before_window`（回溯 3 秒内一直可见，起点未知）、`smoke`、`no_map_data` | — |
 
 **烟雾**：CS2 的烟是体素，会被雷和子弹打散，无法精确建模。只用来排除："第一次看见"那一刻视线经过烟雾附近（球体近似，半径 144、展开后 1–18 秒有效）时，起点可能偏早，不计算 Time to Damage、Crosshair Placement。校准：被排除的 3%–5% 样本 Time to Damage 中位数 0.9–1.4 秒，保留样本的中位数几乎不变。
@@ -108,6 +110,7 @@
 | `no_shots_fired` | 死亡前这次交火中没有朝对手开枪 |
 | `died_blind` / `unused_utility` | 被闪致死 / 死时道具没用 |
 | `saw_opponent_first` / `opponent_saw_first` | 谁先看见谁（地图几何视野） |
+| `peeked_held_angle` / `held_angle` | 接触时自己主动拉出、对手架点 / 自己架点、对手拉出 |
 | `died_without_seeing` | 死亡时看不到击杀者（被背身、侧身或穿点打死） |
 | `flash_assist` / `damage_assist` | 关键助攻的类型 |
 | `teamkill` / `victim_is_bot` / `world_damage` | 误杀队友 / 击杀 bot / 非玩家伤害致死 |

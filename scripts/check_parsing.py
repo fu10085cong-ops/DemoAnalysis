@@ -46,10 +46,15 @@ def check_rounds(m: MatchData, p: DemoParser) -> bool:
         print(f"回合：{len(m.rounds)} 个；demo 中没有 round_end 事件，无法对照")
         return True
     ev = ev[ev["winner"].map(lambda w: w in _WINNER)]  # 热身回合的 winner 为空（陷阱 14）
+    # 比赛重开（如 5E 在第一回合后重开比赛，陷阱 21）之前的回合已作废，记分板也清零，不参与对照
+    first = m.rounds[0].start_tick
+    voided = sorted(int(t) for t in ev["tick"] if int(t) < first)
+    ev = ev[ev["tick"] >= first]
     evs = {int(t): _WINNER[w] for t, w in zip(ev["tick"], ev["winner"])}
     mine = {r.end_tick: int(r.winner) for r in m.rounds}
     ok = evs == mine
-    print(f"回合：切分 {len(mine)} 个，round_end 事件 {len(evs)} 个（不含热身）→ {verdict(ok)}")
+    note = f"；比赛重开前作废的回合 {len(voided)} 个（tick {', '.join(map(str, voided))}）" if voided else ""
+    print(f"回合：切分 {len(mine)} 个，round_end 事件 {len(evs)} 个（不含热身）{note} → {verdict(ok)}")
     if not ok:
         for t in sorted(set(evs) | set(mine)):
             if evs.get(t) != mine.get(t):

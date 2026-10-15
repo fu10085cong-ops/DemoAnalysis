@@ -26,6 +26,8 @@ class FirstSeen:
     tick: int | None  # 这段连续可见的第一个 tick；在回溯范围内一直可见时为 None
     seen_at_limit: bool  # 回溯到上限时仍然可见（"第一次看见"早于回溯范围）
     smoke: bool  # "第一次看见"那一刻视线经过烟雾附近：起点可能偏早，不可信
+    # seen_at_limit 时回溯停在哪里：lookback（回溯时长上限）或 floor（调用方给的下限，如上一次击杀、冻结期结束）
+    limit: str | None = None
 
 
 @dataclass(slots=True)
@@ -171,7 +173,10 @@ class Sight:
         at_limit = start is not None and start == lo
         # 只看"第一次看见"那一刻视线是否经过烟雾：如果是，真正看见的时刻可能更晚（烟雾挡住了），起点不可信
         smoke = start is not None and not at_limit and self.smoke_between(vs[start], ts[start], start)
-        return FirstSeen(tick=None if at_limit else start, seen_at_limit=at_limit, smoke=smoke)
+        limit = None
+        if at_limit:
+            limit = "floor" if lo == floor and floor > tick - self.lookback else "lookback"
+        return FirstSeen(tick=None if at_limit else start, seen_at_limit=at_limit, smoke=smoke, limit=limit)
 
     def view_vector(self, steamid: int, tick: int) -> np.ndarray | None:
         st = _as_state(self.match.state_at(steamid, tick))

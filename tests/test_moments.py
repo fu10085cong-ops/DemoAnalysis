@@ -271,3 +271,35 @@ def test_effective_damage():
     })
     # 第二枪原始伤害 120，但 C 只剩 70；AWP 打满血 400 只算 100；第二回合重新从满血算
     assert effective_damage(df) == [30, 70, 100, 20]
+
+
+@pytest.mark.parametrize("mine,theirs,expected", [
+    (200.0, 5.0, "peek"),        # 自己跑动进入视野，对手架点
+    (5.0, 200.0, "held"),
+    (200.0, 180.0, "both_moving"),
+    (10.0, 0.0, "both_still"),
+    (90.0, 0.0, "unclear"),      # 自己在减速 / 急停中，不下结论
+    (None, 0.0, None),
+])
+def test_contact_type(mine, theirs, expected):
+    from cs2coach.features.moments import contact_type
+
+    assert contact_type(mine, theirs, 40.0, 120.0) == expected
+
+
+
+def test_weapon_not_ready_after_awp_shot():
+    # A 在 tick 180 开了一枪 AWP（打别的方向），tick 200 阵亡：只隔 20 tick，AWP 两枪最短间隔 1.45 秒，来不及再开枪
+    fires = [fire(85, C), fire(90, A), fire(95, A), fire(100, A), fire(150, D), fire(180, A, "weapon_awp"), fire(200, D)]
+    bullets = [bullet(f["tick"], int(f["user_steamid"])) for f in fires]
+    bullets[5] = bullet(180, A, yaw=135.0)  # 没瞄向任何人
+    d = moment(find_moments(scenario(fires=fires, bullets=bullets), A, CFG), "R1-death")
+    assert d.death.weapon_ready is False and d.death.last_shot_weapon == "awp"
+    assert d.death.last_shot_gap_s == pytest.approx(20 / 64, abs=1e-3) and d.death.min_shot_interval_s == 1.45
+    assert "weapon_not_ready" in d.tags
+
+
+def test_weapon_ready_when_last_shot_is_old_or_fast_weapon():
+    # 上一枪是 AK（没有配置最短间隔）：不做判断
+    d = moment(find_moments(scenario(), A, CFG), "R1-death")
+    assert d.death.weapon_ready is None and "weapon_not_ready" not in d.tags

@@ -34,6 +34,7 @@
 - 字段调研结论（哪些数据准确、哪些只能近似）见 `docs/fields.md`；复现方法：`scripts/explore_demo.py`、`scripts/verify_semantics.py`
 - 解析层（`parsing/match.py`）改动后，或拿到新来源的 demo 时，跑 `scripts/check_parsing.py` 与 demo 中的独立数据逐项核对
 - 解析层输出格式见 `docs/parsing.md`；决定性瞬间与各指标的定义、准确度见 `docs/features.md`
+- 工具层在 `src/cs2coach/tools/`（整场摘要、查询工具、引用检查），AI 层在 `src/cs2coach/ai/`（提示词、调用循环）。单元测试用假客户端，不调用真实 API；真实调用会产生费用，运行前先征得用户同意
 - 分步推进，每一步完成后停下来等用户确认；遇到重要的设计取舍时，先列出选项和利弊，再动手
 
 ## demoparser2 关键陷阱（详见 docs/fields.md §0、§1）

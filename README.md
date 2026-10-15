@@ -7,7 +7,7 @@ CS2 demo 赛后复盘分析工具：找出玩家的决定性瞬间，用数据�
 - 解析层的输出格式：[docs/parsing.md](docs/parsing.md)
 - 开发约定与架构原则：[CLAUDE.md](CLAUDE.md)
 
-当前阶段：解析层完成（回合、击杀、伤害、开枪、致盲、投掷物、经济与背包都已与 demo 中的独立数据核对，覆盖 ESL、5E、完美共 24 场）；决定性瞬间与指标已实现，包括基于地图几何的视野计算和 Leetify 口径的枪法统计（见 [docs/features.md](docs/features.md)）；AI 诊断尚未实现。
+当前阶段：解析层完成（回合、击杀、伤害、开枪、致盲、投掷物、经济与背包都已与 demo 中的独立数据核对，覆盖 ESL、5E、完美共 24 场）；决定性瞬间与指标已实现，包括基于地图几何的视野计算和 Leetify 口径的枪法统计（见 [docs/features.md](docs/features.md)）；AI 诊断已接入（DeepSeek、Claude 可切换），待用真实 API 验证报告质量。
 
 ## 环境搭建
 
@@ -77,9 +77,20 @@ python scripts/explore_demo.py data/demos/xxx.rar --demo-member some-map.dem
 # 核对解析结果（回合、记分板、致盲、开枪）。新来源的 demo 先跑这个
 python scripts/check_parsing.py data/demos/xxx.dem
 
-# 找出目标玩家的决定性瞬间及指标，结果写入 data/output/（AI 诊断开发中）
+# 找出目标玩家的决定性瞬间及指标，结果写入 data/output/
 python -m cs2coach analyze data/demos/xxx.dem --player <SteamID64>
+
+# 加上 --ai：调用 AI 生成中文复盘报告（data/output/<demo>_<steamid>_report.md）
+python -m cs2coach analyze data/demos/xxx.dem --player <SteamID64> --ai
 ```
+
+`--ai` 用哪个模型由 `config/default.toml` 的 `[ai] provider` 决定（默认 `deepseek`），各模型的设置在 `[ai.deepseek]`、`[ai.claude]`。凭据：
+- DeepSeek：环境变量 `DEEPSEEK_API_KEY`（Windows PowerShell：`$env:DEEPSEEK_API_KEY = "sk-..."`）
+- Claude：环境变量 `ANTHROPIC_API_KEY`，或用 Anthropic CLI 执行 `ant auth login`
+
+也可以把 key 写在项目根目录的 `.env` 文件里（一行一个，如 `DEEPSEEK_API_KEY=sk-...`）；`.env` 已在 `.gitignore` 中，不会提交。
+
+职业基准（报告中"与职业样本对比"）由 `scripts/build_baseline.py` 从职业比赛 demo 生成，目前只有一个小样本（ESL 一个 BO3 的三张图，30 人次）。
 
 视野计算首次运行时会从 GitHub 下载 awpy-data 的地图网格（约 150 MB，缓存在 `~/.awpy`）；下载不了时视野相关指标留空，其余分析照常。
 

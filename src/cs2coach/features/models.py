@@ -61,14 +61,25 @@ class Engagement(BaseModel):
     # Leetify 同名指标：从看见对手到第一次对他造成伤害；对手的同一指标
     time_to_damage_s: float | None = None
     opponent_time_to_damage_s: float | None = None
-    # Time to Damage 拆成三段（Leetify 没有）：看见 → 第一枪（负数表示看见之前就开枪，如预瞄穿点）、
-    # 第一枪 → 第一次命中、第一次命中 → 击杀（只有击杀）
+    # Time to Damage 拆成三段（Leetify 没有），前两段相加等于 Time to Damage：
+    # 看见 → 看见后的第一枪、看见后的第一枪 → 第一次命中、第一次命中 → 击杀（只有击杀）
     seen_to_first_shot_s: float | None = None
     first_shot_to_damage_s: float | None = None
     damage_to_kill_s: float | None = None
+    # 看见对手之前就朝他开的枪数（预瞄穿点、隔着掩体扫射，或上一次露头时的射击）
+    shots_before_seen: int | None = None
+    # 接触时刻（双方中较早看见对方的那一 tick）前一小段时间内双方的平均水平速度（u/s），用来判断谁在移动、谁在架点
+    contact_tick: int | None = None
+    player_speed_at_contact: float | None = None
+    opponent_speed_at_contact: float | None = None
+    # peek：自己移动进入对手视野而对手几乎静止（主动拉出、对方架点）；held：反过来（自己架点、对手拉出）；
+    # both_moving：双方都在移动；both_still：双方都几乎静止；unclear：有一方处在减速、急停等过渡状态；
+    # None：没有接触时刻。阈值见 config [moments] contact_still_speed / contact_moving_speed
+    contact_type: Literal["peek", "held", "both_moving", "both_still", "unclear"] | None = None
     # Leetify 同名指标：从看见对手到第一次造成伤害，准星转过的角度（度）
     crosshair_placement_deg: float | None = None
-    # 视野指标为空的原因：no_map_data / not_seen（事件发生时看不到对手）/ seen_before_window（回溯范围内一直可见）/ smoke
+    # 视野指标为空的原因：no_map_data / not_seen（事件发生时看不到对手）/ seen_before_window（回溯 3 秒内一直可见）/
+    # seen_since_previous_kill（本回合上一次击杀时就已经能看见这名对手）/ seen_since_round_start / smoke
     visibility_note: str | None = None
 
 
@@ -105,6 +116,12 @@ class Trade(BaseModel):
 
 class DeathState(BaseModel):
     unused_grenades: list[str]  # 死亡时身上没用掉的投掷物（规范名，重复保留）
+    # 武器是否来得及开枪：上一枪到阵亡的间隔小于该武器两枪的最短间隔时为 False（如 AWP 刚开过一枪还在拉栓）。
+    # 没有上一枪或该武器没有配置最短间隔时为 None
+    weapon_ready: bool | None = None
+    last_shot_weapon: str | None = None
+    last_shot_gap_s: float | None = None
+    min_shot_interval_s: float | None = None
     blinded: bool  # 死亡时处于致盲中（致盲时长不低于阈值）
     blind_remaining_s: float | None
     blinded_by: int | None

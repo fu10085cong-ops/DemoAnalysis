@@ -38,6 +38,8 @@
 | 18 | **冻结期内的自杀**（weapon 为 `world`，推测是控制台 `kill` 或换队）：完美 3 次、5E 2 次。记分板 `deaths_total` 当时都会加 1，但**完美会在约 25 秒后扣回**（仍在冻结期内），5E 不扣 | 击杀表标记 `in_freeze_time`，不参与分析；核对记分板时两种口径都接受 |
 | 19 | **`player_death` 的武器名不统一**：5E 的 13 个样本中有 5 个带平台皮肤前缀（`5e_tyloo2025_ak47`、`5ExTEAMSPIRIT_awp`、`5e_fazesr2026004_knife_karambit`）；完美的 8 个样本中有 5 个带后缀（`ak47_vip`、`m4a1_silencer_txz08`、`awp_ace_vip`）。`player_hurt` 和 `weapon_fire`（去掉 `weapon_` 前缀后）的写法是干净的 | `parsing/weapons.py` 按 `_` 切开、取其中最长的已知武器名。核对：击杀的武器与致命一击 `player_hurt` 的武器逐条一致 |
 | 20 | **5E 的 `player_hurt` 把 USP-S 记成 `hkp2000`、M4A1-S 记成 `m4a1`**（共用栏位的基础型号）；同一 demo 的 `player_death`、`weapon_fire` 是对的，完美的 `player_hurt` 也是对的。已用攻击者当时的 `active_weapon_name` 确认 | 伤害表的武器名是基础型号、而攻击者手持的是同栏位另一把枪时，改成手持的那把 |
+| 21 | **5E 会在第一回合后重开比赛**（2026-10-14 的两个 5E 样本都是如此）：第一回合正常打完、有 round_end，随后重新进入热身、`begin_new_match` 再次触发，记分板和 `total_rounds_played` 清零 | 回合切分在回合号倒退时丢弃被重打的回合，这一回合里的击杀等事件不属于任何回合、一并丢弃；核对脚本把重开前的 round_end 单独列出，不算不一致 |
+| 22 | **中途被截断的 demo 里 `parse_player_info` 是空表**：ESL Pro League S24 Falcons vs NaVi 的 Mirage 因服务器重启被拆成 p1（前 12 回合）、p2（第 13 回合起，`total_rounds_played` 接着算）。p1 没有玩家信息，逐 tick 数据完整；p2 的记分板是两段的累计值，开头 tick 4 有 10 次 world 击杀（恢复备份时的重置，落在冻结期） | 花名册为空时改用逐 tick 数据中出现在 T / CT 的玩家（`roster_names`）；这样会带上热身时进过队伍的教练等人，由覆盖率检查标出。p2 的记分板对不上属正常 |
 | 11 | `parse_grenades()` 返回所有投掷物实体的逐 tick 轨迹（A 有 51.7 万行，B 有 252 万行），其中还混有 `CWeaponGlock`、`CKnife` 等非投掷物 | MVP 不用它 |
 
 ## 1. 不同来源的差异（重要）

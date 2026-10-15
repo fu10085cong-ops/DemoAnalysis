@@ -1,0 +1,225 @@
+"""整场摘要：直接放进提示词，让便宜的模型不调用工具也能写出报告（docs/product.md：程序一侧要"厚"）。
+
+每个决定性瞬间一行，带编号；AI 引用编号，需要细节时再调用工具。
+"""
+
+from __future__ import annotations
+
+from typing import Any
+
+from cs2coach.baseline import METRICS, compare
+from cs2coach.features.labels import GRENADE_LABELS, KIND_LABELS, ROUND_END_REASONS, tag_label
+from cs2coach.features.models import AimStats, MatchMoments, Moment
+from cs2coach.parsing.match import MatchData
+from cs2coach.parsing.models import Team
+
+METRIC_LABELS = {
+    "time_to_damage_ms": ("Time to Damage", "ms", "time_to_damage_samples", "次遭遇"),
+    "crosshair_placement_deg": ("Crosshair Placement", "°", "crosshair_placement_samples", "次遭遇"),
+    "counter_strafing_pct": ("Counter-Strafing", "%", "counter_strafing_shots", "发步枪"),
+    "spray_accuracy_pct": ("Spray Accuracy", "%", "spray_shots", "发扫射"),
+    "spotted_accuracy_pct": ("Spotted Accuracy", "%", "spotted_shots", "发"),
+    "headshot_accuracy_pct": ("Headshot Accuracy", "%", "hits", "次命中"),
+}
+
+
+def player_side(match: MatchData, steamid: int, round_number: int) -> str | None:
+    r = match.round(round_number)
+    if r is None:
+        return None
+    st = match.state_at(steamid, r.freeze_end_tick if r.freeze_end_tick is not None else r.start_tick)
+    if st is None:
+        return None
+    try:
+        return Team(int(st["team_num"])).name
+    except (ValueError, TypeError):
+        return None
+
+
+def build_digest(match: MatchData, mm: MatchMoments, baseline: dict[str, Any] | None) -> str:
+    lines = [_header(match, mm), "", _aim_section(mm.aim_stats, baseline), "", summary_section(mm), "",
+             _moments_section(mm)]
+    if mm.missed_trades:
+        lines += ["", "## 漏补（队友阵亡时自己在附近、窗口内在雷达上发现过击杀者，但没有补上；距离不考虑视线，近似）"]
+        for t in mm.missed_trades:
+            lines.append(f"- [[R{t.round}]] tick {t.tick}：队友 {match.name_of(t.teammate)} 被 {match.name_of(t.killer)} 击杀，"
+                         f"距离 {t.distance:.0f}" + ("，后来别的队友补上了" if t.killer_traded_by_other else ""))
+    if mm.excluded:
+        lines += ["", "## 不参与分析的记录"]
+        lines += [f"- [[R{x.round}]] tick {x.tick} {KIND_LABELS.get(x.kind, x.kind)}：{x.reason}" for x in mm.excluded]
+    return "\n".join(lines)
+
+
+def _header(match: MatchData, mm: MatchMoments) -> str:
+    sides, results = [], []
+    won = lost = 0
+    for r in match.rounds:
+        side = player_side(match, mm.player, r.number)
+        win = side is not None and r.winner.name == side
+        won += win
+        lost += side is not None and not win
+        results.append(f"R{r.number}{side or '?'}{'胜' if win else '负'}")
+        sides.append(side)
+    reasons = "、".join(sorted({ROUND_END_REASONS.get(r.reason, str(r.reason)) for r in match.rounds}))
+    return "\n".join([
+        "## 比赛",
+        f"地图 {mm.map_name}，{mm.rounds} 回合，目标玩家 {mm.player_name}。目标玩家所在队伍比分 {won}:{lost}。",
+        "每回合（阵营+胜负）：" + " ".join(results),
+        f"回合结束方式包括：{reasons}",
+    ])
+
+
+def _aim_section(stats: AimStats | None, baseline: dict[str, Any] | None) -> str:
+    if stats is None:
+        return "## 整场枪法\n视野计算不可用，没有枪法统计。"
+    src = baseline["source"] if baseline else "无"
+    lines = ["## 整场枪法（Leetify 口径）", f"职业样本：{src}。职业样本很小，只能作为参考。"]
+    for m in METRICS:
+        name, unit, n_field, n_unit = METRIC_LABELS[m]
+        v = getattr(stats, m)
+        n = getattr(stats, n_field)
+        if v is None:
+            lines.append(f"- {name}：样本不足（{n} {n_unit}）")
+            continue
+        c = compare(m, v, baseline)
+        cmp = (f"；职业中位数 {c['pro_median']}{unit}（四分位 {c['pro_p25']}–{c['pro_p75']}），"
+               f"优于 {c['better_than_pro_pct']}% 的职业样本") if c else ""
+        lines.append(f"- {name}：{v}{unit}（{n} {n_unit}）{cmp}")
+    return "\n".join(lines)
+
+
+VISIBILITY_NOTES = {
+    "not_seen": "事件发生时看不到对手",
+    "seen_before_window": "看见对手已超过 3 秒",
+    "seen_since_previous_kill": "本回合上一次击杀时就已经能看见这名对手（交火紧接着上一次击杀）",
+    "seen_since_round_start": "回合开始时就能看见这名对手",
+    "smoke": "首次看见时隔着烟，视野数据不计",
+    "no_map_data": "无视野数据",
+}
+
+CONTACT_LABELS = {
+    "peek": "自己移动进入对手视野、对手几乎静止：主动拉出，对手在架点",
+    "held": "自己几乎静止、对手移动进入视野：自己在架点，对手拉出",
+    "both_moving": "双方都在移动",
+    "both_still": "双方都几乎静止",
+    "unclear": "有一方处在减速或急停的过渡状态，无法判断谁在架点",
+}
+
+
+def summary_section(mm: MatchMoments) -> str:
+    """整场汇总：由程序统计并列出编号，AI 直接引用，不必自己数（避免数错、列错）。"""
+    kills = [m for m in mm.moments if m.kind == "kill"]
+    deaths = [m for m in mm.moments if m.kind == "death"]
+    assists = [m for m in mm.moments if m.kind == "assist"]
+
+    def ids(ms: list[Moment]) -> str:
+        return "、".join(f"[[{m.id}]]" for m in ms) if ms else "无"
+
+    def row(label: str, ms: list[Moment], total: list[Moment]) -> str:
+        return f"  - {label}：{len(ms)}/{len(total)} 次：{ids(ms)}"
+
+    def has(m: Moment, tag: str) -> bool:
+        return tag in m.tags
+
+    e = lambda m: m.engagement  # noqa: E731
+    lines = ["## 整场汇总（程序统计；引用次数和编号时直接用这里的结果，不要自己重新数）"]
+    lines.append(f"- 击杀 {len(kills)} 次（爆头 {sum(m.headshot for m in kills)}）")
+    lines += [
+        row("首杀", [m for m in kills if has(m, "opening_kill")], kills),
+        row("补枪（替刚阵亡的队友报仇）", [m for m in kills if has(m, "trade_kill")], kills),
+        row("残局中的击杀", [m for m in kills if any(t.startswith("clutch_") for t in m.tags)], kills),
+        row("主动拉出、对手在架点时拿下", [m for m in kills if e(m) and e(m).contact_type == "peek"], kills),
+    ]
+    # 下面的规律只统计交火中的阵亡：回合结束后的死亡、摔死 / 被炸弹炸死不是对局行为
+    other = [m for m in deaths if has(m, "after_round_end") or has(m, "world_damage")]
+    combat = [m for m in deaths if m not in other]
+    lines.append(f"- 死亡 {len(deaths)} 次，其中交火中阵亡 {len(combat)} 次"
+                 + (f"（另有 {ids(other)} 是回合结束后或非玩家伤害致死，不计入下面的统计）" if other else ""))
+    lines += [
+        row("首死", [m for m in combat if has(m, "opening_death")], combat),
+        row("人数优势时阵亡", [m for m in combat if has(m, "man_advantage")], combat),
+        row("死时身上还有没用的道具", [m for m in combat if m.death and m.death.unused_grenades], combat),
+        row("没朝击杀者开枪就阵亡（不含武器还不能开枪的）",
+            [m for m in combat if has(m, "no_shots_fired") and not has(m, "weapon_not_ready")], combat),
+        row("阵亡时武器还不能开枪（刚开过一枪，如 AWP 拉栓）", [m for m in combat if has(m, "weapon_not_ready")], combat),
+        row("阵亡时看不到击杀者（被背身、侧身或穿点打死）", [m for m in combat if has(m, "died_without_seeing")], combat),
+        row("对手先看见自己", [m for m in combat if has(m, "opponent_saw_first")], combat),
+        row("主动拉出、对手在架点时阵亡", [m for m in combat if e(m) and e(m).contact_type == "peek"], combat),
+        row("被闪致死", [m for m in combat if has(m, "died_blind")], combat),
+        row("死于 AWP", [m for m in combat if m.weapon == "awp"], combat),
+        row("被队友补回", [m for m in combat if has(m, "traded")], combat),
+    ]
+    lines.append(f"- 关键助攻 {len(assists)} 次（闪光助攻 {sum(has(m, 'flash_assist') for m in assists)}，"
+                 f"伤害助攻 {sum(has(m, 'damage_assist') for m in assists)}）")
+    if mm.missed_trades:
+        lines.append(f"- 漏补 {len(mm.missed_trades)} 次（见文末，近似）")
+    return "\n".join(lines)
+
+
+def _moments_section(mm: MatchMoments) -> str:
+    lines = [f"## 决定性瞬间（共 {len(mm.moments)} 个；[[编号]] 用于引用，get_moment 可查看完整数据）"]
+    lines += [moment_line(m) for m in mm.moments]
+    return "\n".join(lines)
+
+
+def moment_line(m: Moment) -> str:
+    c = m.context
+    who = {"kill": "击杀", "death": "被击杀，对手", "assist": "助攻击杀"}[m.kind]
+    flags = [f for f, on in (("爆头", m.headshot), ("穿烟", m.through_smoke), ("穿墙", m.wallbang),
+                             ("盲狙", m.noscope)) if on]
+    parts = [
+        f"[[{m.id}]] {who} {m.opponent_name or '-'}（{m.weapon}{'，' + '、'.join(flags) if flags else ''}）",
+        f"{c.side} {c.alive_own}v{c.alive_enemy}，第 {c.round_time_s:.0f} 秒" + ("，已下包" if c.bomb_planted else "")
+        + (f"，距离 {c.distance:.0f} 米" if c.distance else "")
+        + (f"，交火前血量 {c.own_health_before} vs {c.opponent_health_before}"
+           if c.own_health_before is not None and c.opponent_health_before is not None
+           and (c.own_health_before < 100 or c.opponent_health_before < 100) else ""),
+        f"手持 {c.own_weapon or '-'} vs {c.opponent_weapon or '-'}，装备 {c.own_equip_value or '-'} vs {c.opponent_equip_value or '-'}",
+    ]
+    e = m.engagement
+    if e is not None:
+        first = "首枪中" if e.first_shot_hit else "首枪未中" if e.first_shot_hit is False else ""
+        cs = f"急停 {e.counter_strafe_stopped}/{e.counter_strafe_shots}" if e.counter_strafe_shots else "急停 -"
+        parts.append(f"开枪 {e.shots_fired} 中 {e.shots_hit}{'（' + first + '）' if first else ''}，{cs}，"
+                     f"造成/受到伤害 {e.damage_dealt}/{e.damage_taken}")
+        vis = []
+        if e.seen_first_lead_s is not None:
+            vis.append(f"先看见：{'自己' if e.seen_first_lead_s > 0 else '对手' if e.seen_first_lead_s < 0 else '同时'}"
+                       f"（{abs(e.seen_first_lead_s):.2f}s）")
+        if e.time_to_damage_s is not None:
+            vis.append(f"TTD {e.time_to_damage_s * 1000:.0f}ms（看见→开枪 {_ms(e.seen_to_first_shot_s)}，"
+                       f"开枪→命中 {_ms(e.first_shot_to_damage_s)}）")
+        if e.shots_before_seen:
+            vis.append(f"看见前已朝他开了 {e.shots_before_seen} 枪")
+        if e.player_speed_at_contact is not None:
+            vis.append(f"接触时速度 自己 {e.player_speed_at_contact:.0f} / 对手 {e.opponent_speed_at_contact:.0f} u/s"
+                       f"（{CONTACT_LABELS[e.contact_type]}）")
+        if e.crosshair_placement_deg is not None:
+            vis.append(f"准星移动 {e.crosshair_placement_deg:.1f}°")
+        if e.visibility_note:
+            vis.append(VISIBILITY_NOTES[e.visibility_note])
+        if vis:
+            parts.append("，".join(vis))
+    if m.trade is not None:
+        if m.trade.traded is not None:
+            near = f"，最近队友 {m.trade.nearest_teammate_distance:.0f}" if m.trade.nearest_teammate_distance else "，附近没有存活队友"
+            parts.append(("被补回" if m.trade.traded else "未被补") + near)
+        if m.trade.is_trade_kill:
+            parts.append(f"补枪（队友阵亡 {m.trade.avenge_delay_s:.1f}s 后）")
+    if m.death is not None:
+        if m.death.weapon_ready is False:
+            parts.append(f"阵亡时武器还不能开枪：上一枪（{m.death.last_shot_weapon}）到阵亡只有 {m.death.last_shot_gap_s:.2f}s，"
+                         f"该武器两枪最短间隔 {m.death.min_shot_interval_s:.2f}s")
+        if m.death.unused_grenades:
+            parts.append("死时身上道具：" + "、".join(GRENADE_LABELS.get(g, g) for g in m.death.unused_grenades))
+        if m.death.blinded:
+            parts.append(f"死时被闪（剩 {m.death.blind_remaining_s:.1f}s，{'队友' if m.death.blinded_by_teammate else '对手'}闪的）")
+    if m.assist is not None:
+        parts.append(("闪光助攻" if m.assist.flash_assist else f"伤害助攻，造成 {m.assist.damage_to_victim} 伤害"))
+    if m.tags:
+        parts.append("标签：" + "、".join(tag_label(t) for t in m.tags))
+    return "- " + " | ".join(parts)
+
+
+def _ms(s: float | None) -> str:
+    return f"{s * 1000:.0f}ms" if s is not None else "-"
