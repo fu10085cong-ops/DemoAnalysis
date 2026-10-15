@@ -82,9 +82,17 @@ python -m cs2coach analyze data/demos/xxx.dem --player <SteamID64>
 
 # 加上 --ai：调用 AI 生成中文复盘报告（同一目录下的 report.md 和 submission.json）
 python -m cs2coach analyze data/demos/xxx.dem --player <SteamID64> --ai
+
+# 汇总同一玩家在 data/demos 中的全部比赛，不调用 AI
+python -m cs2coach summary --player <SteamID64>
+
+# 仅汇总指定比赛；压缩包含多个 demo 时用 --demo-member 指定
+python -m cs2coach summary data/demos/xxx.zip --demo-member some-map.dem --player <SteamID64> --out <临时目录>
 ```
 
 不加 `--ai` 时生成 `moments.json`、`facts.md`、`problems.md`。重新分析同一玩家时，原有的 `report.md` 和 `submission.json` 会按修改时间移入同目录的 `历史版本/`。
+
+`summary` 直接从 demo 生成多场程序汇总，不读取单场输出；结果放在 `<输出根目录>/<玩家名>_<SteamID64>/汇总/`，包含 `problems.md` 和 `summary.json`。重复运行会归档旧版文件。本命令没有 AI 选项。
 
 `--ai` 用哪个模型由 `config/default.toml` 的 `[ai] provider` 决定（默认 `deepseek`），各模型的设置在 `[ai.deepseek]`、`[ai.claude]`。凭据：
 - DeepSeek：环境变量 `DEEPSEEK_API_KEY`（Windows PowerShell：`$env:DEEPSEEK_API_KEY = "sk-..."`）

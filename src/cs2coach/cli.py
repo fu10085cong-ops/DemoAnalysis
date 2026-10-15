@@ -1,4 +1,4 @@
-"""命令行入口：python -m cs2coach analyze <demo路径> --player <steamid64>"""
+"""命令行入口：analyze 单场分析与 summary 多场程序汇总。"""
 
 from __future__ import annotations
 
@@ -29,9 +29,9 @@ def _output_folder(root: Path, demo: Path, name: str, steamid: int) -> Path:
     return player_dir / demo.stem
 
 
-def _archive_reports(folder: Path) -> None:
-    """重跑前保存已有的 AI 报告；同一分钟内重跑也不覆盖历史版本。"""
-    for name in ("report.md", "submission.json"):
+def _archive_reports(folder: Path, names: tuple[str, ...] = ("report.md", "submission.json")) -> None:
+    """重跑前保存指定文件；同一分钟内重跑也不覆盖历史版本。"""
+    for name in names:
         old = folder / name
         if not old.is_file():
             continue
@@ -57,6 +57,13 @@ def _build_parser() -> argparse.ArgumentParser:
     analyze.add_argument("--out", type=Path, default=Path("data/output"), help="输出目录")
     analyze.add_argument("--config", type=Path, default=None, help="阈值配置文件（TOML），只需写要覆盖的条目")
     analyze.add_argument("--ai", action="store_true", help="调用 AI 生成中文复盘报告（模型在配置的 [ai] 段，需要对应的 API 凭据）")
+    summary = sub.add_parser("summary", help="汇总同一玩家的多场 demo（程序部分）")
+    summary.add_argument("demo", nargs="*", type=Path, help="指定 demo；省略时递归扫描 --demos-dir")
+    summary.add_argument("--demo-member", action="append", default=[], help="指定压缩包中的 demo；多个路径时按顺序对应")
+    summary.add_argument("--player", required=True, help="目标玩家 SteamID64")
+    summary.add_argument("--demos-dir", type=Path, default=Path("data/demos"), help="自动扫描的 demo 根目录")
+    summary.add_argument("--out", type=Path, default=Path("data/output"), help="输出目录")
+    summary.add_argument("--config", type=Path, default=None, help="阈值配置文件（TOML）")
     return parser
 
 
@@ -65,7 +72,54 @@ def main(argv: list[str] | None = None) -> int:
     args = _build_parser().parse_args(argv)
     if args.command == "analyze":
         return _analyze(args)
+    if args.command == "summary":
+        return _summary(args)
     return 1
+
+
+def _summary(args: argparse.Namespace) -> int:
+    from cs2coach.baseline import load_baseline
+    from cs2coach.summary.aggregate import build_summary
+    from cs2coach.summary.discover import find_player_demos, inspect_player_demos
+    from cs2coach.summary.render import render_summary_problems
+
+    if not args.player.isdigit():
+        print(f"错误: --player 应为 SteamID64（17 位数字），收到 {args.player!r}", file=sys.stderr)
+        return 1
+    if args.demo_member and not args.demo:
+        print("错误: --demo-member 只能与指定 demo 一起使用", file=sys.stderr)
+        return 1
+    archives = [path for path in args.demo if path.name.lower().endswith((".zip", ".rar"))]
+    if len(args.demo_member) > len(archives):
+        print("错误: --demo-member 数量不能超过压缩包数量", file=sys.stderr)
+        return 1
+    selected = dict(zip(archives, args.demo_member))
+    try:
+        cfg = load_config(args.config)
+        steamid = int(args.player)
+        refs = (inspect_player_demos(steamid, [(path, selected.get(path)) for path in args.demo])
+                if args.demo else find_player_demos(steamid, args.demos_dir))
+    except (ConfigError, OSError) as exc:
+        print(f"错误: {exc}", file=sys.stderr)
+        return 1
+    for item in getattr(refs, "skipped", []):
+        print(f"扫描跳过 {item.match_id}：{item.reason}", flush=True)
+    if not refs:
+        print(f"错误: 没有找到玩家 {steamid} 的可用 demo", file=sys.stderr)
+        return 1
+    result = build_summary(steamid, refs, cfg, load_baseline())
+    folder = _output_folder(args.out, Path("汇总.dem"), result.names[0] if result.names
+                            else refs[0].player_name, steamid)
+    folder.mkdir(parents=True, exist_ok=True)
+    _archive_reports(folder, ("problems.md", "summary.json"))
+    problems = folder / "problems.md"
+    summary_file = folder / "summary.json"
+    problems.write_text(render_summary_problems(result), encoding="utf-8")
+    summary_file.write_text(result.model_dump_json(indent=2) + "\n", encoding="utf-8")
+    print(f"汇总完成：{len(result.matches)} 场，在场 {result.rounds_played_total} 回合，"
+          f"跳过 {len(result.skipped)} 场")
+    print(f"输出目录：{folder}")
+    return 0
 
 
 def _analyze(args: argparse.Namespace) -> int:

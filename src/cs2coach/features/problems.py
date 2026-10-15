@@ -329,14 +329,19 @@ def problem_frequency(report: ProblemReport, mm: MatchMoments, baseline: dict | 
     """每十回合的问题频率与职业对比；不含整场目标、停用项和亮点。"""
     counts = Counter(h.problem for h in report.hits if h.target != "match")
     disabled = set(report.disabled) | set(cfg["problems"]["disabled"])
+    return frequency_from_counts(counts, mm.rounds_played, disabled, baseline, cfg)
+
+
+def frequency_from_counts(counts: Counter, rounds: int, disabled: set[str],
+                          baseline: dict | None, cfg: dict) -> list[FrequencyRow]:
+    """单场与多场共用的频率、职业预期及突出判断。"""
     rates = baseline.get("problem_rates", {}) if baseline is not None else {}
     rows = []
     for pid in DETECTED_PROBLEMS:
         spec = PROBLEMS[pid]
         if pid in disabled or spec.category == "highlight":
             continue
-        hits = counts[pid]
-        rounds = mm.rounds_played
+        hits = counts.get(pid, 0)
         frequency = 10 * hits / rounds if rounds > 0 else 0.0
         rate = rates.get(pid, {})
         pro_hits, pro_rounds = rate.get("hits"), rate.get("rounds")

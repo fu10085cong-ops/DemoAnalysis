@@ -5,21 +5,25 @@ import json
 from cs2coach.features.problems import PROBLEMS, FrequencyRow, ProblemReport
 
 
+def frequency_cells(row: FrequencyRow) -> list[str]:
+    """单场和多场共用的六列显示口径。"""
+    name = f"**{row.label}**" if row.prominent else row.label
+    if row.needs_more_matches:
+        name += "（次数较少，需要更多比赛确认）"
+    elif row.excess_hits is not None and row.excess_hits <= 0:
+        name += "（不高于职业水平）"
+    return [name, str(row.hits),
+            f"{row.expected_hits:.2f}" if row.expected_hits is not None else "—",
+            f"{row.excess_hits:.2f}" if row.excess_hits is not None else "—",
+            f"{row.chance * 100:.1f}%" if row.chance is not None else "—",
+            f"{row.ratio:.2f}×" if row.ratio is not None else "—"]
+
+
 def frequency_table(rows: list[FrequencyRow]) -> list[str]:
     """摘要、程序检测和 AI 报告共用同一组频率列。"""
     lines = ["| 问题 | 本场次数 | 按职业频率预期 | 多出的次数 | 偶然概率 | 倍数 |",
              "|---|---:|---:|---:|---:|---:|"]
-    for row in rows:
-        name = f"**{row.label}**" if row.prominent else row.label
-        if row.needs_more_matches:
-            name += "（次数较少，需要更多比赛确认）"
-        elif row.excess_hits is not None and row.excess_hits <= 0:
-            name += "（不高于职业水平）"
-        expected = f"{row.expected_hits:.2f}" if row.expected_hits is not None else "—"
-        excess = f"{row.excess_hits:.2f}" if row.excess_hits is not None else "—"
-        chance = f"{row.chance * 100:.1f}%" if row.chance is not None else "—"
-        ratio = f"{row.ratio:.2f}×" if row.ratio is not None else "—"
-        lines.append(f"| {name} | {row.hits} | {expected} | {excess} | {chance} | {ratio} |")
+    lines.extend("| " + " | ".join(frequency_cells(row)) + " |" for row in rows)
     return lines
 
 

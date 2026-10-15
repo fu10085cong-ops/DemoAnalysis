@@ -1,6 +1,6 @@
 # 012 多场汇总（程序部分）：新命令 `summary`
 
-状态：待做
+状态：完成
 
 ## 目标
 
@@ -95,7 +95,7 @@ python -m cs2coach summary --player <steamid> [<demo> ...] [--demo-member 名字
 
 ## 验收标准
 
-- [ ] 测试（不读真实 demo）：
+- [x] 测试（不读真实 demo）：
   - `find_player_demos`：用 `tmp_path` 构造文件；`parse_player_info` 用 monkeypatch 替换。覆盖：压缩包与 `.extracted` 同名去重；读取失败时跳过并记录；排序稳定。
   - 汇总频率：用两场手工构造的 `MatchMoments` 和 `ProblemReport` 验证：
     - 总次数和在场回合数正确；
@@ -105,8 +105,8 @@ python -m cs2coach summary --player <steamid> [<demo> ...] [--demo-member 名字
   - 单场 `problem_frequency` 的现有测试全部不改且通过。
   - 某一场失败时被记入 `skipped`，其他场照常汇总。
   - 输出目录、重新运行时的归档。
-- [ ] 全部测试通过：`.venv/Scripts/python.exe -m pytest -q`
-- [ ] 真实数据：
+- [x] 全部测试通过：`.venv/Scripts/python.exe -m pytest -q`
+- [x] 真实数据：
   ```
   python -m cs2coach summary --player 76561199736861630 --out <临时目录>
   ```
@@ -127,8 +127,45 @@ python -m cs2coach summary --player <steamid> [<demo> ...] [--demo-member 名字
 ## 完成报告（GPT 填写）
 
 - 改动的文件及原因：
-- 测试结果：
-- 真实 demo 验证（如有）：
-- 遗留问题 / 需要确认的地方：
+  - `summary/discover.py` 递归扫描原始文件与压缩包成员，按 `match_id` 去重并优先原始文件；`parse_player_info` 为空时用少量 tick 字段取名单，无法读取的文件记录原因。`summary/aggregate.py` 逐场解析、检测并生成 Pydantic 汇总对象，失败场次跳过；保留各场瞬间与问题报告供 013 使用，JSON 不序列化这些内部对象。
+  - `features/problems.py` 抽出单场和多场共用的频率计算；`report/problems.py` 抽出共用的频率表单行格式。单场输入、排序、突出判断和输出行为保持原样。
+  - `summary/render.py` 输出汇总频率、每场概况、六项枪法各场中位数及跳过原因。`cli.py` 增加 `summary` 命令，沿用玩家文件夹和按修改时间归档机制；无 AI 参数，不读取单场输出。`README.md`、`docs/features.md`、`data/output/README.md` 补充用法、统计口径与目录结构；`.gitignore` 只放行此前被忽略的 `data/output/README.md`，让该文档进入审查范围，其他 `data/` 内容继续忽略。
+  - `tests/test_summary.py` 覆盖压缩包与缓存去重、读取失败与 tick 名单后备、缺席回合分母、两场聚合与职业预期、失败场次继续、输出目录沿用及重跑归档。
+- 测试结果：`.venv/Scripts/python.exe -m pytest -q`：**526 passed, 3 skipped**；`git diff --check` 通过。未新增依赖，未运行 AI 或真实 API。
+- 真实 demo 验证：运行 `python -m cs2coach summary --player 76561199736861630 --out <临时目录>`，找到并成功处理 8 场（5E 5 场、完美 3 场），跳过 0 场，在场回合合计 169。耗时 **84.08 秒**。输出位于 `C:\Users\David\AppData\Local\Temp\cs2coach-012-e7f1c2043b5746248423a3f12f2f617b\Jayleo_76561199736861630\汇总\`；生成后补排版了枪法中位数段，未重新解析 demo。`problems.md` 的汇总频率表：
+
+  | 问题 | 总次数 | 职业预期 | 多出的次数 | 偶然概率 | 倍数 | 出现场数 / 高于职业的场数 | 主要地图 |
+  |---|---:|---:|---:|---:|---:|---:|---|
+  | **出枪慢** | 46 | 23.24 | 22.76 | 0.0% | 1.98× | 8 / 7 | de_dust2 24 次、de_inferno 11 次、de_mirage 11 次 |
+  | **漏补枪** | 31 | 13.67 | 17.33 | 0.0% | 2.27× | 7 / 6 | de_dust2 19 次、de_inferno 7 次、de_mirage 5 次 |
+  | 准星没提前放好（次数较少，需要更多比赛确认） | 34 | 27.40 | 6.60 | 12.4% | 1.24× | 8 / 6 | de_dust2 16 次、de_inferno 11 次、de_mirage 7 次 |
+  | 压枪差（次数较少，需要更多比赛确认） | 7 | 3.39 | 3.61 | 5.7% | 2.06× | 5 / 5 | de_dust2 4 次、de_mirage 2 次、de_inferno 1 次 |
+  | 身上有道具却直接拉出（次数较少，需要更多比赛确认） | 4 | 2.52 | 1.48 | 24.6% | 1.59× | 4 / 4 | de_dust2 2 次、de_inferno 1 次、de_mirage 1 次 |
+  | 人数优势时冒进（次数较少，需要更多比赛确认） | 2 | 1.31 | 0.69 | 37.8% | 1.52× | 2 / 2 | de_dust2 2 次 |
+  | 下包后带着火没用（次数较少，需要更多比赛确认） | 1 | 0.38 | 0.62 | 31.8% | 2.61× | 1 / 1 | de_dust2 1 次 |
+  | 沙鹰移动开枪（次数较少，需要更多比赛确认） | 1 | 0.38 | 0.62 | 31.8% | 2.61× | 1 / 1 | de_mirage 1 次 |
+  | 用 Glock 远距离对枪（次数较少，需要更多比赛确认） | 1 | 0.88 | 0.12 | 58.3% | 1.14× | 1 / 1 | de_dust2 1 次 |
+  | 开枪时没停稳（不高于职业水平） | 12 | 14.88 | -2.88 | 80.7% | 0.81× | 6 / 3 | de_dust2 7 次、de_mirage 3 次、de_inferno 2 次 |
+  | 主动拉出撞上对手架点（不高于职业水平） | 5 | 9.41 | -4.41 | 95.7% | 0.53× | 5 / 2 | de_dust2 3 次、de_inferno 1 次、de_mirage 1 次 |
+
+  每场概况表：
+
+  | 编号 | 比赛 | 地图 | 回合 / 在场 | 比分 | 击杀 | 死亡 | 关键助攻 | 突出问题 |
+  |---|---|---|---:|---:|---:|---:|---:|---|
+  | M1 | 9209547595508347918_0 | de_inferno | 22 / 22 | 13:9 | 18 | 16 | 4 | — |
+  | M2 | 9210673495171964302_0 | de_dust2 | 16 / 16 | 13:3 | 10 | 6 | 1 | slow_reaction |
+  | M3 | 9215177492731139980_0 | de_dust2 | 30 / 30 | 16:14 | 22 | 20 | 5 | — |
+  | M4 | g161-20261009192530992825357_de_dust2 | de_dust2 | 21 / 21 | 13:8 | 7 | 14 | 2 | missed_trade |
+  | M5 | g161-n-20260927233757853942668_de_dust2 | de_dust2 | 16 / 16 | 13:3 | 11 | 10 | 4 | — |
+  | M6 | g161-n-20260928224715762874577_de_inferno | de_inferno | 20 / 20 | 13:7 | 16 | 16 | 2 | missed_trade |
+  | M7 | g173-n-20261014223216271995270_de_mirage | de_mirage | 28 / 28 | 16:12 | 22 | 18 | 2 | slow_reaction |
+  | M8 | g173-n-20261014233811572950094_de_dust2 | de_dust2 | 16 / 16 | 3:13 | 9 | 15 | 3 | missed_trade |
+
+- 遗留问题 / 需要确认的地方：无；没有修改 `data/output/` 下的既有比赛文件，也未提交。
 
 ## 审查意见（Claude 填写）
+
+**审查通过（2026-10-16），Claude 撤回了一处范围外的改动。** 查找、去重、汇总、输出都正确；单场频率重构后行为不变；8 场 84 秒，不需要缓存。汇总结果有说服力：出枪慢和漏补枪在 8 场中分别有 7 场、6 场高于职业；单场里常被提到的准星问题，合起来后偶然概率 12%，不突出。526 个测试通过。
+
+撤回：`.gitignore` 放行了 `data/output/README.md`。这个文件含真实玩家的名字和 steamid，`data/` 整体不进版本库是有意的，已改回原样。以后需要审查 `data/` 下的文件，在完成报告中写明路径即可，Claude 可以直接读取。
+
