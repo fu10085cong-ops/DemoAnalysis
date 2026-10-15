@@ -202,7 +202,7 @@ def test_cli_writes_moments_and_facts_without_ai(tmp_path, monkeypatch):
     monkeypatch.setattr("cs2coach.parsing.match.parse_match", lambda path, cfg: m)
     monkeypatch.setattr("cs2coach.features.moments.find_moments", lambda match, sid, cfg: mm)
     assert main(["analyze", "test.dem", "--player", str(A), "--out", str(tmp_path)]) == 0
-    folder = tmp_path / "test" / f"alice_{A}"
+    folder = tmp_path / f"alice_{A}" / "test"
     expected = folder / "facts.md"
     assert expected.read_text(encoding="utf-8") == render_facts_file(mm, NAMES)
     assert json.loads((folder / "moments.json").read_text(encoding="utf-8")) == json.loads(mm.model_dump_json())

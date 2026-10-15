@@ -320,4 +320,4 @@ def test_cli_writes_problem_report_without_ai_or_baseline(tmp_path, monkeypatch,
     assert main(["analyze", "test.dem", "--player", str(A), "--out", str(tmp_path)]) == 0
     detected = detect_problems(mm, None, cfg)
     expected = render_problem_report(detected, problem_frequency(detected, mm, None, cfg))
-    assert (tmp_path / "test" / f"alice_{A}" / "problems.md").read_text(encoding="utf-8") == expected
+    assert (tmp_path / f"alice_{A}" / "test" / "problems.md").read_text(encoding="utf-8") == expected

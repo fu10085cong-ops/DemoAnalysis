@@ -2,7 +2,7 @@
 
 > 入口：`features/moments.py` 的 `find_moments(match, steamid, cfg) -> MatchMoments`；数据结构见 `features/models.py`。
 > 所有阈值在 `config/default.toml` 的 `[moments]`、`[counter_strafe]`、`[aim]`、`[aim_stats]`、`[visibility]` 段。
-> 命令行：`python -m cs2coach analyze <demo> --player <steamid64>` 打印列表，并把完整结果写入 `data/output/<比赛名>/<玩家名>_<steamid>/moments.json`。
+> 命令行：`python -m cs2coach analyze <demo> --player <steamid64>` 打印列表，并把完整结果写入 `data/output/<玩家名>_<steamid>/<比赛名>/moments.json`。
 > 同时输出该目录的 `facts.md`：由 `report/facts.py` 按固定句式生成全部瞬间与漏补枪的中文事实卡，不调用 AI；缺失字段省略，投掷者未知时明确说明。击杀距离按米、队友距离按游戏单位、速度按单位/秒显示。
 
 ## 决定性瞬间
@@ -137,7 +137,7 @@
 - `[problems]` 集中保存阈值和停用列表。默认停用 `died_without_seeing`、`turned_into_flash`、`weapon_not_ready`、`spray_while_moving`、`awp_unscoped_shot`。前者仍有视野误判，后两项及整场压枪待数据校准；被闪后阵亡、拉栓期间交火按目录降为背景，事实卡照常显示。`awp_moving_shot` 由通用移动首枪规则覆盖。目录待开发项、`awp_close_range_duel`、`other` 仅登记，不检测；AWP 未开镜规则仅检测死亡。检测条件和原有阈值不变。
 - 每条 `ProblemHit` 保留 target、交火武器、判断所用的 evidence 和 thresholds（数值与来源）；子弹序列和道具列表因证据字典只允许标量，编码为 JSON 字符串。`ProblemReport` 同时记录职业来源、停用编号及缺少数据的计数；不满足条件和样本不足不计作缺少数据。
 - `problem_frequency()` 对已实现、启用的非亮点问题计算本场次数，零命中也列出，排除 `match` 目标。职业频率从基准原始 `hits / rounds` 计算，预期次数 λ 为职业频率乘以本场在场回合数（`MatchMoments.rounds_played`：总回合数减去中途掉线、重连前不在场的回合，fields.md 陷阱 24）；多出次数为本场次数减 λ，偶然概率为泊松分布 P(X ≥ 本场次数 | λ)。偶然概率 < `frequency_max_chance`（默认 0.05）且多出次数 ≥ `frequency_min_excess`（默认 2）才突出；职业频率缺失或为零时不判突出。倍数仅作展示。突出项在前，各组按多出次数降序排序。
-- `analyze` 无需 `--ai` 即在 `<输出根目录>/<比赛名>/<玩家名>_<SteamID64>/` 生成 `moments.json`、`facts.md` 和 `problems.md`。频率表展示本场、预期、多出、偶然概率和倍数，突出项加粗；多出次数大于 0 但不突出的标为“次数较少，需要更多比赛确认”，多出次数小于或等于 0 的标为“不高于职业水平”，不作为问题提出。其后列出命中证据、停用项和 skipped。重新运行会把旧 `report.md` 与 `submission.json` 按文件修改时间移入 `历史版本/`。背景项登记于 `CONTEXT_ONLY`，不单独报为问题；不改变事实卡和原始指标。
+- `analyze` 无需 `--ai` 即在 `<输出根目录>/<玩家名>_<SteamID64>/<比赛名>/` 生成（按 steamid 归档：已有以 `_<SteamID64>` 结尾的玩家文件夹时沿用，同一个人在不同平台的名字不同也归到一处） `moments.json`、`facts.md` 和 `problems.md`。频率表展示本场、预期、多出、偶然概率和倍数，突出项加粗；多出次数大于 0 但不突出的标为“次数较少，需要更多比赛确认”，多出次数小于或等于 0 的标为“不高于职业水平”，不作为问题提出。其后列出命中证据、停用项和 skipped。重新运行会把旧 `report.md` 与 `submission.json` 按文件修改时间移入 `历史版本/`。背景项登记于 `CONTEXT_ONLY`，不单独报为问题；不改变事实卡和原始指标。
 
 ## 结构化诊断与报告
 

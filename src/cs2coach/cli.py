@@ -15,8 +15,18 @@ from cs2coach.parsing.loader import DemoLoadError, resolve_demo
 
 
 def _output_folder(root: Path, demo: Path, name: str, steamid: int) -> Path:
-    safe_name = re.sub(r'[\\/:*?"<>|]', "_", name.strip())
-    return root / demo.stem / f"{safe_name}_{steamid}"
+    """<输出根目录>/<玩家名>_<steamid>/<比赛名>/。
+
+    按 steamid 归到同一个玩家文件夹：同一个人在不同平台的名字可能不同（如 5E 和完美），
+    已有以 _<steamid> 结尾的文件夹时沿用它，不按新名字另建。
+    """
+    existing = sorted(p for p in root.glob(f"*_{steamid}") if p.is_dir()) if root.is_dir() else []
+    if existing:
+        player_dir = existing[0]
+    else:
+        safe_name = re.sub(r'[\\/:*?"<>|]', "_", name.strip()) or "player"
+        player_dir = root / f"{safe_name}_{steamid}"
+    return player_dir / demo.stem
 
 
 def _archive_reports(folder: Path) -> None:

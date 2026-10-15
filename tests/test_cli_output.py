@@ -13,7 +13,14 @@ from tests.test_moments import find_moments, scenario
 def test_output_folder_uses_resolved_member_and_sanitizes_player_name(tmp_path):
     folder = _output_folder(tmp_path, Path("archive/.extracted/inside.dem"),
                             '  A/B:*?"<>|  ', A)
-    assert folder == tmp_path / "inside" / f"A_B________{A}"
+    assert folder == tmp_path / f"A_B________{A}" / "inside"
+
+
+def test_output_folder_reuses_player_folder_by_steamid(tmp_path):
+    # 同一个人在不同平台名字不同（如 5E 的"梁孙超"、完美的"Jayleo"），按 steamid 归到同一个文件夹
+    (tmp_path / f"梁孙超_{A}").mkdir()
+    folder = _output_folder(tmp_path, Path("9215177492731139980_0.dem"), "Jayleo", A)
+    assert folder == tmp_path / f"梁孙超_{A}" / "9215177492731139980_0"
 
 
 def test_rerun_moves_both_ai_files_and_keeps_program_outputs(tmp_path, monkeypatch, capsys):
@@ -23,7 +30,7 @@ def test_rerun_moves_both_ai_files_and_keeps_program_outputs(tmp_path, monkeypat
     monkeypatch.setattr("cs2coach.cli.resolve_demo", lambda path, member=None: tmp_path / "inside.dem")
     monkeypatch.setattr("cs2coach.parsing.match.parse_match", lambda path, config: match)
     monkeypatch.setattr("cs2coach.features.moments.find_moments", lambda *args: mm)
-    folder = tmp_path / "inside" / f"alice_{A}"
+    folder = tmp_path / f"alice_{A}" / "inside"
     folder.mkdir(parents=True)
     stamp = 1792116840
     label = datetime.fromtimestamp(stamp).strftime("%Y%m%d-%H%M")

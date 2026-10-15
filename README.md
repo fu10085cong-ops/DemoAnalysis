@@ -77,7 +77,7 @@ python scripts/explore_demo.py data/demos/xxx.rar --demo-member some-map.dem
 # 核对解析结果（回合、记分板、致盲、开枪）。新来源的 demo 先跑这个
 python scripts/check_parsing.py data/demos/xxx.dem
 
-# 找出目标玩家的决定性瞬间及指标，结果写入 data/output/<比赛名>/<玩家名>_<SteamID64>/
+# 找出目标玩家的决定性瞬间及指标，结果写入 data/output/<玩家名>_<SteamID64>/<比赛名>/（同一 steamid 沿用已有的玩家文件夹）
 python -m cs2coach analyze data/demos/xxx.dem --player <SteamID64>
 
 # 加上 --ai：调用 AI 生成中文复盘报告（同一目录下的 report.md 和 submission.json）
