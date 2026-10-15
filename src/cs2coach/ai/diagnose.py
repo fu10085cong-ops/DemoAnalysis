@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import re
 from dataclasses import dataclass, field
 from typing import Any, Literal
@@ -63,6 +64,11 @@ def _submission_args(args: dict[str, Any] | None) -> tuple[dict[str, Any] | None
     """兼容模型把报告多包一层对象；保留原始参数供审计。"""
     if args is not None and len(args) == 1:
         key, value = next(iter(args.items()))
+        if isinstance(value, str):  # DeepSeek 常把整份报告转成 JSON 字符串再包一层：{"report": "{\"overview\": ...}"}
+            try:
+                value = json.loads(value)
+            except ValueError:
+                return args, None
         if isinstance(value, dict) and set(value).intersection(ReportSubmission.model_fields):
             return value, key
     return args, None

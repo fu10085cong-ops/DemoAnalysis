@@ -312,3 +312,11 @@ def test_too_many_absent_rounds_are_not_excluded():
     m = make_match(make_ticks(overrides=_absent_in_round1(C)))  # 只有 1 回合，全部不在场
     mark_absent_rounds(m, 0.5, 0.5, 0.95)
     assert m.players[C].absent_rounds == [] and m.players[C].coverage < 0.95
+
+
+def test_player_side_falls_back_to_teammates_when_absent():
+    from cs2coach.tools.digest import match_score, player_side
+    # C 第 1 回合不在场（掉线），队友 D 在场：阵营和比分按队友计算
+    m = make_match(make_ticks(last=240, overrides=_absent_in_round1(C)), rounds=_two_rounds())
+    assert player_side(m, C, 1) == "CT" and player_side(m, C, 2) == "CT"
+    assert match_score(m, C) == (0, 2)  # make_round 默认 T 获胜

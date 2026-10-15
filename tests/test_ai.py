@@ -432,3 +432,12 @@ def test_summary_excludes_post_round_and_world_deaths(match):
                  damages=[hurt(100, A, C, 100, 0), hurt(110, None, A, 100, 0, weapon="planted_c4")])
     text = summary_section(find_moments(m, A, CFG))
     assert "死亡 1 次，其中交火中阵亡 0 次" in text and "[[R1-death]] 是回合结束后或非玩家伤害致死" in text
+
+
+def test_wrapper_holding_json_string_is_unwrapped(match, mm):
+    # DeepSeek 实测：{"report": "{\"overview\": ...}"}，整份报告被转成 JSON 字符串再包一层
+    wrapped = {"report": json.dumps(payload(), ensure_ascii=False)}
+    provider, fake = claude([submit_response(wrapped)])
+    d = diagnose(match, mm, CFG, BASELINE, provider)
+    assert d.repairs == 0 and d.violations_history == [[]] and len(fake.calls) == 1
+    assert d.submission.model_dump() == payload() and d.raw_calls[0]["unwrapped"] == "report"

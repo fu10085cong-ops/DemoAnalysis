@@ -28,16 +28,43 @@ METRIC_LABELS = {
 
 
 def player_side(match: MatchData, steamid: int, round_number: int) -> str | None:
+    """该回合玩家所在阵营；玩家不在场（中途掉线、重连前，fields.md 陷阱 24）时取队友的阵营。"""
     r = match.round(round_number)
     if r is None:
         return None
-    st = match.state_at(steamid, r.freeze_end_tick if r.freeze_end_tick is not None else r.start_tick)
+    tick = _round_tick(r)
+    side = _side_at(match, steamid, tick)
+    if side is not None:
+        return side
+    for mate in _teammates(match, steamid):
+        side = _side_at(match, mate, tick)
+        if side is not None:
+            return side
+    return None
+
+
+def _round_tick(r) -> int:
+    return r.freeze_end_tick if r.freeze_end_tick is not None else r.start_tick
+
+
+def _side_at(match: MatchData, steamid: int, tick: int) -> str | None:
+    st = match.state_at(steamid, tick)
     if st is None:
         return None
     try:
         return Team(int(st["team_num"])).name
     except (ValueError, TypeError):
         return None
+
+
+def _teammates(match: MatchData, steamid: int) -> list[int]:
+    """在玩家在场的第一个回合里与他同阵营的其他玩家。"""
+    for r in match.rounds:
+        tick = _round_tick(r)
+        side = _side_at(match, steamid, tick)
+        if side is not None:
+            return [s for s in match.players if s != steamid and _side_at(match, s, tick) == side]
+    return []
 
 
 def build_digest(match: MatchData, mm: MatchMoments, baseline: dict[str, Any] | None,
