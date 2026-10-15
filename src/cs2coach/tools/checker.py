@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import math
 import re
+from dataclasses import dataclass
 from decimal import Decimal
 from typing import TYPE_CHECKING, Callable
 
@@ -48,6 +49,9 @@ _PEOPLE = re.compile(r"(?<![A-Za-z0-9_.])(\d+)\s*[vV]\s*(\d+)(?![A-Za-z0-9_.])")
 _ROUND = re.compile(r"^R(\d+)$")
 _TEXT_ROUND = re.compile(r"第\s*(\d+)\s*回合|(?<![A-Za-z0-9_])R(\d+)(?!\d)")
 _MOMENT_ID = re.compile(r"(?<![A-Za-z0-9_])R\d+-(?:kill\d+|death|assist\d+)(?![A-Za-z0-9_])")
+_SUMMARY_ID = re.compile(r"(?<![A-Za-z0-9_])M\d+:R\d+(?:-(?:kill\d+|death|assist\d+))?(?![A-Za-z0-9_])")
+_SUMMARY_TARGET = re.compile(r"^(M\d+):(R\d+(?:-(?:kill\d+|death|assist\d+))?)$")
+_TEXT_MATCH = re.compile(r"第\s*(\d+)\s*场")
 _WEAPONS = re.compile("|".join(re.escape(s) for s in sorted(WEAPON_LABELS.values(), key=len, reverse=True)), re.I)
 _APPROX_BEFORE = re.compile(r"(?:约|大约|接近|左右)\s*$")
 _APPROX_AFTER = re.compile(r"^\s*(?:%|毫秒|秒|度|米|发|次|人)?\s*左右")
@@ -134,14 +138,66 @@ def _describe(moments: list[Moment], records: list) -> str:
     return "；".join(descriptions) if descriptions else "targets 中没有可核对的数据。"
 
 
-def _check_entries(sub: ReportSubmission, mm: MatchMoments, report: ProblemReport, cfg: dict,
-                   whole_numbers: list[float]) -> list[Violation]:
-    out: list[Violation] = []
+@dataclass
+class _TargetData:
+    moments: list[Moment]
+    records: list
+    rounds: set[int]
+    numbers: list[float]
+    hit_problems: set[str]
+    predicate_moments: list[Moment]
+
+
+def _single_resolver(mm: MatchMoments, report: ProblemReport):
     by_id = {m.id: m for m in mm.moments}
-    actual_hits: dict[str, set[str]] = {}
-    for h in report.hits:
-        actual_hits.setdefault(h.target, set()).add(h.problem)
-    disabled = set(report.disabled) | set(cfg["problems"]["disabled"])
+
+    def resolve(target: str, pid: str) -> tuple[_TargetData | None, str]:
+        if target == "match":
+            if pid != "spray_control":
+                return None, f"match 只能用于 spray_control，当前问题为 {pid}。"
+            moments, records, rounds = [], [], set()
+            predicate = mm.moments
+        elif target in by_id:
+            moments, records = [by_id[target]], []
+            rounds = {moments[0].round}
+            predicate = moments
+        else:
+            found = _ROUND.fullmatch(target)
+            if not found or not 1 <= int(found[1]) <= mm.rounds:
+                return None, f"{target} 不存在，本场共 {mm.rounds} 回合；瞬间编号须来自 mm.moments。"
+            number = int(found[1])
+            moments, records = [], [r for r in mm.missed_trades if r.round == number]
+            rounds, predicate = {number}, []
+        hits = [h for h in report.hits if h.target == target]
+        numbers = _numeric_leaves([m.model_dump() for m in moments])
+        numbers.extend(_numeric_leaves([r.model_dump() for r in records]))
+        for hit in hits:
+            numbers.extend(_numeric_leaves(hit.evidence))
+            numbers.extend(_numeric_leaves(hit.thresholds))
+        return _TargetData(moments, records, rounds, numbers,
+                           {h.problem for h in hits}, predicate), ""
+    return resolve
+
+
+def _summary_resolver(summary):
+    matches = {match.number: match for match in summary.matches}
+
+    def resolve(target: str, pid: str) -> tuple[_TargetData | None, str]:
+        parts = _SUMMARY_TARGET.fullmatch(target)
+        if not parts or parts[1] not in matches:
+            return None, f"{target} 不存在；跨场编号须使用 M序号:R回合或 M序号:R回合-瞬间。"
+        number, local = parts.groups()
+        mm, report = summary.detail(number)
+        data, error = _single_resolver(mm, report)(local, pid)
+        if data is None or local == "match":
+            return None, error or f"{target} 不存在。"
+        return data, ""
+    return resolve
+
+
+def _check_entries(sub: ReportSubmission, cfg: dict, whole_numbers: list[float],
+                   resolve, disabled: set[str], summary_count: int = 0) -> list[Violation]:
+    out: list[Violation] = []
     other_paths = []
     seen_findings: set[str] = set()
 
@@ -179,53 +235,42 @@ def _check_entries(sub: ReportSubmission, mm: MatchMoments, report: ProblemRepor
             allowed = _numeric_leaves(len(entry.targets)) + whole_numbers
             for j, target in enumerate(entry.targets):
                 target_path = f"{path}.targets[{j}]"
-                valid = False
-                if target == "match":
-                    valid = pid == "spray_control"
-                    if not valid:
-                        add(target_path, "unknown_target", f"match 只能用于 spray_control，当前问题为 {pid}。")
-                elif target in by_id:
-                    m = by_id[target]
-                    valid = True
-                    moments.append(m)
-                    rounds.add(m.round)
-                    allowed.extend(_numeric_leaves(m.model_dump()))
-                else:
-                    match = _ROUND.fullmatch(target)
-                    if match and 1 <= int(match[1]) <= mm.rounds:
-                        valid = True
-                        number = int(match[1])
-                        rounds.add(number)
-                        rows = [r for r in mm.missed_trades if r.round == number]
-                        records.extend(rows)
-                        allowed.extend(_numeric_leaves([r.model_dump() for r in rows]))
-                    else:
-                        add(target_path, "unknown_target", f"{target} 不存在，本场共 {mm.rounds} 回合；瞬间编号须来自 mm.moments。")
-                if valid:
-                    for h in report.hits:
-                        if h.target == target:
-                            allowed.extend(_numeric_leaves(h.evidence))
-                            allowed.extend(_numeric_leaves(h.thresholds))
-                    if known and pid != "other" and pid not in disabled and pid not in actual_hits.get(target, set()):
-                        found = "、".join(sorted(actual_hits.get(target, set()))) or "没有任何命中"
-                        add(target_path, "precondition_failed", f'{target} 不满足“{spec.label}”（{pid}）：该 target 实际检测到的问题为 {found}。')
+                data, error = resolve(target, pid)
+                if data is None:
+                    add(target_path, "unknown_target", error)
+                    continue
+                moments.extend(data.moments)
+                records.extend(data.records)
+                rounds.update(data.rounds)
+                allowed.extend(data.numbers)
+                if known and pid != "other" and pid not in disabled and pid not in data.hit_problems:
+                    found = "、".join(sorted(data.hit_problems)) or "没有任何命中"
+                    add(target_path, "precondition_failed", f'{target} 不满足“{spec.label}”（{pid}）：该 target 实际检测到的问题为 {found}。')
             for number in rounds:
                 allowed.extend(_numeric_leaves(number))
 
             text_path = path + ".analysis"
             clean = _WEAPONS.sub(" ", entry.analysis)
-            identifiers = CITATION.findall(clean) + _MOMENT_ID.findall(CITATION.sub(" ", clean))
+            id_pattern = _SUMMARY_ID if summary_count else _MOMENT_ID
+            identifiers = CITATION.findall(clean) + id_pattern.findall(CITATION.sub(" ", clean))
             if identifiers:
                 add(text_path, "id_in_text", f"分析文字出现编号 { '、'.join(dict.fromkeys(identifiers)) }；编号只能放在 targets 中。")
             for match in _TEXT_ROUND.finditer(clean):
                 number = int(next(v for v in match.groups() if v is not None))
                 if number not in rounds:
                     add(text_path, "round_mismatch", f"文字提到第 {number} 回合，但本条 targets 的回合为 {sorted(rounds)}。")
+            if summary_count:
+                for match in _TEXT_MATCH.finditer(clean):
+                    number = int(match[1])
+                    if not 1 <= number <= summary_count:
+                        add(text_path, "match_mismatch", f"文字提到第 {number} 场，但汇总只有 {summary_count} 场。")
             description = _describe(moments, records)
             people = {(m.context.alive_own, m.context.alive_enemy) for m in moments}
             out.extend(_number_violations(entry.analysis, text_path, allowed, people, description, cfg["checker"]))
             # 用户确认：match 可用整场逐枪数据核对说法，但不扩大其允许数值集合。
-            predicate_moments = mm.moments if "match" in entry.targets and pid == "spray_control" else moments
+            predicate_moments = moments
+            if "match" in entry.targets and pid == "spray_control":
+                predicate_moments = resolve("match", pid)[0].predicate_moments
             for phrase in cfg["checker"]["phrases"]:
                 match = re.search(phrase["pattern"], entry.analysis)
                 if match is None:
@@ -242,13 +287,37 @@ def _check_entries(sub: ReportSubmission, mm: MatchMoments, report: ProblemRepor
     return out
 
 
-def check_submission(sub: ReportSubmission, mm: MatchMoments, report: ProblemReport,
-                     digest: str, cfg: dict, whole_numbers: list[float] | None = None) -> list[Violation]:
-    """检查提交内容；分析可引用整场数值，训练文字不作数字或敏感说法检查。"""
+def _check_overview(sub: ReportSubmission, digest: str, cfg: dict,
+                    id_pattern: re.Pattern, summary_count: int = 0) -> list[Violation]:
     allowed = [float(m.group()) for m in _NUMBER.finditer(digest) if math.isfinite(float(m.group()))]
     people = {tuple(int(v) for v in m.groups()) for m in _PEOPLE.finditer(digest)}
     out = _number_violations(sub.overview, "overview", allowed, people, "总览数字及人数应来自 digest 原文。", cfg["checker"])
-    identifiers = CITATION.findall(sub.overview) + _MOMENT_ID.findall(CITATION.sub(" ", sub.overview))
+    identifiers = CITATION.findall(sub.overview) + id_pattern.findall(CITATION.sub(" ", sub.overview))
     if identifiers:
         out.append(Violation(path="overview", code="id_in_text", message="总览中不能写引用编号：" + "、".join(identifiers)))
-    return out + _check_entries(sub, mm, report, cfg, whole_numbers or [])
+    if summary_count:
+        for match in _TEXT_MATCH.finditer(sub.overview):
+            number = int(match[1])
+            if not 1 <= number <= summary_count:
+                out.append(Violation(path="overview", code="match_mismatch",
+                    message=f"总览提到第 {number} 场，但汇总只有 {summary_count} 场。"))
+    return out
+
+
+def check_submission(sub: ReportSubmission, mm: MatchMoments, report: ProblemReport,
+                     digest: str, cfg: dict, whole_numbers: list[float] | None = None) -> list[Violation]:
+    """单场检查；分析可引用整场数值，训练文字不作数字或敏感说法检查。"""
+    return (_check_overview(sub, digest, cfg, _MOMENT_ID)
+            + _check_entries(sub, cfg, whole_numbers or [], _single_resolver(mm, report),
+                             set(report.disabled) | set(cfg["problems"]["disabled"])))
+
+
+def check_summary_submission(sub: ReportSubmission, summary, digest: str, cfg: dict,
+                             whole_numbers: list[float]) -> list[Violation]:
+    """跨场检查与单场共用前提、数字、敏感说法规则。"""
+    disabled = set(cfg["problems"]["disabled"])
+    for match in summary.matches:
+        disabled.update(summary.detail(match.number)[1].disabled)
+    return (_check_overview(sub, digest, cfg, _SUMMARY_ID, len(summary.matches))
+            + _check_entries(sub, cfg, whole_numbers, _summary_resolver(summary), disabled,
+                             len(summary.matches)))

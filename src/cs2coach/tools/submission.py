@@ -9,6 +9,7 @@ from pydantic import BaseModel, ConfigDict, ValidationError
 from cs2coach.features.problems import PROBLEMS, ProblemReport
 
 TARGET_PATTERN = r"^(R\d+(-(kill\d+|death|assist\d+))?|match)$"
+SUMMARY_TARGET_PATTERN = r"^M\d+:R\d+(-(kill\d+|death|assist\d+))?$"
 
 
 class _SubmissionModel(BaseModel):
@@ -64,7 +65,7 @@ def parse_submission(args: dict) -> ReportSubmission:
         raise SubmissionError("提交格式不正确：" + "；".join(errors)) from None
 
 
-def submit_tool(report: ProblemReport, cfg: dict) -> dict:
+def submit_tool(report: ProblemReport, cfg: dict, summary: bool = False) -> dict:
     """为当前报告生成严格 schema；不注册到现有查询工具或 AI 调用流程。"""
     p = cfg["checker"]
     disabled = set(report.disabled) | set(cfg["problems"]["disabled"])
@@ -85,8 +86,9 @@ def submit_tool(report: ProblemReport, cfg: dict) -> dict:
         props = definitions[name]["properties"]
         props["problem"].update(enum=enum, description="问题目录编号，必须与每个 target 的程序命中对应；other 表示 AI 判断、无程序依据。" if name != "Highlight" else "亮点编号，必须与每个 target 的亮点命中对应。")
         props["targets"].update(minItems=minimum, maxItems=maximum, uniqueItems=True,
-            description="只在这里填写瞬间编号、回合编号或 match；match 只能用于 spray_control。",
-            items={"type": "string", "pattern": TARGET_PATTERN})
+            description=("只在这里填写跨场瞬间或回合编号，如 M3:R9-death、M3:R9。" if summary else
+                         "只在这里填写瞬间编号、回合编号或 match；match 只能用于 spray_control。"),
+            items={"type": "string", "pattern": SUMMARY_TARGET_PATTERN if summary else TARGET_PATTERN})
         text(props["analysis"], "结合情境说明原因和轻重；分析文字里不要写编号，编号只放在 targets 中。",
              p[f"max_{group}_analysis_length"])
         if name == "Finding":

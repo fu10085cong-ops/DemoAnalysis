@@ -1,0 +1,21 @@
+{
+  "overview": "共 8 场，在场 169 回合。出枪慢和漏补枪值得优先复盘，训练先围绕接敌准备和队友协同展开。",
+  "findings": [
+    {
+      "problem": "slow_reaction",
+      "targets": ["M1:R2-kill1", "M2:R10-kill1"],
+      "severity": "medium",
+      "analysis": "两场接敌后首次造成伤害的等待时间都偏长，说明接敌准备值得复盘。应结合各自对手位置检查预瞄角度和露身时机。",
+      "training": "每周挑选两次典型接敌，记录从看见对手到首次命中的时间，再练习对应角度的预瞄。"
+    }
+  ],
+  "patterns": [
+    {
+      "problem": "slow_reaction",
+      "targets": ["M1:R2-kill1", "M2:R10-kill1"],
+      "analysis": "不同地图都出现出枪慢，接敌准备可以作为跨场复盘重点；各场地形不同，还需分别核对站位和对手位置。"
+    }
+  ],
+  "highlights": [],
+  "training_plan": ["每周复盘不同地图的典型接敌，记录预瞄位置和首次命中时机，再做针对性练习。"]
+}

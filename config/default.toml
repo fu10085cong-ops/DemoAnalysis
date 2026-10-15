@@ -114,6 +114,10 @@ spray_segment_starts = [0, 1, 3, 6, 10, 15]
 # 额外标记为职业选手的 SteamID64；默认仅使用职业基准实际参与的选手名单
 extra_pro_steamids = []
 
+[summary]
+# 每类问题或亮点在 AI 摘要中展示的代表性命中上限
+representatives_per_problem = 3
+
 # 各武器最高移动速度（u/s，规范名）。标"实测"的已用 24 个样本 demo 的速度分布核对（95/99 分位恰好等于该值），
 # 其余样本量不够，取游戏数值
 [counter_strafe.max_speed]

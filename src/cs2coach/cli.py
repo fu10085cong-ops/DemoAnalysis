@@ -64,6 +64,7 @@ def _build_parser() -> argparse.ArgumentParser:
     summary.add_argument("--demos-dir", type=Path, default=Path("data/demos"), help="自动扫描的 demo 根目录")
     summary.add_argument("--out", type=Path, default=Path("data/output"), help="输出目录")
     summary.add_argument("--config", type=Path, default=None, help="阈值配置文件（TOML）")
+    summary.add_argument("--ai", action="store_true", help="调用 AI 生成多场中文复盘报告")
     return parser
 
 
@@ -107,7 +108,8 @@ def _summary(args: argparse.Namespace) -> int:
     if not refs:
         print(f"错误: 没有找到玩家 {steamid} 的可用 demo", file=sys.stderr)
         return 1
-    result = build_summary(steamid, refs, cfg, load_baseline())
+    baseline = load_baseline()
+    result = build_summary(steamid, refs, cfg, baseline)
     folder = _output_folder(args.out, Path("汇总.dem"), result.names[0] if result.names
                             else refs[0].player_name, steamid)
     folder.mkdir(parents=True, exist_ok=True)
@@ -118,7 +120,51 @@ def _summary(args: argparse.Namespace) -> int:
     summary_file.write_text(result.model_dump_json(indent=2) + "\n", encoding="utf-8")
     print(f"汇总完成：{len(result.matches)} 场，在场 {result.rounds_played_total} 回合，"
           f"跳过 {len(result.skipped)} 场")
+    if args.ai:
+        outcome = _summary_ai(result, cfg, baseline, folder)
+        if outcome:
+            return outcome
     print(f"输出目录：{folder}")
+    return 0
+
+
+def _summary_ai(summary, cfg: dict, baseline: dict | None, folder: Path) -> int:
+    from cs2coach.ai.diagnose import DiagnosisError
+    from cs2coach.ai.providers import ProviderError
+    from cs2coach.env import load_env_file
+    from cs2coach.summary.diagnose import diagnose_summary
+
+    load_env_file(Path(".env"))
+    name = cfg["ai"]["provider"]
+    model = cfg["ai"].get(name, {}).get("model", "?")
+    print(f"正在生成多场 AI 复盘报告（{name} / {model}）……", flush=True)
+    try:
+        d = diagnose_summary(summary, cfg, baseline)
+    except (DiagnosisError, ProviderError) as exc:
+        print(f"错误: {exc}", file=sys.stderr)
+        return 1
+    except Exception as exc:
+        msg = _api_error_message(exc)
+        if msg is None:
+            raise
+        print(f"错误: {msg}", file=sys.stderr)
+        return 1
+    _archive_reports(folder, ("report.md", "submission.json"))
+    report_file = folder / "report.md"
+    audit_file = folder / "submission.json"
+    report_file.write_text(d.report, encoding="utf-8")
+    audit_file.write_text(json.dumps({
+        "submission": d.submission.model_dump(),
+        "violations_history": [[v.model_dump() for v in group] for group in d.violations_history],
+        "dropped": [item.model_dump() for item in d.dropped],
+        "raw_calls": d.raw_calls,
+    }, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    print("\n" + d.report)
+    u = d.usage
+    print(f"已写入 {report_file}")
+    print(f"已写入 {audit_file}")
+    print(f"{d.provider} / {d.model}，工具调用 {len(d.tool_calls)} 次，结论修正 {d.repairs} 次；"
+          f"输入 {u.input_tokens} tokens（其中缓存命中 {u.cache_read_tokens}），输出 {u.output_tokens} tokens")
     return 0
 
 

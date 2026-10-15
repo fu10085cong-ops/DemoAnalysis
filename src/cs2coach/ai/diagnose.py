@@ -112,8 +112,8 @@ def _schema_violations(sub: ReportSubmission, schema: dict) -> list[Violation]:
     return violations
 
 
-def _prune(sub: ReportSubmission, violations: list[Violation], mm: MatchMoments,
-           score: tuple[int, int], cfg: dict) -> tuple[ReportSubmission, list[DroppedItem]]:
+def _prune(sub: ReportSubmission, violations: list[Violation], fallback_overview: str,
+           cfg: dict) -> tuple[ReportSubmission, list[DroppedItem]]:
     """按原始下标删除整条结论，原文及原因留下审计记录。"""
     result = sub.model_copy(deep=True)
     bad: dict[tuple[str, int], list[Violation]] = {}
@@ -142,26 +142,30 @@ def _prune(sub: ReportSubmission, violations: list[Violation], mm: MatchMoments,
     overview = [v for v in violations if v.path == "overview"]
     if overview:
         dropped.append(DroppedItem(path="overview", content=sub.overview, violations=overview, action="replaced"))
-        kills = sum(m.kind == "kill" for m in mm.moments)
-        deaths = sum(m.kind == "death" for m in mm.moments)
-        result.overview = (f"本场比分 {score[0]}:{score[1]}，击杀 {kills} 次、死亡 {deaths} 次"
-                           "（AI 总览未通过检查，已替换）。")
+        result.overview = fallback_overview
     if not result.findings:
         raise DiagnosisError("删除违规结论后没有任何 finding，无法生成有依据的报告")
     return result, dropped
 
 
-def diagnose(match: MatchData, mm: MatchMoments, cfg: dict[str, Any], baseline: dict[str, Any] | None,
-             provider: ChatProvider | None = None) -> Diagnosis:
+@dataclass
+class LoopResult:
+    submission: ReportSubmission
+    dropped: list[DroppedItem]
+    violations_history: list[list[Violation]]
+    raw_calls: list[dict[str, Any]]
+    tool_calls: list[dict[str, Any]]
+    usage: Usage
+    repairs: int
+    model: str
+
+
+def run_diagnosis_loop(provider: ChatProvider, cfg: dict, system_prompt: str, digest: str,
+                       instruction: str, tools: list[dict], submission_tool: dict,
+                       check, query, fallback_overview: str) -> LoopResult:
+    """单场和多场共用提交、检查、退回、删除、审计流程。"""
     ac = cfg["ai"]
-    problems = detect_problems(mm, baseline, cfg)
-    frequency = problem_frequency(problems, mm, baseline, cfg)
-    digest = build_digest(match, mm, baseline, problems, frequency, cfg)
-    score = match_score(match, mm.player)
-    whole_numbers = whole_match_numbers(mm, baseline, frequency, score)
-    provider = provider or make_provider(cfg)
-    submission_tool = submit_tool(problems, cfg)
-    provider.start(SYSTEM_PROMPT, [digest, USER_INSTRUCTION], [*TOOLS, submission_tool])
+    provider.start(system_prompt, [digest, instruction], [*tools, submission_tool])
     usage, calls, history = Usage(), [], []
     raw_calls: list[dict[str, Any]] = []
     repairs = 0
@@ -170,18 +174,8 @@ def diagnose(match: MatchData, mm: MatchMoments, cfg: dict[str, Any], baseline: 
     latest: ReportSubmission | None = None
     latest_violations: list[Violation] = []
 
-    def check(candidate):
-        return (_schema_violations(candidate, submission_tool["input_schema"])
-                + check_submission(candidate, mm, problems, digest, cfg, whole_numbers))
-
     def finish(submission, dropped=None):
-        from cs2coach.report.render import render_diagnosis
-
-        d = Diagnosis(submission=submission, problems=problems, frequency=frequency, digest=digest,
-                      provider=provider.name, model=model, score=score, usage=usage, tool_calls=calls,
-                      raw_calls=raw_calls, repairs=repairs, violations_history=history, dropped=dropped or [])
-        d.report = render_diagnosis(d, mm, {sid: p.name for sid, p in match.players.items()})
-        return d
+        return LoopResult(submission, dropped or [], history, raw_calls, calls, usage, repairs, model)
 
     for _ in range(int(ac["max_turns"])):
         turn = provider.send()
@@ -222,7 +216,8 @@ def diagnose(match: MatchData, mm: MatchMoments, cfg: dict[str, Any], baseline: 
                             if args is None:
                                 raise SubmissionError("提交参数不是合法的 JSON 对象")
                             candidate = parse_submission(args)
-                            violations = check(candidate)
+                            violations = (_schema_violations(candidate, submission_tool["input_schema"])
+                                          + check(candidate))
                             latest, latest_violations = candidate, violations
                         except SubmissionError as exc:
                             violations = [Violation(path="submission", code="invalid_submission", message=str(exc))]
@@ -232,7 +227,7 @@ def diagnose(match: MatchData, mm: MatchMoments, cfg: dict[str, Any], baseline: 
                     out, err = f"参数不是合法的 JSON 对象：{call.raw_args!r}", True
                 else:
                     try:
-                        out, err = run_tool(call.name, call.args, match, mm), False
+                        out, err = query(call.name, call.args), False
                     except ToolError as exc:
                         out, err = str(exc), True
                 calls.append({"name": call.name, "input": call.args, "error": err})
@@ -258,9 +253,36 @@ def diagnose(match: MatchData, mm: MatchMoments, cfg: dict[str, Any], baseline: 
             continue
         if latest is None:
             raise DiagnosisError("达到修正上限仍没有可检查的结构化提交，请通过 submit_report 提交合法参数")
-        final, dropped = _prune(latest, latest_violations, mm, score, cfg)
-        remaining = check(final)
+        final, dropped = _prune(latest, latest_violations, fallback_overview, cfg)
+        remaining = (_schema_violations(final, submission_tool["input_schema"])
+                     + check(final))
         if remaining:
             raise DiagnosisError("删除违规结论后仍未通过检查：" + _error_text(remaining))
         return finish(final, dropped)
     raise DiagnosisError(f"超过 {ac['max_turns']} 轮仍未完成报告")
+
+
+def diagnose(match: MatchData, mm: MatchMoments, cfg: dict[str, Any], baseline: dict[str, Any] | None,
+             provider: ChatProvider | None = None) -> Diagnosis:
+    problems = detect_problems(mm, baseline, cfg)
+    frequency = problem_frequency(problems, mm, baseline, cfg)
+    digest = build_digest(match, mm, baseline, problems, frequency, cfg)
+    score = match_score(match, mm.player)
+    whole_numbers = whole_match_numbers(mm, baseline, frequency, score)
+    provider = provider or make_provider(cfg)
+    submission_tool = submit_tool(problems, cfg)
+    kills = sum(m.kind == "kill" for m in mm.moments)
+    deaths = sum(m.kind == "death" for m in mm.moments)
+    fallback = (f"本场比分 {score[0]}:{score[1]}，击杀 {kills} 次、死亡 {deaths} 次"
+                "（AI 总览未通过检查，已替换）。")
+    result = run_diagnosis_loop(provider, cfg, SYSTEM_PROMPT, digest, USER_INSTRUCTION,
+        TOOLS, submission_tool,
+        lambda candidate: check_submission(candidate, mm, problems, digest, cfg, whole_numbers),
+        lambda name, args: run_tool(name, args, match, mm), fallback)
+    d = Diagnosis(submission=result.submission, problems=problems, frequency=frequency,
+        digest=digest, provider=provider.name, model=result.model, score=score, usage=result.usage,
+        tool_calls=result.tool_calls, raw_calls=result.raw_calls, repairs=result.repairs,
+        violations_history=result.violations_history, dropped=result.dropped)
+    from cs2coach.report.render import render_diagnosis
+    d.report = render_diagnosis(d, mm, {sid: p.name for sid, p in match.players.items()})
+    return d
