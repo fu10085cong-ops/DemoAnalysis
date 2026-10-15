@@ -55,6 +55,7 @@ def _analyze(args: argparse.Namespace) -> int:
 
     from cs2coach.features.moments import find_moments
     from cs2coach.report.console import format_moments
+    from cs2coach.report.facts import render_facts_file
 
     m = match.meta
     print(f"地图 {m.map_name}，{m.tick_rate} tick，{len(match.rounds)} 个回合，服务器 {m.server_name}\n")
@@ -65,6 +66,9 @@ def _analyze(args: argparse.Namespace) -> int:
     out = args.out / f"{demo.stem}_{player.steamid}_moments.json"
     out.write_text(moments.model_dump_json(indent=2), encoding="utf-8")
     print(f"\n已写入 {out}")
+    facts = args.out / f"{demo.stem}_{player.steamid}_facts.md"
+    facts.write_text(render_facts_file(moments, {sid: p.name for sid, p in match.players.items()}), encoding="utf-8")
+    print(f"已写入 {facts}")
     if not args.ai:
         print("加上 --ai 生成 AI 复盘报告")
         return 0

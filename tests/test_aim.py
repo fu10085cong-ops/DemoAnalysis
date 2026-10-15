@@ -46,3 +46,16 @@ def test_shot_targets_ignore_teammates():
     rows = [(40, A, 0.0)]  # 正前方只有队友 B（原点附近，不算）
     t = shot_targets(match_with_shots(rows, o), CFG)
     assert pd.isna(t["target"].iloc[0])
+
+
+@pytest.mark.parametrize("rows,expected", [
+    ({100: True}, True),
+    ({99: False, 100: True}, False),
+    ({99: None, 100: True}, True),
+    ({98: True}, False),
+])
+def test_scoped_before_shot_falls_back_when_previous_tick_is_missing(rows, expected):
+    from cs2coach.features.aim import scoped_before_shot
+
+    states = pd.DataFrame({"is_scoped": rows})
+    assert scoped_before_shot(states, 100) is expected

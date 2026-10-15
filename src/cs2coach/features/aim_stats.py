@@ -14,6 +14,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
+from cs2coach.features.aim import scoped_before_shot
 from cs2coach.features.models import AimStats, Moment
 from cs2coach.features.visibility import Sight, angle_between
 from cs2coach.parsing.match import MatchData
@@ -42,7 +43,7 @@ def aim_stats(match: MatchData, sid: int, cfg: dict[str, Any], shots: pd.DataFra
         t = int(r.tick)
         st = states.loc[t]
         speed = _float(st["speed_xy"])
-        scoped = bool(st["is_scoped"])
+        scoped = scoped_before_shot(states, t)
         mx = (cs["max_speed_scoped"].get(r.weapon) if scoped else None) or cs["max_speed"].get(r.weapon)
         rows.append({"tick": t, "weapon": r.weapon, "seen": seen, "hit": t in hit_ticks,
                      "crouched": (_float(st["duck_amount"]) or 0.0) >= cs["crouch_duck_amount"],

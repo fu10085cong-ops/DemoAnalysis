@@ -191,3 +191,35 @@ def test_grenade_damage_does_not_count_for_time_to_damage():
     m.shots = build_shots(pd.DataFrame(fires), pd.DataFrame([bullet(f["tick"], A) for f in fires]), m)
     e = find_moments(m, A, CFG, sight=Sight(m, CFG, checker=WallChecker(500.0, -50.0))).moments[0].engagement
     assert e.time_to_damage_s == pytest.approx(15 / 64, abs=1e-3)  # 80 看见 → 95 第一次枪械伤害
+
+
+@pytest.mark.parametrize("previous_scoped,expected", [(True, False), (False, True)])
+def test_aim_stats_uses_scope_before_aug_shot(previous_scoped, expected):
+    from cs2coach.features.aim_stats import aim_stats
+
+    cfg = copy.deepcopy(CFG)
+    cfg["aim_stats"]["min_samples"] = 1
+    m = make_match(ticks(extra={(A, 89): {"is_scoped": previous_scoped},
+                               (A, 90): {"is_scoped": False, "X": 0.9375}}))
+    m.damages = build_damages(pd.DataFrame([hurt(90, A, C, 30, 70, weapon="aug")]), m)
+    m.shots = build_shots(pd.DataFrame([fire(90, A, "weapon_aug")]), pd.DataFrame([bullet(90, A)]), m)
+    st = aim_stats(m, A, cfg, m.shots, sight(m), [])
+    assert st.counter_strafing_shots == 1
+    assert st.counter_strafing_pct == (100.0 if expected else 0.0)
+
+
+def test_aim_stats_reads_scoped_awp_speed_without_changing_rifle_scope():
+    from unittest.mock import Mock
+
+    from cs2coach.features.aim_stats import aim_stats
+
+    cfg = copy.deepcopy(CFG)
+    scoped_speeds = Mock(wraps=cfg["counter_strafe"]["max_speed_scoped"])
+    cfg["counter_strafe"]["max_speed_scoped"] = scoped_speeds
+    m = make_match(ticks(extra={(A, 89): {"is_scoped": True},
+                               (A, 90): {"is_scoped": False, "X": 0.9375}}))
+    m.damages = build_damages(pd.DataFrame([hurt(90, A, C, 30, 70, weapon="awp")]), m)
+    m.shots = build_shots(pd.DataFrame([fire(90, A, "weapon_awp")]), pd.DataFrame([bullet(90, A)]), m)
+    st = aim_stats(m, A, cfg, m.shots, sight(m), [])
+    scoped_speeds.get.assert_called_once_with("awp")
+    assert st.counter_strafing_shots == 0  # 整场 Counter-Strafing 仍只统计步枪。

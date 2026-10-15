@@ -1,6 +1,6 @@
 # 001 交火中的闪光数据、本回合已投道具
 
-状态：待做
+状态：完成
 
 ## 目标
 
@@ -77,7 +77,7 @@
 
 ## 验收标准
 
-- [ ] `tests/test_moments.py` 新增测试，至少覆盖：
+- [x] `tests/test_moments.py` 新增测试，至少覆盖：
   - 击杀前对手被目标玩家的队友闪中，事件时仍在致盲中：`opponent_blind.blinded_at_event` 为 True，`thrower_role == "teammate"`，并有 `opponent_blind` 标签；
   - 对手在交火窗口内被闪，但事件时已恢复：`blinded_at_event` 为 False，`remaining_at_event_s` 为 None，`max_duration_s` 正确；
   - 被自己的闪闪到：`thrower_role == "self"`；
@@ -85,9 +85,9 @@
   - 致盲在交火窗口开始前就已结束：字段为 None；
   - 投掷者不确定（`thrower` 为空、`thrower_ambiguous` 为 True）：`thrower_role` 为 None；
   - `thrown_grenades`：本回合死前投出的道具按顺序出现；死后和上一回合投出的不算。
-- [ ] 现有测试全部不改且通过（新字段有默认值）。
-- [ ] 全部测试通过：`.venv/Scripts/python.exe -m pytest -q`
-- [ ] 真实 demo 验证：在一场 5E demo（`data/demos/5e_demo/.extracted/` 下任选一场）上运行：
+- [x] 现有测试全部不改且通过（新字段有默认值）。
+- [x] 全部测试通过：`.venv/Scripts/python.exe -m pytest -q`
+- [x] 真实 demo 验证：在一场 5E demo（`data/demos/5e_demo/.extracted/` 下任选一场）上运行：
   ```
   .venv/Scripts/python.exe -m cs2coach analyze <demo> --player <该场任一 steamid>
   ```
@@ -105,8 +105,18 @@
 ## 完成报告（GPT 填写）
 
 - 改动的文件及原因：
-- 测试结果：
-- 真实 demo 验证（如有）：
-- 遗留问题 / 需要确认的地方：
+  - `features/models.py` 新增 `BlindInfo`、双方可空致盲字段和默认空列表 `DeathState.thrown_grenades`，兼容旧数据。
+  - `features/moments.py` 新增独立函数 `blind_info`：按时长阈值和时间重叠筛选，事件时取剩余最长的一次、全部恢复时取总时长最长的一次；角色以目标玩家为参照，未知时留空。死亡状态附加本回合死前已投道具，不改原有致盲字段算法。
+  - `features/labels.py` 新增双方交火被闪标签；`tools/digest.py` 显示致盲和已投道具；`tools/queries.py` 补充字段说明；`docs/features.md` 说明定义与 ESL 重建局限。
+  - `tests/test_moments.py` 新增 15 项测试：四种角色、窗口前开始的致盲、事件时已恢复、阈值和边界、重叠致盲选取、未知投掷者、原死亡致盲口径、已投道具的顺序/重复/回合/死亡/bot 过滤，以及摘要输出。现有测试未改写。
+- 测试结果：`.venv/Scripts/python.exe -m pytest -q`：198 passed，3 skipped（未设置真实 demo 测试环境变量）。
+- 真实 demo 验证：
+  - 运行 `.venv/Scripts/python.exe -m cs2coach analyze data/demos/5e_demo/.extracted/g173-n-20261014223216271995270_de_mirage/g173-n-20261014223216271995270_de_mirage.dem --player 76561199711881069`，正常生成 `_moments.json`，未加 `--ai`。
+  - 目标玩家云雾散漫山野：20 次击杀、17 次死亡，共 37 个瞬间。
+  - `opponent_blind` 非空 **3** 次：`opponent=1`、`enemy=1`、`self=1`；`player_blind` 非空 **2** 次：`opponent=1`、`self=1`。本场这五条记录无未知投掷者，未知分支由单元测试覆盖。
+  - 17 次死亡中有 13 次 `thrown_grenades` 非空，原 demo 未修改。
+- 遗留问题 / 需要确认的地方：该 demo 的两名其他玩家坐标覆盖率分别约 93%、94%，解析层按原逻辑提示警告；未改解析层。原 `death.blinded` 摘要对未知投掷者的措辞、视野与武器就绪等既有问题均保留，按范围外问题处理。没有新增依赖、配置键或 AI 提示词改动。
 
 ## 审查意见（Claude 填写）
+
+**审查通过（2026-10-15）。**已用原始 `player_blind` 事件核对致盲数据（5E Mirage R11-death），结果一致。`_blind_line` 的措辞歧义并入 002 第 1 轮修改。

@@ -303,3 +303,126 @@ def test_weapon_ready_when_last_shot_is_old_or_fast_weapon():
     # 上一枪是 AK（没有配置最短间隔）：不做判断
     d = moment(find_moments(scenario(), A, CFG), "R1-death")
     assert d.death.weapon_ready is None and "weapon_not_ready" not in d.tags
+
+
+@pytest.mark.parametrize("previous_scoped", [True, False])
+def test_awp_first_shot_reads_previous_tick_scope(previous_scoped):
+    # 交火只在 tick 100 发生；AWP 开枪后退镜，仍须读到窗口外 tick 99 的状态。
+    m = scenario(kills=[death(100, A, C, weapon="awp")],
+                 damages=[hurt(100, A, C, 100, 0, weapon="awp")],
+                 fires=[fire(100, A, "weapon_awp")],
+                 extra_ticks={(A, 99): {"X": 3.5, "is_scoped": previous_scoped},
+                              (A, 100): {"X": 4.5, "is_scoped": False, "duck_amount": 1.0,
+                                         "is_airborne": True}})
+    e = moment(find_moments(m, A, CFG), "R1-kill1").engagement
+    shot = e.shots[0]
+    speeds = CFG["counter_strafe"]
+    expected = speeds["max_speed_scoped" if previous_scoped else "max_speed"]["awp"]
+    assert e.start_tick == shot.tick == 100
+    assert shot.scoped is previous_scoped and shot.max_speed == expected
+    assert shot.speed == 64.0 and shot.crouched and shot.airborne
+    assert shot.stopped is (64.0 / expected < speeds["accurate_speed_ratio"])
+
+
+@pytest.mark.parametrize("thrower,role", [(A, "self"), (B, "teammate"), (C, "opponent"), (D, "enemy")])
+def test_opponent_blind_at_kill_and_thrower_roles(thrower, role):
+    m = scenario(blinds=[{"tick": 80, "user_steamid": sid(C), "attacker_steamid": sid(thrower),
+                          "blind_duration": 1.5}])
+    k = moment(find_moments(m, A, CFG), "R1-kill1")
+    b = k.engagement.opponent_blind
+    assert b.blinded_at_event and b.remaining_at_event_s == 1.19
+    assert b.max_duration_s == 1.5 and b.thrower == thrower
+    assert b.thrower_role == role and not b.thrower_ambiguous
+    assert "opponent_blind" in k.tags
+
+
+def test_blind_overlaps_window_but_has_ended_at_event():
+    # 致盲从窗口前开始，在 tick 90 结束，仍与 [85, 100] 重叠。
+    m = scenario(blinds=[{"tick": 10, "user_steamid": sid(C), "attacker_steamid": sid(A),
+                          "blind_duration": 1.25}])
+    b = moment(find_moments(m, A, CFG), "R1-kill1").engagement.opponent_blind
+    assert not b.blinded_at_event and b.remaining_at_event_s is None
+    assert b.max_duration_s == 1.25 and b.thrower_role == "self"
+
+
+@pytest.mark.parametrize("tick,duration", [(80, 0.5), (20, 1.0), (21, 1.0), (101, 2.0)])
+def test_blind_excludes_short_ended_and_future_records(tick, duration):
+    # tick 21 的一秒致盲恰好在窗口起点 85 结束，不再生效。
+    m = scenario(blinds=[{"tick": tick, "user_steamid": sid(C), "attacker_steamid": sid(B),
+                          "blind_duration": duration}])
+    k = moment(find_moments(m, A, CFG), "R1-kill1")
+    assert k.engagement.opponent_blind is None and "opponent_blind" not in k.tags
+
+
+def test_blind_selects_longest_remaining_and_tracks_max_total_duration():
+    m = scenario(blinds=[{"tick": 40, "user_steamid": sid(C), "attacker_steamid": sid(A), "blind_duration": 2.0},
+                          {"tick": 80, "user_steamid": sid(C), "attacker_steamid": sid(B), "blind_duration": 1.5}])
+    b = moment(find_moments(m, A, CFG), "R1-kill1").engagement.opponent_blind
+    assert b.thrower == B and b.remaining_at_event_s == 1.19 and b.max_duration_s == 2.0
+
+
+def test_blind_selects_longest_duration_when_all_have_ended():
+    m = scenario(blinds=[{"tick": 10, "user_steamid": sid(C), "attacker_steamid": sid(A), "blind_duration": 1.25},
+                          {"tick": 25, "user_steamid": sid(C), "attacker_steamid": sid(B), "blind_duration": 1.0}])
+    b = moment(find_moments(m, A, CFG), "R1-kill1").engagement.opponent_blind
+    assert b.thrower == A and b.max_duration_s == 1.25 and not b.blinded_at_event
+
+
+def test_blind_ambiguous_thrower_stays_unknown():
+    m = scenario(blinds=[{"tick": 80, "user_steamid": sid(C), "attacker_steamid": sid(None), "blind_duration": 1.5}])
+    m.blinds["thrower_ambiguous"] = True
+    b = moment(find_moments(m, A, CFG), "R1-kill1").engagement.opponent_blind
+    assert b.thrower is None and b.thrower_role is None and b.thrower_ambiguous
+
+
+def test_player_blind_in_fight_keeps_death_blind_fields():
+    d = moment(find_moments(scenario(), A, CFG), "R1-death")
+    b = d.engagement.player_blind
+    assert b.blinded_at_event and b.remaining_at_event_s == d.death.blind_remaining_s
+    assert b.thrower == d.death.blinded_by == D and b.thrower_role == "opponent"
+    assert "blind_in_fight" in d.tags and "died_blind" in d.tags
+
+
+def test_thrown_grenades_keep_order_duplicates_and_exclude_other_rounds_and_bots():
+    from cs2coach.features.moments import _Params, death_state
+
+    # 第一回合在 120 结束；第二回合 tick 200 阵亡。
+    m = scenario(fires=[fire(50, A, "weapon_smokegrenade"), fire(130, A, "weapon_flashbang"),
+                         fire(140, B, "weapon_hegrenade"), fire(150, A, "weapon_flashbang"),
+                         fire(160, A, "weapon_molotov"), fire(170, A, "weapon_smokegrenade"),
+                         fire(180, A), fire(200, A, "weapon_hegrenade"), fire(210, A, "weapon_decoy")],
+                 extra_ticks={(A, 160): {"X": 3.5, "controlling_bot": True}})
+    rounds = [make_round(1, end=100, last=120), make_round(2, start=121, freeze_end=125, end=300, last=400)]
+    m.rounds = rounds
+    from cs2coach.parsing.match import assign_rounds
+
+    m.shots["round"] = assign_rounds(m.shots["tick"], rounds)
+    row = m.kills[m.kills["victim"] == A].iloc[0].copy()
+    row["round"] = 2
+    d = death_state(m, _Params(m, CFG), A, 200, row)
+    assert d.thrown_grenades == ["flashbang", "flashbang", "smokegrenade"]
+
+
+def test_digest_shows_fight_blinds_and_thrown_grenades():
+    from cs2coach.tools.digest import moment_line
+
+    m = scenario(blinds=[{"tick": 80, "user_steamid": sid(C), "attacker_steamid": sid(B), "blind_duration": 1.5}],
+                 fires=[fire(50, A, "weapon_flashbang"), fire(85, C), fire(90, A), fire(95, A),
+                        fire(100, A), fire(150, D), fire(200, D)])
+    mm = find_moments(m, A, CFG)
+    assert "对手被闪（事件时剩 1.2s，最长 1.5s，目标玩家的队友闪的）" in moment_line(moment(mm, "R1-kill1"))
+    assert "本回合已投道具：闪光" in moment_line(moment(mm, "R1-death"))
+
+
+@pytest.mark.parametrize("subject", ["自己", "对手"])
+@pytest.mark.parametrize("role,source", [("self", "目标玩家本人"), ("teammate", "目标玩家的队友"),
+                                         ("opponent", "该对手本人"), ("enemy", "对手的队友"),
+                                         (None, None)])
+def test_digest_blind_roles_are_explicit_for_both_subjects(subject, role, source):
+    from cs2coach.features.models import BlindInfo
+    from cs2coach.tools.digest import _blind_line
+
+    info = BlindInfo(blinded_at_event=True, remaining_at_event_s=0.8, max_duration_s=2.0,
+                     thrower=None, thrower_ambiguous=role is None, thrower_role=role)
+    expected = f"{source}闪的" if source is not None else "投掷者无法确定"
+    assert _blind_line(subject, info) == f"{subject}被闪（事件时剩 0.8s，最长 2.0s，{expected}）"

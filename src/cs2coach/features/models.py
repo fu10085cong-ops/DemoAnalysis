@@ -24,11 +24,23 @@ class Shot(BaseModel):
     stopped: bool | None  # speed_ratio 低于阈值（已停稳）；未知武器为 None
     crouched: bool
     airborne: bool
-    scoped: bool
+    scoped: bool  # 开枪前一 tick 的开镜状态，缺数据时取开枪 tick（fields.md 陷阱 23）
     recoil_index: float | None  # 连射第几发，从 0 开始
     hit: bool  # 同一 tick 对这次交火的对手造成了伤害
     # 子弹方向与"眼睛 → 对手身体中心"的夹角（度，近似，见 features/aim.py）；没判定为瞄准对手时为 None
     aim_error_deg: float | None = None
+
+
+class BlindInfo(BaseModel):
+    """交火窗口内某一方被闪的情况（只记录时长 ≥ min_blind_seconds 的致盲）。"""
+
+    blinded_at_event: bool
+    remaining_at_event_s: float | None
+    max_duration_s: float
+    thrower: int | None
+    thrower_ambiguous: bool
+    # 相对于目标玩家：本人、队友、本次对手、对手的其他队友；未知时留空。
+    thrower_role: Literal["self", "teammate", "opponent", "enemy"] | None
 
 
 class Engagement(BaseModel):
@@ -81,6 +93,8 @@ class Engagement(BaseModel):
     # 视野指标为空的原因：no_map_data / not_seen（事件发生时看不到对手）/ seen_before_window（回溯 3 秒内一直可见）/
     # seen_since_previous_kill（本回合上一次击杀时就已经能看见这名对手）/ seen_since_round_start / smoke
     visibility_note: str | None = None
+    player_blind: BlindInfo | None = None
+    opponent_blind: BlindInfo | None = None
 
 
 class Context(BaseModel):
@@ -97,7 +111,7 @@ class Context(BaseModel):
     opponent_weapon: str | None
     own_health_before: int | None  # 交火开始前的血量
     opponent_health_before: int | None
-    distance: float | None  # 击杀距离（游戏单位，事件原始值）
+    distance: float | None  # 击杀距离（米，事件原始值；见 docs/parsing.md）
     place: str | None
     opponent_place: str | None
 
@@ -116,6 +130,7 @@ class Trade(BaseModel):
 
 class DeathState(BaseModel):
     unused_grenades: list[str]  # 死亡时身上没用掉的投掷物（规范名，重复保留）
+    thrown_grenades: list[str] = []  # 本回合阵亡 tick 之前投出的道具，按时间顺序、保留重复
     # 武器是否来得及开枪：上一枪到阵亡的间隔小于该武器两枪的最短间隔时为 False（如 AWP 刚开过一枪还在拉栓）。
     # 没有上一枪或该武器没有配置最短间隔时为 None
     weapon_ready: bool | None = None

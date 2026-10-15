@@ -17,6 +17,14 @@ import pandas as pd
 from cs2coach.parsing.match import MatchData
 
 
+def scoped_before_shot(states: pd.DataFrame, tick: int) -> bool:
+    """开镜状态取开枪前一 tick，缺数据时退回开枪 tick（docs/fields.md 陷阱 23）。"""
+    for t in (tick - 1, tick):
+        if t in states.index and pd.notna(states.loc[t, "is_scoped"]):
+            return bool(states.loc[t, "is_scoped"])
+    return False
+
+
 def shot_targets(match: MatchData, cfg: dict[str, Any]) -> pd.DataFrame:
     """所有枪械射击（不含接管 bot 时）的目标：列 tick、steamid、target（可空）、target_angle（度，可空）。"""
     a = cfg["aim"]

@@ -13,6 +13,7 @@ import pandas as pd
 
 from cs2coach.features.models import (
     AssistInfo,
+    BlindInfo,
     Context,
     DeathState,
     Engagement,
@@ -23,7 +24,7 @@ from cs2coach.features.models import (
     Shot,
     Trade,
 )
-from cs2coach.features.aim import shot_targets
+from cs2coach.features.aim import scoped_before_shot, shot_targets
 from cs2coach.features.aim_stats import aim_stats
 from cs2coach.features.visibility import Sight, angle_between
 from cs2coach.parsing.match import MatchData
@@ -172,7 +173,7 @@ def engagement(match: MatchData, p: _Params, sid: int, opponent: int, tick: int,
     dealt = dealt[dealt["tick"] >= start]
     taken = taken[taken["tick"] >= start]
 
-    states = match.player_ticks(sid, start, tick).set_index("tick")
+    states = match.player_ticks(sid, start - 1, tick).set_index("tick")
     hit_ticks = set(dealt["tick"].astype(int))
     shots = [_shot(p, r, states, hit_ticks) for _, r in my_shots.iterrows()]
     cs = [x for x in shots if not x.crouched and not x.airborne and x.stopped is not None]
@@ -188,6 +189,41 @@ def engagement(match: MatchData, p: _Params, sid: int, opponent: int, tick: int,
         first_shot_lead_s=p.secs(opp_first - my_first) if my_first is not None and opp_first is not None else None,
         counter_strafe_shots=len(cs), counter_strafe_stopped=sum(bool(x.stopped) for x in cs),
         first_shot_stopped=(first.stopped if first and first in cs else None),
+        player_blind=blind_info(match, p, sid, sid, opponent, start, tick),
+        opponent_blind=blind_info(match, p, opponent, sid, opponent, start, tick),
+    )
+
+
+def blind_info(match: MatchData, p: _Params, victim: int, sid: int, opponent: int,
+               start_tick: int, tick: int) -> BlindInfo | None:
+    """取与交火窗口重叠的致盲；事件时仍被闪取剩余最长的一次，否则取时长最长的一次。"""
+    b = match.blinds
+    if b.empty:
+        return None
+    b = b[(b["victim"] == victim).fillna(False) & (b["duration"] >= p.min_blind)
+          & (b["tick"] <= tick) & (b["tick"] + b["duration"] * p.rate > start_tick)]
+    if b.empty:
+        return None
+    remaining = (b["tick"] + b["duration"] * p.rate - tick) / p.rate
+    best = b.loc[remaining.idxmax()] if remaining.max() > 0 else b.loc[b["duration"].idxmax()]
+    left = (int(best["tick"]) + float(best["duration"]) * p.rate - tick) / p.rate
+    ambiguous = bool(best["thrower_ambiguous"])
+    thrower = None if ambiguous else _int_or_none(best["thrower"])
+    role = None
+    if thrower == sid:
+        role = "self"
+    elif thrower == opponent:
+        role = "opponent"
+    elif thrower is not None:
+        st = match.state_at(sid, int(best["tick"]))
+        team = _int_or_none(st["team_num"]) if st is not None else None
+        thrower_team = _int_or_none(best["thrower_team_num"])
+        if team in (Team.T, Team.CT) and thrower_team in (Team.T, Team.CT):
+            role = "teammate" if team == thrower_team else "enemy"
+    return BlindInfo(
+        blinded_at_event=left > 0, remaining_at_event_s=round(left, 2) if left > 0 else None,
+        max_duration_s=float(b["duration"].max()), thrower=thrower,
+        thrower_ambiguous=ambiguous, thrower_role=role,
     )
 
 
@@ -283,7 +319,7 @@ def _shot(p: _Params, r: pd.Series, states: pd.DataFrame, hit_ticks: set[int]) -
     t = int(r["tick"])
     st = states.loc[t] if t in states.index else None
     speed = _float(st["speed_xy"]) if st is not None else None
-    scoped = bool(st["is_scoped"]) if st is not None else False
+    scoped = scoped_before_shot(states, t)
     weapon = r["weapon"]
     max_speed = (p.max_speed_scoped.get(weapon) if scoped else None) or p.max_speed.get(weapon)
     ratio = round(speed / max_speed, 3) if speed is not None and max_speed else None
@@ -381,9 +417,13 @@ def death_state(match: MatchData, p: _Params, sid: int, tick: int, row: pd.Serie
         by_mate = bool(best[1]["thrower_team_num"] == best[1]["victim_team_num"]) if blinded_by is not None else None
     grenades = row.get("victim_prev_grenades")
     ready = weapon_readiness(p, sid, tick)
+    s = p.shots
+    thrown = s[(s["steamid"] == sid).fillna(False) & (s["round"] == int(row["round"]))
+               & (s["tick"] < tick) & s["is_grenade"] & ~s["controlling_bot"]]
     return DeathState(
         **ready,
         unused_grenades=list(grenades) if isinstance(grenades, list) else [],
+        thrown_grenades=thrown.sort_values("tick", kind="stable")["weapon"].tolist(),
         blinded=best is not None, blind_remaining_s=round(best[0], 2) if best else None,
         blinded_by=blinded_by, blinded_by_teammate=by_mate,
     )
@@ -434,6 +474,10 @@ def _tags(match: MatchData, row: pd.Series, kind: str, ctx: Context, eng: Engage
             tags.append("trade_kill")
     if kind == "death" and eng is not None and eng.shots_fired == 0:
         tags.append("no_shots_fired")
+    if eng is not None and eng.opponent_blind is not None:
+        tags.append("opponent_blind")
+    if eng is not None and eng.player_blind is not None:
+        tags.append("blind_in_fight")
     if eng is not None and eng.seen_first_lead_s is not None and eng.seen_first_lead_s != 0:
         tags.append("saw_opponent_first" if eng.seen_first_lead_s > 0 else "opponent_saw_first")
     if eng is not None and eng.contact_type in ("peek", "held"):

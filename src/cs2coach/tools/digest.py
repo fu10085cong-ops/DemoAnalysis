@@ -9,7 +9,7 @@ from typing import Any
 
 from cs2coach.baseline import METRICS, compare
 from cs2coach.features.labels import GRENADE_LABELS, KIND_LABELS, ROUND_END_REASONS, tag_label
-from cs2coach.features.models import AimStats, MatchMoments, Moment
+from cs2coach.features.models import AimStats, BlindInfo, MatchMoments, Moment
 from cs2coach.parsing.match import MatchData
 from cs2coach.parsing.models import Team
 
@@ -200,6 +200,9 @@ def moment_line(m: Moment) -> str:
             vis.append(VISIBILITY_NOTES[e.visibility_note])
         if vis:
             parts.append("，".join(vis))
+        for subject, blind in (("对手", e.opponent_blind), ("自己", e.player_blind)):
+            if blind is not None:
+                parts.append(_blind_line(subject, blind))
     if m.trade is not None:
         if m.trade.traded is not None:
             near = f"，最近队友 {m.trade.nearest_teammate_distance:.0f}" if m.trade.nearest_teammate_distance else "，附近没有存活队友"
@@ -212,6 +215,8 @@ def moment_line(m: Moment) -> str:
                          f"该武器两枪最短间隔 {m.death.min_shot_interval_s:.2f}s")
         if m.death.unused_grenades:
             parts.append("死时身上道具：" + "、".join(GRENADE_LABELS.get(g, g) for g in m.death.unused_grenades))
+        if m.death.thrown_grenades:
+            parts.append("本回合已投道具：" + "、".join(GRENADE_LABELS.get(g, g) for g in m.death.thrown_grenades))
         if m.death.blinded:
             parts.append(f"死时被闪（剩 {m.death.blind_remaining_s:.1f}s，{'队友' if m.death.blinded_by_teammate else '对手'}闪的）")
     if m.assist is not None:
@@ -219,6 +224,14 @@ def moment_line(m: Moment) -> str:
     if m.tags:
         parts.append("标签：" + "、".join(tag_label(t) for t in m.tags))
     return "- " + " | ".join(parts)
+
+
+def _blind_line(subject: str, blind: BlindInfo) -> str:
+    status = (f"事件时剩 {blind.remaining_at_event_s:.1f}s"
+              if blind.blinded_at_event and blind.remaining_at_event_s is not None else "事件时已恢复")
+    roles = {"self": "目标玩家本人", "teammate": "目标玩家的队友", "opponent": "该对手本人", "enemy": "对手的队友"}
+    source = f"{roles[blind.thrower_role]}闪的" if blind.thrower_role is not None else "投掷者无法确定"
+    return f"{subject}被闪（{status}，最长 {blind.max_duration_s:.1f}s，{source}）"
 
 
 def _ms(s: float | None) -> str:

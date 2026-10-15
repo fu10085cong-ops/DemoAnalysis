@@ -3,6 +3,7 @@
 > 入口：`features/moments.py` 的 `find_moments(match, steamid, cfg) -> MatchMoments`；数据结构见 `features/models.py`。
 > 所有阈值在 `config/default.toml` 的 `[moments]`、`[counter_strafe]`、`[aim]`、`[aim_stats]`、`[visibility]` 段。
 > 命令行：`python -m cs2coach analyze <demo> --player <steamid64>` 打印列表，并把完整结果写入 `data/output/<demo>_<steamid>_moments.json`。
+> 同时输出 `<demo>_<steamid>_facts.md`：由 `report/facts.py` 按固定句式生成全部瞬间与漏补枪的中文事实卡，不调用 AI；缺失字段省略，投掷者未知时明确说明。击杀距离按米、队友距离按游戏单位、速度按单位/秒显示。
 
 ## 决定性瞬间
 
@@ -33,7 +34,8 @@
 | `shots_fired` / `shots_hit` / `first_shot_hit` | 这次交火中瞄准对手的开枪数、同一 tick 对对手造成伤害的开枪数、第一枪是否命中 | 命中准确；开枪数依赖目标判断（近似） |
 | `damage_dealt` / `damage_taken` | 这次交火中双方实际扣掉的血量（不是武器原始伤害） | 准确（与记分板总伤害相差约 1%，原因未查明，见下） |
 | `first_shot_lead_s` | 对手第一枪的 tick 减去自己第一枪的 tick（秒）；正数表示自己先开枪 | 近似（依赖目标判断） |
-| 急停 `shots[].stopped` | 开枪时水平速度 < 武器最高速度 × `accurate_speed_ratio`（34%，Leetify 口径）；开镜按开镜速度 | 速度准确（坐标差分）；各武器最高速度已用样本核对 |
+| 急停 `shots[].stopped` | 开枪时水平速度 < 武器最高速度 × `accurate_speed_ratio`（34%，Leetify 口径）；开镜按开镜速度，开镜状态取开枪前一 tick | 速度准确（坐标差分）；各武器最高速度已用样本核对；开镜状态见 fields.md 陷阱 23 |
+| `shots[].scoped` | 开枪前一 tick 的开镜状态；前一 tick 缺数据时退回开枪 tick。速度、下蹲、空中等仍取开枪 tick | AWP 开枪后自动退镜，开枪 tick 已是退镜后的状态（fields.md 陷阱 23） |
 | `counter_strafe_shots` / `counter_strafe_stopped` / `first_shot_stopped` | 急停统计，不含下蹲（`duck_amount ≥ crouch_duck_amount`）和空中的射击 | 同上 |
 | `shots[].aim_error_deg` | 子弹方向与对手身体中心的夹角 | 近似（眼睛、身体高度是估计值） |
 
@@ -61,7 +63,19 @@
 
 ### 死亡状态 `death`
 - `unused_grenades`：死亡前一 tick 背包里的投掷物。
+- `thrown_grenades`：目标玩家在本回合、阵亡 tick 之前已经投出的道具规范名，来自 `shots.is_grenade`，按时间顺序且保留重复；不含接管 bot 时的投掷。
 - `blinded`：死亡时仍处于致盲中，且这次致盲时长 ≥ `min_blind_seconds`；附剩余时长、投掷者、是否队友闪的。
+
+### 交火中的闪光 `engagement.player_blind` / `opponent_blind`
+
+双方分别记录 `BlindInfo`：只考虑时长 ≥ `min_blind_seconds` 且致盲期间与交火窗口 `[start_tick, end_tick]` 重叠的记录；窗口前开始但窗口内仍生效的也算，窗口开始时已结束的不算。没有相关致盲时为 None。
+
+- `blinded_at_event`、`remaining_at_event_s`：击杀 / 死亡那一 tick 是否仍被闪、剩余秒数（保留两位小数）；已恢复时剩余时间为空。
+- `max_duration_s`：所有相关致盲中最长的总时长，不是窗口内的重叠时长。
+- `thrower`、`thrower_ambiguous`：事件时仍被闪，选剩余时间最长的记录；都已恢复时选总时长最长的记录。投掷者不确定时为空。
+- `thrower_role` 相对于目标玩家：`self` 本人，`teammate` 本人的队友，`opponent` 本次交火的对手，`enemy` 对手的其他队友；投掷者或队伍关系未知时为空。
+
+有原生 `player_blind` 时直接使用解析结果；ESL 由 `flash_duration` 重建，同 tick 多颗闪可能无法确定投掷者（fields.md 陷阱 17）。这些字段记录窗口内被闪的事实，不据此判定致盲是死亡原因；现有 `death.blinded`、`died_blind` 口径不变。
 
 ### 跳转
 `jump_command` = `demo_gototick <交火开始前 jump_lead_seconds 秒的 tick>`。**命令写法尚未在 CS2 中实测。**
@@ -74,7 +88,7 @@
 |---|---|---|
 | `time_to_damage_ms` | 每次遭遇（同一回合对同一敌人，伤害间隔超过 3 秒算新的一次）从看见到第一次伤害，≥ 1 秒的排除，取中位数 | "看见"用地图几何；按遭遇统计 |
 | `crosshair_placement_deg` | 同上的遭遇中，从看见到第一次伤害准星转过的角度，取中位数 | 同上 |
-| `counter_strafing_pct` | 步枪、看见敌人时、未下蹲的射击中，速度 < 34% 武器最高速度的比例 | "看见"用地图几何 |
+| `counter_strafing_pct` | 步枪、看见敌人时、未下蹲的射击中，速度 < 34% 武器最高速度的比例；开镜状态取开枪前一 tick，缺数据时取开枪 tick（fields.md 陷阱 23） | "看见"用地图几何 |
 | `spray_accuracy_pct` | 步枪连续 3 发以上（相邻两枪间隔 ≤ 0.2 秒）的扫射中，看见敌人时开的枪命中敌人的比例 | 同上；"连续"的间隔是我们定的 |
 | `spotted_accuracy_pct` | 看见敌人时开枪的命中率（同一 tick 对敌人造成伤害即命中） | 同上 |
 | `headshot_accuracy_pct` | 枪械命中中命中头部的比例，不含 AWP | 无 |
@@ -109,6 +123,7 @@
 | `shot_first` / `opponent_shot_first` / `shot_same_tick` | 交火中谁先开枪（近似） |
 | `no_shots_fired` | 死亡前这次交火中没有朝对手开枪 |
 | `died_blind` / `unused_utility` | 被闪致死 / 死时道具没用 |
+| `opponent_blind` / `blind_in_fight` | 对手 / 自己在交火窗口内被闪，事件时可能已恢复 |
 | `saw_opponent_first` / `opponent_saw_first` | 谁先看见谁（地图几何视野） |
 | `peeked_held_angle` / `held_angle` | 接触时自己主动拉出、对手架点 / 自己架点、对手拉出 |
 | `died_without_seeing` | 死亡时看不到击杀者（被背身、侧身或穿点打死） |

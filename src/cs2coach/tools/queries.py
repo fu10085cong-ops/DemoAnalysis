@@ -27,7 +27,11 @@ TOOLS: list[dict[str, Any]] = [
             "engagement.opponent_time_to_damage_s（对手从看见自己到第一次打中自己，不是开枪到击杀的时间）；"
             "engagement.player_first_shot_tick / opponent_first_shot_tick（双方第一枪的 tick）；"
             "engagement.player_speed_at_contact / opponent_speed_at_contact / contact_type（接触时双方速度及判断：peek 主动拉出、held 架点、unclear 无法判断）；"
-            "trade（是否被补回、最近队友距离，单位为游戏单位）；death（死时身上的道具、是否被闪）。"
+            "engagement.player_blind / opponent_blind（双方交火中的致盲：blinded_at_event 事件时是否仍被闪，"
+            "remaining_at_event_s 事件时剩余秒数，max_duration_s 相关致盲的最长时长，thrower 投掷者，"
+            "thrower_ambiguous 投掷者是否不确定，thrower_role 相对目标玩家为 self 本人、teammate 队友、opponent 本次对手、enemy 对手的其他队友；未知时为空）；"
+            "trade（是否被补回、最近队友距离，单位为游戏单位）；death（死时身上的道具、是否被闪，"
+            "thrown_grenades 是本回合阵亡前已投道具，按时间顺序且保留重复，不含接管 bot 时的投掷）。"
         ),
         "input_schema": {
             "type": "object",
