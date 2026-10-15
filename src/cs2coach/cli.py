@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from pathlib import Path
 
@@ -108,13 +109,18 @@ def _diagnose(match, moments, cfg, out: Path) -> int:
         return 1
 
     out.write_text(d.report, encoding="utf-8")
+    audit = out.with_name(out.stem.removesuffix("_report") + "_submission.json")
+    audit.write_text(json.dumps({
+        "submission": d.submission.model_dump(),
+        "violations_history": [[v.model_dump() for v in group] for group in d.violations_history],
+        "dropped": [item.model_dump() for item in d.dropped],
+    }, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     print("\n" + d.report)
     u = d.usage
     print(f"已写入 {out}")
-    print(f"{d.provider} / {d.model}，工具调用 {len(d.tool_calls)} 次，引用修正 {d.repairs} 次；"
+    print(f"已写入 {audit}")
+    print(f"{d.provider} / {d.model}，工具调用 {len(d.tool_calls)} 次，结论修正 {d.repairs} 次；"
           f"输入 {u.input_tokens} tokens（其中缓存命中 {u.cache_read_tokens}），输出 {u.output_tokens} tokens")
-    if d.citations.invalid:
-        print(f"警告: 报告中有无法对应的引用：{'、'.join(d.citations.invalid)}", file=sys.stderr)
     return 0
 
 

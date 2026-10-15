@@ -1,60 +1,173 @@
-"""AI 诊断：摘要放进提示词，配两个查询工具（方案 C，2026-10-15 产品负责人确定）。
-
-诊断循环与具体模型无关（ai/providers.py）；手写循环而不是用各家 SDK 的工具运行器，
-因为要在循环里检查引用、必要时要求修正。
-"""
+"""结构化诊断：AI 选取和讲解，程序检查提交并生成可追溯的报告。"""
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Literal
 
-from cs2coach.ai.prompts import (
-    BARE_INSTRUCTION,
-    NO_CITATION_INSTRUCTION,
-    REPAIR_INSTRUCTION,
-    REPAIR_SUFFIX,
-    SYSTEM_PROMPT,
-    USER_INSTRUCTION,
-)
+from pydantic import BaseModel
+
+from cs2coach.ai.prompts import SYSTEM_PROMPT, USER_INSTRUCTION
 from cs2coach.ai.providers import ChatProvider, ToolResult, Usage, make_provider
 from cs2coach.features.models import MatchMoments
+from cs2coach.features.problems import FrequencyRow, ProblemReport, detect_problems, problem_frequency
 from cs2coach.parsing.match import MatchData
-from cs2coach.tools.citations import CitationCheck, check_citations, render_report
-from cs2coach.tools.digest import build_digest
+from cs2coach.tools.checker import Violation, check_submission
+from cs2coach.tools.digest import build_digest, match_score
 from cs2coach.tools.queries import TOOLS, ToolError, run_tool
+from cs2coach.tools.submission import ReportSubmission, SubmissionError, parse_submission, submit_tool
 
 
 class DiagnosisError(Exception):
     pass
 
 
+class DroppedItem(BaseModel):
+    path: str
+    content: dict[str, Any] | str
+    violations: list[Violation]
+    action: Literal["removed", "replaced"] = "removed"
+
+
 @dataclass
 class Diagnosis:
-    report: str  # 渲染后的 Markdown（引用已转成〔编号〕，附跳转命令）
-    raw_text: str  # 模型原文
-    citations: CitationCheck
+    submission: ReportSubmission
+    problems: ProblemReport
+    frequency: list[FrequencyRow]
     digest: str
     provider: str
     model: str
+    score: tuple[int, int]
+    report: str = ""
+    violations_history: list[list[Violation]] = field(default_factory=list)
+    dropped: list[DroppedItem] = field(default_factory=list)
     tool_calls: list[dict[str, Any]] = field(default_factory=list)
     usage: Usage = field(default_factory=Usage)
     repairs: int = 0
 
 
+def _error_text(violations: list[Violation]) -> str:
+    groups: dict[str, list[Violation]] = {}
+    for v in violations:
+        groups.setdefault(v.path, []).append(v)
+    lines = ["提交未通过数据检查："]
+    for path, entries in groups.items():
+        lines.append(f"{path}：")
+        lines.extend(f"- [{v.code}] {v.message}" for v in entries)
+    return "\n".join([*lines, "请修改后再次调用 submit_report，分析文字中的编号请移到 targets。"])
+
+
+def _schema_violations(sub: ReportSubmission, schema: dict) -> list[Violation]:
+    """兼容服务未强制 schema 时，在本地核对工具已经声明的格式约束。"""
+    violations = []
+
+    def add(path, message):
+        violations.append(Violation(path=path, code="invalid_submission", message=message))
+
+    def walk(value, rule, path):
+        if "$ref" in rule:
+            rule = schema["$defs"][rule["$ref"].split("/")[-1]]
+        if "enum" in rule and value not in rule["enum"]:
+            add(path, f"{value!r} 不在当前工具允许的编号或取值中。")
+        if isinstance(value, dict):
+            for key, child in value.items():
+                walk(child, rule["properties"][key], f"{path}.{key}" if path else key)
+        elif isinstance(value, list):
+            if len(value) < rule.get("minItems", 0):
+                add(path, f"至少需要 {rule['minItems']} 项，实际为 {len(value)} 项。")
+            maximum = rule.get("maxItems", len(value))
+            for i, child in enumerate(value):
+                item_path = f"{path}[{i}]"
+                if i >= maximum:
+                    add(item_path, f"超过当前工具允许的 {maximum} 项上限。")
+                if rule.get("uniqueItems") and child in value[:i]:
+                    add(item_path, "targets 不允许重复编号。")
+                walk(child, rule["items"], item_path)
+        elif isinstance(value, str):
+            if len(value) < rule.get("minLength", 0):
+                add(path, "文字不能为空。")
+            if len(value) > rule.get("maxLength", len(value)):
+                add(path, f"文字超过当前工具允许的 {rule['maxLength']} 字符上限。")
+            if "pattern" in rule and re.search(rule["pattern"], value) is None:
+                add(path, f"编号 {value!r} 不符合工具规定的格式。")
+
+    walk(sub.model_dump(), schema, "")
+    return violations
+
+
+def _prune(sub: ReportSubmission, violations: list[Violation], mm: MatchMoments,
+           score: tuple[int, int], cfg: dict) -> tuple[ReportSubmission, list[DroppedItem]]:
+    """按原始下标删除整条结论，原文及原因留下审计记录。"""
+    result = sub.model_copy(deep=True)
+    bad: dict[tuple[str, int], list[Violation]] = {}
+    for v in violations:
+        match = re.match(r"^(findings|patterns|highlights)\[(\d+)\]", v.path)
+        if match:
+            bad.setdefault((match[1], int(match[2])), []).append(v)
+    # too_many_other 是跨组违规，保留顺序靠前且没有其他违规的允许数量。
+    excess = [v for v in violations if v.code == "too_many_other"]
+    if excess:
+        remaining = [(group, i) for group in ("findings", "patterns", "highlights")
+                     for i, entry in enumerate(getattr(sub, group))
+                     if entry.problem == "other" and (group, i) not in bad]
+        for key in remaining[cfg["checker"]["max_other"]:]:
+            bad.setdefault(key, []).extend(excess)
+    dropped = []
+    for group in ("findings", "patterns", "highlights"):
+        kept = []
+        for i, entry in enumerate(getattr(sub, group)):
+            reasons = bad.get((group, i))
+            if reasons:
+                dropped.append(DroppedItem(path=f"{group}[{i}]", content=entry.model_dump(), violations=reasons))
+            else:
+                kept.append(entry)
+        setattr(result, group, kept)
+    overview = [v for v in violations if v.path == "overview"]
+    if overview:
+        dropped.append(DroppedItem(path="overview", content=sub.overview, violations=overview, action="replaced"))
+        kills = sum(m.kind == "kill" for m in mm.moments)
+        deaths = sum(m.kind == "death" for m in mm.moments)
+        result.overview = (f"本场比分 {score[0]}:{score[1]}，击杀 {kills} 次、死亡 {deaths} 次"
+                           "（AI 总览未通过检查，已替换）。")
+    if not result.findings:
+        raise DiagnosisError("删除违规结论后没有任何 finding，无法生成有依据的报告")
+    return result, dropped
+
+
 def diagnose(match: MatchData, mm: MatchMoments, cfg: dict[str, Any], baseline: dict[str, Any] | None,
              provider: ChatProvider | None = None) -> Diagnosis:
     ac = cfg["ai"]
+    problems = detect_problems(mm, baseline, cfg)
+    frequency = problem_frequency(problems, mm, baseline, cfg)
+    digest = build_digest(match, mm, baseline, problems, frequency)
+    score = match_score(match, mm.player)
     provider = provider or make_provider(cfg)
-    digest = build_digest(match, mm, baseline)
-    provider.start(SYSTEM_PROMPT, [digest, USER_INSTRUCTION], TOOLS)
+    submission_tool = submit_tool(problems, cfg)
+    provider.start(SYSTEM_PROMPT, [digest, USER_INSTRUCTION], [*TOOLS, submission_tool])
+    usage, calls, history = Usage(), [], []
+    repairs = 0
+    model = provider.model
+    latest: ReportSubmission | None = None
+    latest_violations: list[Violation] = []
 
-    result = Diagnosis(report="", raw_text="", citations=CitationCheck([], []), digest=digest,
-                       provider=provider.name, model=provider.model)
+    def check(candidate):
+        return (_schema_violations(candidate, submission_tool["input_schema"])
+                + check_submission(candidate, mm, problems, digest, cfg))
+
+    def finish(submission, dropped=None):
+        from cs2coach.report.render import render_diagnosis
+
+        d = Diagnosis(submission=submission, problems=problems, frequency=frequency, digest=digest,
+                      provider=provider.name, model=model, score=score, usage=usage, tool_calls=calls,
+                      repairs=repairs, violations_history=history, dropped=dropped or [])
+        d.report = render_diagnosis(d, mm, {sid: p.name for sid, p in match.players.items()})
+        return d
+
     for _ in range(int(ac["max_turns"])):
         turn = provider.send()
-        result.usage.add(turn.usage)
-        result.model = turn.model or result.model
+        usage.add(turn.usage)
+        model = turn.model or model
         if turn.stop == "refusal":
             raise DiagnosisError(f"模型拒绝生成（{turn.detail}）")
         if turn.stop == "max_tokens":
@@ -62,31 +175,59 @@ def diagnose(match: MatchData, mm: MatchMoments, cfg: dict[str, Any], baseline: 
         if turn.stop == "error":
             raise DiagnosisError(f"模型服务异常结束（{turn.detail}），请稍后重试")
 
+        submitted = False
+        candidate = None
+        violations: list[Violation] = []
         if turn.stop == "tool_use":
             results = []
+            submit_count = sum(c.name == "submit_report" for c in turn.tool_calls)
             for call in turn.tool_calls:
-                if call.args is None:
+                if call.name == "submit_report":
+                    submitted = True
+                    if submit_count > 1:
+                        violations = [Violation(path="submission", code="multiple_submissions",
+                            message="同一条回复只能调用一次 submit_report；收到失败结果后才可修改并重新提交。")]
+                    else:
+                        try:
+                            if call.args is None:
+                                raise SubmissionError("提交参数不是合法的 JSON 对象")
+                            candidate = parse_submission(call.args)
+                            violations = check(candidate)
+                            latest, latest_violations = candidate, violations
+                        except SubmissionError as exc:
+                            violations = [Violation(path="submission", code="invalid_submission", message=str(exc))]
+                    err = bool(violations)
+                    out = _error_text(violations) if err else "提交已通过数据检查。"
+                elif call.args is None:
                     out, err = f"参数不是合法的 JSON 对象：{call.raw_args!r}", True
                 else:
                     try:
                         out, err = run_tool(call.name, call.args, match, mm), False
-                    except ToolError as e:
-                        out, err = str(e), True
-                result.tool_calls.append({"name": call.name, "input": call.args, "error": err})
+                    except ToolError as exc:
+                        out, err = str(exc), True
+                calls.append({"name": call.name, "input": call.args, "error": err})
                 results.append(ToolResult(id=call.id, content=out, is_error=err))
             provider.add_tool_results(results)
-            continue
+            if not submitted:
+                continue
+            history.append(violations)
+            if candidate is not None and not violations:
+                return finish(candidate)
+        else:
+            violations = [Violation(path="submission", code="submission_required",
+                message="必须调用 submit_report 提交结构化结论，不能以自由文本结束。")]
+            history.append(violations)
 
-        check = check_citations(turn.text, mm)
-        if check.ok or result.repairs >= int(ac["max_repairs"]):
-            result.raw_text, result.citations = turn.text, check
-            result.report = render_report(turn.text, mm)
-            return result
-        result.repairs += 1
-        fixes = []
-        if check.invalid:
-            fixes.append(REPAIR_INSTRUCTION.format(invalid="、".join(check.invalid)))
-        if check.bare:
-            fixes.append(BARE_INSTRUCTION.format(bare="、".join(check.bare)))
-        provider.add_user("\n".join([*fixes, REPAIR_SUFFIX]) if fixes else NO_CITATION_INSTRUCTION)
+        if repairs < int(ac["max_repairs"]):
+            repairs += 1
+            if not submitted:
+                provider.add_user(violations[0].message + "请现在调用 submit_report。")
+            continue
+        if latest is None:
+            raise DiagnosisError("达到修正上限仍没有可检查的结构化提交，请通过 submit_report 提交合法参数")
+        final, dropped = _prune(latest, latest_violations, mm, score, cfg)
+        remaining = check(final)
+        if remaining:
+            raise DiagnosisError("删除违规结论后仍未通过检查：" + _error_text(remaining))
+        return finish(final, dropped)
     raise DiagnosisError(f"超过 {ac['max_turns']} 轮仍未完成报告")

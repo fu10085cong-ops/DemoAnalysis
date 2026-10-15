@@ -276,8 +276,8 @@ require = "weapon_not_ready"
 provider = "deepseek"
 # 一次诊断最多请求几轮（含工具调用和引用修正）
 max_turns = 10
-# 引用对不上时最多要求修正几次
-max_repairs = 1
+# 结构化提交未通过检查时最多允许修改几轮，之后删除违规结论
+max_repairs = 2
 
 [ai.deepseek]
 # OpenAI 兼容接口。凭据：环境变量 DEEPSEEK_API_KEY

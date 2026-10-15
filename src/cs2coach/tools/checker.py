@@ -13,7 +13,6 @@ from pydantic import BaseModel
 from cs2coach.features.labels import WEAPON_LABELS
 from cs2coach.features.models import MatchMoments, Moment
 from cs2coach.features.problems import CONTEXT_ONLY, PROBLEMS, ProblemReport
-from cs2coach.tools.citations import CITATION
 
 if TYPE_CHECKING:
     from cs2coach.tools.submission import ReportSubmission
@@ -42,6 +41,8 @@ PREDICATES: dict[str, Callable[[Moment], bool]] = {
     "weapon_not_ready": lambda m: m.death is not None and m.death.weapon_ready is False,
 }
 
+# 从旧引用模块原样迁移，仅用于拒绝分析文字里的引用；检查规则不变。
+CITATION = re.compile(r"\[\[\s*([A-Za-z0-9\-]+)\s*\]\]")
 _NUMBER = re.compile(r"\d+(?:\.\d+)?")
 _PEOPLE = re.compile(r"(?<![A-Za-z0-9_.])(\d+)\s*[vV]\s*(\d+)(?![A-Za-z0-9_.])")
 _ROUND = re.compile(r"^R(\d+)$")

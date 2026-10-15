@@ -10,6 +10,8 @@ from typing import Any
 from cs2coach.baseline import METRICS, compare
 from cs2coach.features.labels import GRENADE_LABELS, KIND_LABELS, ROUND_END_REASONS, tag_label
 from cs2coach.features.models import AimStats, BlindInfo, MatchMoments, Moment
+from cs2coach.features.problems import PROBLEMS, FrequencyRow, ProblemReport
+from cs2coach.report.evidence import evidence_sentence
 from cs2coach.parsing.match import MatchData
 from cs2coach.parsing.models import Team
 
@@ -36,9 +38,26 @@ def player_side(match: MatchData, steamid: int, round_number: int) -> str | None
         return None
 
 
-def build_digest(match: MatchData, mm: MatchMoments, baseline: dict[str, Any] | None) -> str:
-    lines = [_header(match, mm), "", _aim_section(mm.aim_stats, baseline), "", summary_section(mm), "",
-             _moments_section(mm)]
+def build_digest(match: MatchData, mm: MatchMoments, baseline: dict[str, Any] | None,
+                 problems: ProblemReport | None = None, frequency: list[FrequencyRow] | None = None) -> str:
+    lines = [_header(match, mm), "", _aim_section(mm.aim_stats, baseline), "", summary_section(mm)]
+    if frequency is not None:
+        lines.extend(["", "## 问题频率", "报告应优先讲突出问题；单条命中不说明问题。"])
+        for row in frequency:
+            pro = f"{row.pro_per_10_rounds:.2f}" if row.pro_per_10_rounds is not None else "缺失"
+            ratio = f"{row.ratio:.2f} 倍" if row.ratio is not None else "无可用倍数"
+            lines.append(f"- {row.label}（{row.problem}）：{row.hits} 次，每 10 回合 {row.per_10_rounds:.2f} / 职业 {pro}，"
+                         f"{ratio}" + ("，**突出问题**" if row.prominent else ""))
+    if problems is not None:
+        lines.extend(["", "## 检测到的问题", "只能从以下命中中选择问题和亮点；other 除外。编号只放在 targets 中。"])
+        for pid, spec in PROBLEMS.items():
+            hits = [h for h in problems.hits if h.problem == pid]
+            if hits:
+                lines.append(f"### {spec.label}（{pid}）")
+                lines.extend(f"- {h.target}：{evidence_sentence(h)}" for h in hits)
+        if not problems.hits:
+            lines.append("没有已启用规则的命中，不要将背景数据当作已检测的问题。")
+    lines.extend(["", _moments_section(mm)])
     if mm.missed_trades:
         lines += ["", "## 漏补（队友阵亡时自己在附近、窗口内在雷达上发现过击杀者，但没有补上；距离不考虑视线，近似）"]
         for t in mm.missed_trades:
@@ -50,14 +69,22 @@ def build_digest(match: MatchData, mm: MatchMoments, baseline: dict[str, Any] | 
     return "\n".join(lines)
 
 
+def match_score(match: MatchData, steamid: int) -> tuple[int, int]:
+    """按目标玩家逐回合的阵营统计比分，供摘要、替换总览和报告共用。"""
+    won = lost = 0
+    for r in match.rounds:
+        side = player_side(match, steamid, r.number)
+        won += side is not None and r.winner.name == side
+        lost += side is not None and r.winner.name != side
+    return won, lost
+
+
 def _header(match: MatchData, mm: MatchMoments) -> str:
     sides, results = [], []
-    won = lost = 0
+    won, lost = match_score(match, mm.player)
     for r in match.rounds:
         side = player_side(match, mm.player, r.number)
         win = side is not None and r.winner.name == side
-        won += win
-        lost += side is not None and not win
         results.append(f"R{r.number}{side or '?'}{'胜' if win else '负'}")
         sides.append(side)
     reasons = "、".join(sorted({ROUND_END_REASONS.get(r.reason, str(r.reason)) for r in match.rounds}))
