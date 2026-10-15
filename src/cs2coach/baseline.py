@@ -49,6 +49,29 @@ def load_baseline(path: Path = BASELINE_FILE) -> dict[str, Any] | None:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
+def is_pro_player(steamid: int, baseline: dict[str, Any] | None, cfg: dict[str, Any]) -> bool:
+    """职业名单来自实际参与基准的选手或手工补充的 SteamID。"""
+    players = baseline.get("players", []) if baseline is not None else []
+    return (any(player.get("steamid") == steamid for player in players)
+            or steamid in cfg["training"]["extra_pro_steamids"])
+
+
+def pro_training_note(steamid: int, baseline: dict[str, Any] | None,
+                      cfg: dict[str, Any]) -> str | None:
+    """单场与后续多场共用的职业选手训练说明。"""
+    if not is_pro_player(steamid, baseline, cfg):
+        return None
+    in_sample = any(player.get("steamid") == steamid
+                    for player in (baseline.get("players", []) if baseline is not None else []))
+    advice = ("训练建议面向职业水平：聚焦细节、对局决策和针对性的情境练习，"
+              "不推荐基础的瞄准、压枪练习图。")
+    if in_sample:
+        return ("目标玩家是职业选手，本人就在职业样本中。" + advice +
+                "与职业样本的比较，反映的是他和其他职业选手的差距。")
+    return ("目标玩家是职业选手，本人不在职业样本中。" + advice +
+            "与职业样本的比较仅供参考，不能当作与其他职业选手的直接差距。")
+
+
 def compare(metric: str, value: float | None, baseline: dict[str, Any] | None) -> dict[str, Any] | None:
     """与职业样本对比：职业中位数、四分位，以及"优于职业样本中多少比例的人次"（考虑指标方向）。"""
     if value is None or baseline is None or metric not in baseline.get("metrics", {}):

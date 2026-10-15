@@ -19,7 +19,14 @@ def load_config(path: Path | None = None) -> dict[str, Any]:
     if path is not None:
         _merge(cfg, _read(Path(path)))
     _validate_checker(cfg["checker"])
+    _validate_training(cfg["training"])
     return cfg
+
+
+def _validate_training(cfg: dict[str, Any]) -> None:
+    ids = cfg["extra_pro_steamids"]
+    if not isinstance(ids, list) or any(type(sid) is not int or sid <= 0 for sid in ids):
+        raise ConfigError("配置项 training.extra_pro_steamids 应为正整数数组")
 
 
 def _validate_checker(cfg: dict[str, Any]) -> None:

@@ -6,7 +6,9 @@ from types import SimpleNamespace
 
 import pytest
 
-from cs2coach.baseline import build_baseline, compare, engagement_weapon, spray_segments, spray_stats, weapon_stats, weapon_threshold
+from cs2coach.baseline import (build_baseline, compare, engagement_weapon, is_pro_player,
+                               pro_training_note, spray_segments, spray_stats, weapon_stats,
+                               weapon_threshold)
 from cs2coach.config import load_config
 from tests.helpers.moments import make_mm, make_moment, make_shot
 from tests.helpers.synthetic import A, B
@@ -16,6 +18,23 @@ def config(minimum=1):
     cfg = load_config()
     cfg["baseline"]["min_engagements"] = minimum
     return cfg
+
+
+def test_pro_player_from_baseline_extra_list_and_legacy_baseline():
+    cfg = config()
+    cfg["training"]["extra_pro_steamids"] = [B]
+    baseline = {"players": [{"steamid": A, "name": "alice"}]}
+    assert is_pro_player(A, baseline, cfg)
+    assert is_pro_player(B, baseline, cfg)
+    assert not is_pro_player(123, baseline, cfg)
+    assert not is_pro_player(A, {}, cfg)
+    assert not is_pro_player(A, None, cfg)
+    assert pro_training_note(A, baseline, cfg) == (
+        "目标玩家是职业选手，本人就在职业样本中。训练建议面向职业水平："
+        "聚焦细节、对局决策和针对性的情境练习，不推荐基础的瞄准、压枪练习图。"
+        "与职业样本的比较，反映的是他和其他职业选手的差距。")
+    assert "本人不在职业样本中" in pro_training_note(B, baseline, cfg)
+    assert pro_training_note(123, baseline, cfg) is None
 
 
 def test_engagement_weapon_uses_first_shot_in_time_not_kill_weapon():
@@ -122,6 +141,7 @@ def test_build_script_skips_failed_demos_and_low_coverage_players(tmp_path, monk
     assert script.main([str(tmp_path / "bad.dem"), str(tmp_path / "good.dem"), "--out", str(out)]) == 0
     b = json.loads(out.read_text(encoding="utf-8"))
     assert b["version"] == 2 and len(b["demos"]) == 1 and seen == [A]
+    assert b["players"] == [{"steamid": A, "name": "alice"}]
     assert "1 人次" in b["source"]
     previous = out.read_bytes()
     assert script.main([str(tmp_path / "bad.dem"), "--out", str(out)]) == 1

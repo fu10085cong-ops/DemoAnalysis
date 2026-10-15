@@ -1,6 +1,6 @@
 # 014 职业选手的训练建议
 
-状态：待做（与 012 互不依赖）
+状态：完成
 
 ## 目标
 
@@ -36,14 +36,14 @@
 
 ## 验收标准
 
-- [ ] 测试：
+- [x] 测试：
   - `is_pro_player`：在基准名单中、在补充名单中、两者都不在；
   - 基准文件没有 `players` 键（旧格式）时返回 False，不报错；
   - 职业选手的摘要有固定说明，普通用户没有；
   - 提示词包含新增的训练规则。
-- [ ] 全部测试通过：`.venv/Scripts/python.exe -m pytest -q`
-- [ ] 重新生成基准，在完成报告中写明 `players` 的人数（应为 150 人次去重后的人数，约 25 人），并确认 ZywOo（`76561198113666193`）在名单中。
-- [ ] **不要运行 `--ai`。**
+- [x] 全部测试通过：`.venv/Scripts/python.exe -m pytest -q`
+- [x] 重新生成基准，在完成报告中写明 `players` 的人数（应为 150 人次去重后的人数，约 25 人），并确认 ZywOo（`76561198113666193`）在名单中。
+- [x] **不要运行 `--ai`。**
 
 ## 范围外（不要做）
 
@@ -55,8 +55,14 @@
 ## 完成报告（GPT 填写）
 
 - 改动的文件及原因：
-- 测试结果：
-- 真实 demo 验证（如有）：
-- 遗留问题 / 需要确认的地方：
+  - `scripts/build_baseline.py` 将实际参与统计的玩家按 SteamID 去重、排序并写入 `players`；重新生成 `src/cs2coach/baselines/pro_sample.json`。
+  - `config/default.toml` 新增 `[training].extra_pro_steamids`；`config.py` 校验为正整数数组，防止字符串形式的 SteamID 静默失效。
+  - `baseline.py` 新增可供单场及后续多场共用的 `is_pro_player` 和 `pro_training_note`；`tools/digest.py` 在职业选手摘要开头加入训练说明，普通用户不加；`ai/prompts.py` 只在摘要标明职业选手时调整训练要求。
+  - `tests/test_baseline.py`、`tests/test_config.py`、`tests/test_render.py` 覆盖名单识别、旧版基准、配置、摘要和提示词。
+- 测试结果：`.venv/Scripts/python.exe -m pytest -q`：**529 passed, 3 skipped**；`git diff --check` 通过。未新增依赖。
+- 真实 demo 验证：运行 `.venv/Scripts/python.exe scripts/build_baseline.py` 重新生成基准，成功处理清单中的 **15 份 demo、150 人次**，失败 0 份，耗时 **419.71 秒**。`players` 按 SteamID 去重后为 **25 人**；ZywOo（`76561198113666193`）在名单中。把新基准移除 `players` 后与生成前的 Git 版本逐字段比较，**完全一致**。未运行 `--ai` 或真实大模型 API。
+- 遗留问题 / 需要确认的地方：无。按用户确认，手工补充名单中的选手若不在基准样本里，摘要改用“本人不在职业样本中”的准确措辞，且不声称比较直接反映与其他职业选手的差距；基准名单中的选手使用任务单固定原句。未提交。
 
 ## 审查意见（Claude 填写）
+
+**审查通过（2026-10-16）。** 名单 25 人，含 ZywOo；基准原有字段与生成前完全一致；只在摘要标明职业选手时才调整训练建议。手工补充、但不在样本中的选手使用"本人不在职业样本中"的措辞，比任务单考虑得更周全。529 个测试通过。

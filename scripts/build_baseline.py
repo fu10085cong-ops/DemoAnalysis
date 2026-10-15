@@ -80,8 +80,13 @@ def main(argv: list[str] | None = None) -> int:
     source = args.source or f"{events}：{groups} 组对局、{len(demos)} 份 demo（分段分别处理）"
     values = {metric: [getattr(mm.aim_stats, metric) for mm in mms if mm.aim_stats is not None]
               for metric in METRICS}
+    players = {}
+    for mm in mms:
+        players.setdefault(mm.player, mm.player_name)
     baseline = {"version": 2, **build_baseline(values, f"{source}；{len(mms)} 人次"),
-                "demos": demos, "weapons": weapon_stats(mms, cfg), "spray": spray_stats(mms, cfg)}
+                "demos": demos, "weapons": weapon_stats(mms, cfg), "spray": spray_stats(mms, cfg),
+                "players": [{"steamid": sid, "name": name} for sid, name in
+                            sorted(players.items())]}
     print("使用本次新算出的阈值统计职业问题频率（包含停用规则，排除 match 目标）", flush=True)
     baseline["problem_rates"] = problem_rates(mms, baseline, cfg)
     args.out.parent.mkdir(parents=True, exist_ok=True)

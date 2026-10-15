@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from cs2coach.baseline import METRICS, compare
+from cs2coach.baseline import METRICS, compare, pro_training_note
 from cs2coach.config import load_config
 from cs2coach.features.labels import GRENADE_LABELS, KIND_LABELS, ROUND_END_REASONS, absent_rounds_note, tag_label
 from cs2coach.features.models import AimStats, BlindInfo, MatchMoments, Moment
@@ -70,7 +70,9 @@ def _teammates(match: MatchData, steamid: int) -> list[int]:
 def build_digest(match: MatchData, mm: MatchMoments, baseline: dict[str, Any] | None,
                  problems: ProblemReport | None = None, frequency: list[FrequencyRow] | None = None,
                  cfg: dict[str, Any] | None = None) -> str:
-    lines = [_header(match, mm), "", _aim_section(mm.aim_stats, baseline), "", summary_section(mm)]
+    note = pro_training_note(mm.player, baseline, cfg or load_config())
+    lines = [*([note, ""] if note else []), _header(match, mm), "",
+             _aim_section(mm.aim_stats, baseline), "", summary_section(mm)]
     if frequency is not None:
         rules = (cfg or load_config())["problems"]
         lines.extend(["", "## 问题频率",

@@ -75,6 +75,21 @@ def test_digest_contains_prominence_and_human_evidence_before_moments():
     assert "看见对手到第一次命中" in text and "不按击杀和死亡分开" in text
 
 
+def test_digest_pro_training_notice_only_for_pro_players():
+    d, mm, _ = sample()
+    cfg = load_config()
+    baseline = {"players": [{"steamid": A, "name": "alice"}]}
+    pro = build_digest(scenario(), mm, baseline, cfg=cfg)
+    assert pro.startswith("目标玩家是职业选手，本人就在职业样本中。")
+    ordinary = build_digest(scenario(), mm, {}, cfg=cfg)
+    assert "训练建议面向职业水平" not in ordinary
+    cfg["training"]["extra_pro_steamids"] = [A]
+    extra = build_digest(scenario(), mm, {}, cfg=cfg)
+    assert extra.startswith("目标玩家是职业选手，本人不在职业样本中。")
+    assert "只有摘要明确标明目标玩家是职业选手时" in SYSTEM_PROMPT
+    assert "否则一律按上述普通用户训练标准" in SYSTEM_PROMPT
+
+
 def test_match_target_fact_uses_aggregate_numbers():
     d, mm, names = sample()
     args = payload(findings=[dict(problem="spray_control", targets=["match"], severity="low", analysis="命中率值得复盘。", training="练习控制连射。")])

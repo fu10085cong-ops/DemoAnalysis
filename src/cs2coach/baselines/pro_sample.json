@@ -1497,6 +1497,108 @@
       }
     ]
   },
+  "players": [
+    {
+      "steamid": 76561197973140692,
+      "name": "mezii"
+    },
+    {
+      "steamid": 76561197978835160,
+      "name": "flameZ"
+    },
+    {
+      "steamid": 76561197989430253,
+      "name": "karrigan"
+    },
+    {
+      "steamid": 76561197989744167,
+      "name": "apEX"
+    },
+    {
+      "steamid": 76561197991272318,
+      "name": "ropz"
+    },
+    {
+      "steamid": 76561197996678278,
+      "name": "TeSeS"
+    },
+    {
+      "steamid": 76561198013243326,
+      "name": "Aleksib"
+    },
+    {
+      "steamid": 76561198041683378,
+      "name": "NiKo"
+    },
+    {
+      "steamid": 76561198050250233,
+      "name": "iM"
+    },
+    {
+      "steamid": 76561198063336407,
+      "name": "Spinx"
+    },
+    {
+      "steamid": 76561198074762801,
+      "name": "m0NESY"
+    },
+    {
+      "steamid": 76561198081484775,
+      "name": "sh1ro"
+    },
+    {
+      "steamid": 76561198113666193,
+      "name": "ZywOo"
+    },
+    {
+      "steamid": 76561198193174134,
+      "name": "xertioN"
+    },
+    {
+      "steamid": 76561198246607476,
+      "name": "b1t"
+    },
+    {
+      "steamid": 76561198310561479,
+      "name": "PR"
+    },
+    {
+      "steamid": 76561198355739212,
+      "name": "torzsi"
+    },
+    {
+      "steamid": 76561198386265483,
+      "name": "donk"
+    },
+    {
+      "steamid": 76561198872013168,
+      "name": "tN1R"
+    },
+    {
+      "steamid": 76561198995880877,
+      "name": "zont1x"
+    },
+    {
+      "steamid": 76561198998266210,
+      "name": "xelex"
+    },
+    {
+      "steamid": 76561199032006224,
+      "name": "kyousuke"
+    },
+    {
+      "steamid": 76561199063068840,
+      "name": "w0nderful"
+    },
+    {
+      "steamid": 76561199063238565,
+      "name": "magixx"
+    },
+    {
+      "steamid": 76561199076189612,
+      "name": "makazze"
+    }
+  ],
   "problem_rates": {
     "slow_reaction": {
       "hits": 425,

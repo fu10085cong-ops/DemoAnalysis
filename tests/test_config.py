@@ -24,6 +24,15 @@ def test_unknown_key_is_rejected(tmp_path):
         load_config(p)
 
 
+def test_extra_pro_steamids_override_requires_integer_list(tmp_path):
+    path = tmp_path / "pro.toml"
+    path.write_text("[training]\nextra_pro_steamids = [76561198113666193]\n", encoding="utf-8")
+    assert load_config(path)["training"]["extra_pro_steamids"] == [76561198113666193]
+    path.write_text('[training]\nextra_pro_steamids = ["76561198113666193"]\n', encoding="utf-8")
+    with pytest.raises(ConfigError, match="training.extra_pro_steamids"):
+        load_config(path)
+
+
 def test_missing_and_malformed_config(tmp_path):
     with pytest.raises(ConfigError, match="不存在"):
         load_config(tmp_path / "nope.toml")
