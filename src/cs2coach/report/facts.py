@@ -78,6 +78,8 @@ def _engagement_facts(m: Moment, names: Mapping[int, str]) -> list[str]:
             out.append("缺少地图数据，没有计算视野。")
         elif e.visibility_note in VISIBILITY_NOTES:
             out.append(VISIBILITY_NOTES[e.visibility_note] + "。")
+    if e.opponent_seen_while_blind:
+        out.append("对手第一次看见你时正被闪白，不计算对手的反应时间。")
     if e.shots_fired == 0:
         out.append("你没有朝对手开枪。")
     elif _known(e.first_shot_lead_s):

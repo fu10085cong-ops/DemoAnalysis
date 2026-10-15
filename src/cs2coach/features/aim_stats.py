@@ -16,7 +16,7 @@ import pandas as pd
 
 from cs2coach.features.aim import scoped_before_shot
 from cs2coach.features.models import AimStats, Moment
-from cs2coach.features.visibility import Sight, angle_between
+from cs2coach.features.visibility import Sight, angle_between, blinded_at
 from cs2coach.parsing.match import MatchData
 from cs2coach.parsing.weapons import RIFLES, is_gun
 
@@ -93,7 +93,7 @@ def _encounters(match: MatchData, sid: int, sight: Sight, ac: dict, rate: int) -
         rnd = match.round(int(r.round))
         floor = rnd.freeze_end_tick if rnd.freeze_end_tick is not None else rnd.start_tick
         fs = sight.first_seen(sid, int(r.victim), t, floor)
-        if fs.tick is None or fs.smoke:
+        if fs.tick is None or fs.smoke or blinded_at(match, sight, sid, fs.tick):
             continue
         x = (t - fs.tick) / rate
         if x >= max_ttd:

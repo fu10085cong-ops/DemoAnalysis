@@ -73,7 +73,7 @@ def _aim_section(stats: AimStats | None, baseline: dict[str, Any] | None) -> str
     if stats is None:
         return "## 整场枪法\n视野计算不可用，没有枪法统计。"
     src = baseline["source"] if baseline else "无"
-    lines = ["## 整场枪法（Leetify 口径）", f"职业样本：{src}。职业样本很小，只能作为参考。"]
+    lines = ["## 整场枪法（Leetify 口径）", f"职业样本：{src}。样本只来自少数职业队伍，仅作参考。"]
     for m in METRICS:
         name, unit, n_field, n_unit = METRIC_LABELS[m]
         v = getattr(stats, m)
@@ -94,6 +94,7 @@ VISIBILITY_NOTES = {
     "seen_since_previous_kill": "本回合上一次击杀时就已经能看见这名对手（交火紧接着上一次击杀）",
     "seen_since_round_start": "回合开始时就能看见这名对手",
     "smoke": "首次看见时隔着烟，视野数据不计",
+    "blind": "第一次看见对手时你正被闪白，这次交火不计算反应时间和准星",
     "no_map_data": "无视野数据",
 }
 

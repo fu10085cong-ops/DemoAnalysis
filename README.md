@@ -90,7 +90,13 @@ python -m cs2coach analyze data/demos/xxx.dem --player <SteamID64> --ai
 
 也可以把 key 写在项目根目录的 `.env` 文件里（一行一个，如 `DEEPSEEK_API_KEY=sk-...`）；`.env` 已在 `.gitignore` 中，不会提交。
 
-职业基准（报告中"与职业样本对比"）由 `scripts/build_baseline.py` 从职业比赛 demo 生成，目前只有一个小样本（ESL 一个 BO3 的三张图，30 人次）。
+职业基准（报告中"与职业样本对比"）由 `scripts/build_baseline.py` 默认读取清单 `src/cs2coach/baselines/pro_demos.toml`，从职业比赛 demo 生成 `src/cs2coach/baselines/pro_sample.json`。样本来源和实际规模以摘要显示的基准 `source` 为准；样本只来自少数职业队伍，仅作参考。
+
+添加新的职业 demo：
+
+1. 把 demo 压缩包放到 `data/demos/`，确认包内 demo 的完整文件名。
+2. 在 `pro_demos.toml` 追加一项 `[[demos]]`，填写 `archive`（相对仓库根目录的路径）、`member`（包内文件名）、`event`（赛事）、`teams`（对阵）和 `map`（地图）；同图的服务器重启分段分别登记。
+3. 在仓库根目录运行 `python scripts/build_baseline.py`。脚本按清单重新统计，跳过覆盖率不足的玩家和失败的 demo，汇总成功/失败情况，并将实际来源与人次写入基准文件。
 
 视野计算首次运行时会从 GitHub 下载 awpy-data 的地图网格（约 150 MB，缓存在 `~/.awpy`）；下载不了时视野相关指标留空，其余分析照常。
 

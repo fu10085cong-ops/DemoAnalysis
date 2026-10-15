@@ -69,6 +69,8 @@ class Engagement(BaseModel):
     # —— 视野（地图几何射线检测，见 features/visibility.py）——
     player_first_seen_tick: int | None = None  # 目标玩家第一次看见对手（这段连续可见期的起点）
     opponent_first_seen_tick: int | None = None  # 对手第一次看见目标玩家
+    player_seen_while_blind: bool | None = None  # 几何首次可见时本人是否正被闪白；无起点时为空
+    opponent_seen_while_blind: bool | None = None
     seen_first_lead_s: float | None = None  # 正数表示目标玩家先看见对手（领先的秒数）
     # Leetify 同名指标：从看见对手到第一次对他造成伤害；对手的同一指标
     time_to_damage_s: float | None = None
@@ -91,7 +93,7 @@ class Engagement(BaseModel):
     # Leetify 同名指标：从看见对手到第一次造成伤害，准星转过的角度（度）
     crosshair_placement_deg: float | None = None
     # 视野指标为空的原因：no_map_data / not_seen（事件发生时看不到对手）/ seen_before_window（回溯 3 秒内一直可见）/
-    # seen_since_previous_kill（本回合上一次击杀时就已经能看见这名对手）/ seen_since_round_start / smoke
+    # seen_since_previous_kill（本回合上一次击杀时就已经能看见这名对手）/ seen_since_round_start / smoke / blind
     visibility_note: str | None = None
     player_blind: BlindInfo | None = None
     opponent_blind: BlindInfo | None = None

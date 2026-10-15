@@ -1,6 +1,6 @@
 # 006 被闪白时不算"看见"
 
-状态：待做（**请在 004 之前做**：它改变 TTD 和准星的统计口径，004 生成职业基准时要用新口径）
+状态：完成
 
 ## 目标
 
@@ -54,15 +54,15 @@
 
 ## 验收标准
 
-- [ ] 测试（`tests/test_visibility.py`，复用其中的 `ticks()`、`duel()` 和 `WallChecker` 场景）：
+- [x] 测试（`tests/test_visibility.py`，复用其中的 `ticks()`、`duel()` 和 `WallChecker` 场景）：
   - 目标玩家第一次看见时被闪白（剩余 ≥ 阈值）：`visibility_note == "blind"`，TTD 和准星为 None，`player_seen_while_blind` 为 True，`seen_first_lead_s` 为 None，没有 `saw_opponent_first` 标签；
   - 剩余时间低于阈值：不受影响；
   - 致盲时长低于 `min_blind_seconds`：不受影响；
   - 对手第一次看见时被闪白：只有 `opponent_time_to_damage_s` 为 None，目标玩家自己的指标不受影响；
   - `smoke` 的优先级高于 `blind`；
   - `aim_stats` 排除 `blind` 的交火。
-- [ ] 全部测试通过：`.venv/Scripts/python.exe -m pytest -q`
-- [ ] 真实 demo 验证（**不加 `--ai`**）：重跑 5E Mirage，玩家 `76561199711881069`。
+- [x] 全部测试通过：`.venv/Scripts/python.exe -m pytest -q`
+- [x] 真实 demo 验证（**不加 `--ai`**）：重跑 5E Mirage，玩家 `76561199711881069`。
   - `R11-death` 的事实卡不再写"你先看见对手"，并出现被闪白的说明；
   - 完成报告中列出：整场有多少次交火因 `blind` 被排除；TTD 中位数在修改前后各是多少。
 
@@ -77,8 +77,21 @@
 ## 完成报告（GPT 填写）
 
 - 改动的文件及原因：
-- 测试结果：
-- 真实 demo 验证（如有）：
-- 遗留问题 / 需要确认的地方：
+  - `config/default.toml` 新增暂定的剩余致盲阈值 1.0 秒，注明末段消退和待数据校准。
+  - `features/visibility.py` 放置共用 `blinded_at(match, p, steamid, tick)`；`features/moments.py` 导入使用（也可从该模块导入此函数），`features/aim_stats.py` 对每次遭遇使用同一规则，避免循环导入和遗漏非致命遭遇。
+  - `features/models.py` 新增双方可空的被闪白原因字段；`add_visibility` 保留几何首次可见 tick，过滤双方相应指标与先看见标签，烟雾原因优先。
+  - `tools/digest.py`、`report/facts.py` 显示原因；`docs/features.md` 说明口径及 Leetify 未公开同类处理。
+  - `tests/test_visibility.py` 新增 9 项测试，覆盖阈值边界、短闪、未来记录、双方独立过滤、烟雾优先、无起点、配置覆盖和整场统计。
+- 测试结果：`.venv/Scripts/python.exe -m pytest -q`：275 passed，3 skipped（未设置真实 demo 测试环境变量）。
+- 真实 demo 验证：
+  - 重跑指定 5E Mirage `g173-n-20261014223216271995270_de_mirage.dem`，目标 `76561199711881069`，正常生成 JSON 和事实卡，未加 `--ai`，原 demo 只读。
+  - 37 个瞬间中 `visibility_note=blind` 共 **1** 次（R11-death）；本人被闪白标记 1 次、对手被闪白标记 1 次。
+  - 整场 TTD 中位数：修改前 **500 ms（17 次遭遇）**，修改后 **500 ms（17 次遭遇）**。R11 本人未造成伤害，原本就不是整场 TTD 的样本，故中位数不变。
+  - R11：几何首次可见 tick 73111、对手首次可见 tick 73115 均保留；`player_seen_while_blind=True`、`seen_first_lead_s=None`、`visibility_note=blind`。事实卡已不再出现“你先看见对手”，新增“第一次看见对手时你正被闪白，这次交火不计算反应时间和准星。”
+- 遗留问题 / 需要确认的地方：阈值仍待数据校准；未处理部分模型的几何误判，未改 BlindInfo/死亡状态或其他枪法口径，未新增依赖、未重建职业基准。首次可见 tick 在烟雾排除时也保留作核对，烟雾的指标排除规则不变。真实 demo 中两名其他玩家原有约 93%、94% 覆盖率警告仍保留。用户已明确将执行顺序调整为 006 → 004 → 005。
 
 ## 审查意见（Claude 填写）
+
+**审查通过（2026-10-15）。** R11-death 的处理正确，阈值边界和烟雾优先级的测试完整。
+
+另有一处超出任务单的改动：`player_first_seen_tick` 和 `opponent_first_seen_tick` 现在无条件保留，在 `smoke` 时也写入，原来只在有效时才写入。保留下来方便核对，可以接受。但给 AI 的字段说明需要注明它们在 `smoke` 和 `blind` 时不可靠，这项并入 004 的第 1 轮修改。

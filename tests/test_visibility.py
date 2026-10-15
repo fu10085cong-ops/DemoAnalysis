@@ -12,7 +12,7 @@ import pytest
 from cs2coach.config import load_config
 from cs2coach.features.moments import find_moments
 from cs2coach.features.visibility import Sight, angle_between
-from cs2coach.parsing.match import build_damages, build_grenades, build_kills, build_shots
+from cs2coach.parsing.match import build_blinds, build_damages, build_grenades, build_kills, build_shots
 from tests.helpers.synthetic import A, B, C, D, WallChecker, make_match, make_round, make_ticks, sid
 from tests.test_moments import bullet, death, fire, hurt
 
@@ -88,12 +88,17 @@ def test_angle_between_view_vectors():
 # ---------- 接入交火与整场统计 ----------
 
 
-def duel(cfg=CFG, checker=None, c_yaw=None):
+def duel(cfg=CFG, checker=None, c_yaw=None, blinds=None, damages=None, smokes=None):
     m = make_match(ticks(a_yaw={80: 10.0}, c_yaw=c_yaw), rounds=[make_round(freeze_end=10, end=110, last=120)])
     m.kills = build_kills(pd.DataFrame([death(100, A, C)]), m)
-    m.damages = build_damages(pd.DataFrame([hurt(95, A, C, 30, 70), hurt(100, A, C, 120, 0)]), m)
+    m.damages = build_damages(pd.DataFrame(damages if damages is not None else
+                                         [hurt(95, A, C, 30, 70), hurt(100, A, C, 120, 0)]), m)
     fires = [fire(90, A), fire(95, A), fire(100, A)]
     m.shots = build_shots(pd.DataFrame(fires), pd.DataFrame([bullet(f["tick"], A) for f in fires]), m)
+    if blinds is not None:
+        m.blinds = build_blinds(pd.DataFrame(blinds), pd.DataFrame(), m)
+    if smokes is not None:
+        m.grenades = build_grenades(smokes, m)
     s = Sight(m, cfg, checker=checker or WallChecker(wall_x=500.0, wall_y_max=-50.0))
     return find_moments(m, A, cfg, sight=s)
 
@@ -223,3 +228,67 @@ def test_aim_stats_reads_scoped_awp_speed_without_changing_rifle_scope():
     st = aim_stats(m, A, cfg, m.shots, sight(m), [])
     scoped_speeds.get.assert_called_once_with("awp")
     assert st.counter_strafing_shots == 0  # 整场 Counter-Strafing 仍只统计步枪。
+
+
+def flash(victim=A, tick=16, duration=2.0):
+    return {"tick": tick, "user_steamid": sid(victim), "attacker_steamid": sid(B), "blind_duration": duration}
+
+
+def test_seen_while_blind_excludes_own_metrics_but_keeps_geometric_tick():
+    mm = duel(blinds=[flash()], c_yaw={t: 0.0 for t in range(1, 88)})
+    e = mm.moments[0].engagement
+    assert e.player_first_seen_tick == 80 and e.opponent_first_seen_tick == 88
+    assert e.player_seen_while_blind is True and e.opponent_seen_while_blind is False
+    assert e.visibility_note == "blind"
+    assert e.time_to_damage_s is e.crosshair_placement_deg is None
+    assert e.seen_to_first_shot_s is e.first_shot_to_damage_s is None
+    assert e.seen_first_lead_s is None
+    assert not {"saw_opponent_first", "opponent_saw_first"}.intersection(mm.moments[0].tags)
+
+
+@pytest.mark.parametrize("record", [flash(tick=15), flash(tick=80, duration=0.5), flash(tick=81)])
+def test_fading_short_and_future_blinds_do_not_exclude_visibility(record):
+    e = duel(blinds=[record]).moments[0].engagement
+    assert e.player_seen_while_blind is False and e.visibility_note is None
+    assert e.time_to_damage_s == pytest.approx(15 / 64, abs=1e-3)
+
+
+def test_opponent_blind_only_excludes_opponent_ttd_and_seen_lead():
+    damages = [hurt(94, C, A, 30, 70), hurt(95, A, C, 30, 70), hurt(100, A, C, 120, 0)]
+    mm = duel(blinds=[flash(C)], damages=damages)
+    e = mm.moments[0].engagement
+    assert e.player_seen_while_blind is False and e.opponent_seen_while_blind is True
+    assert e.visibility_note is None and e.opponent_time_to_damage_s is None
+    assert e.time_to_damage_s == pytest.approx(15 / 64, abs=1e-3)
+    assert e.crosshair_placement_deg is not None and e.seen_first_lead_s is None
+    from cs2coach.report.facts import moment_facts
+
+    assert "对手第一次看见你时正被闪白，不计算对手的反应时间。" in moment_facts(mm.moments[0], {})
+
+
+def test_smoke_has_priority_over_blind_and_keeps_audit_tick():
+    smoke = pd.DataFrame([{"tick": 10, "user_steamid": sid(B), "entityid": 1,
+                           "x": 500.0, "y": 0.0, "z": 0.0}])
+    e = duel(blinds=[flash()], smokes={"smokegrenade_detonate": smoke}).moments[0].engagement
+    assert e.visibility_note == "smoke" and e.player_seen_while_blind is True
+    assert e.player_first_seen_tick == 80 and e.time_to_damage_s is None
+
+
+def test_aim_stats_excludes_blind_encounters_and_keeps_other_statistics():
+    cfg = copy.deepcopy(CFG)
+    cfg["aim_stats"]["min_samples"] = 1
+    st = duel(cfg, blinds=[flash()]).aim_stats
+    assert st.time_to_damage_samples == st.crosshair_placement_samples == 0
+    assert st.time_to_damage_ms is st.crosshair_placement_deg is None
+    assert st.spotted_shots == 3 and st.hits == 2
+
+
+def test_blind_flags_are_unknown_without_geometric_first_seen():
+    e = duel(c_yaw={t: 0.0 for t in range(1, 121)}, blinds=[flash(C)]).moments[0].engagement
+    assert e.opponent_first_seen_tick is None and e.opponent_seen_while_blind is None
+
+
+def test_blind_filter_uses_configured_remaining_threshold():
+    cfg = copy.deepcopy(CFG)
+    cfg["visibility"]["blind_min_remaining_seconds"] = 1.1
+    assert duel(cfg, blinds=[flash()]).moments[0].engagement.player_seen_while_blind is False

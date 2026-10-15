@@ -1,0 +1,279 @@
+"""问题目录的确定性前提条件；命中只表示可供审查，不代表一定是失误。"""
+
+from __future__ import annotations
+
+import json
+import math
+from collections import Counter
+from typing import Literal
+
+from pydantic import BaseModel
+
+from cs2coach.baseline import EXCLUDED_TAGS, engagement_weapon, spray_segments, spray_stats, weapon_threshold
+from cs2coach.features.models import MatchMoments
+
+
+class ProblemSpec(BaseModel):
+    id: str
+    label: str
+    category: Literal["aim", "duel", "utility_team", "weapon", "highlight"]
+    applies_to: list[Literal["kill", "death", "assist", "round", "match"]]
+    reliability: Literal["high", "medium", "low"]
+
+
+class ProblemHit(BaseModel):
+    problem: str
+    target: str
+    weapon: str | None
+    evidence: dict[str, float | int | str | bool | None]
+    thresholds: dict[str, float | int | str | None]
+
+
+class ProblemReport(BaseModel):
+    hits: list[ProblemHit]
+    disabled: list[str]
+    skipped: dict[str, int]
+    baseline_source: str | None
+
+
+# 登记目录的全部编号；仅下方 detect_problems 中明确实现的规则参与检测。
+_SPECS = [
+    ("slow_reaction", "出枪慢", "aim", ["kill", "death"], "medium"),
+    ("poor_crosshair_placement", "准星没提前放好", "aim", ["kill", "death"], "medium"),
+    ("shot_while_moving", "开枪时没停稳", "aim", ["death"], "high"),
+    ("peeked_into_held_angle", "主动拉出撞上对手架点", "duel", ["death"], "medium"),
+    ("dry_peek_with_utility", "身上有道具却直接拉出", "duel", ["death"], "medium"),
+    ("overpeek_in_advantage", "人数优势时冒进", "duel", ["death"], "medium"),
+    ("died_without_seeing", "没看见对手就被打死", "duel", ["death"], "low"),
+    ("turned_into_flash", "被对手闪中后被击杀", "duel", ["death"], "medium"),
+    ("missed_trade", "漏补枪", "utility_team", ["round"], "medium"),
+    ("post_plant_utility_unused", "下包后带着火没用", "utility_team", ["death"], "high"),
+    ("good_trade", "及时补枪", "highlight", ["kill"], "high"),
+    ("flash_assist", "闪光助攻", "highlight", ["assist"], "high"),
+    ("won_duel_seen_first", "先发现、先开枪赢下对枪", "highlight", ["kill"], "medium"),
+    ("spray_control", "压枪差", "weapon", ["kill", "death", "match"], "medium"),
+    ("spray_while_moving", "扫射时在移动", "weapon", ["death"], "high"),
+    ("overspray_at_range", "远距离长扫", "weapon", ["death"], "low"),
+    ("weapon_not_ready", "拉栓期间交火", "weapon", ["death"], "high"),
+    ("awp_unscoped_shot", "没开镜就开枪", "weapon", ["death"], "high"),
+    ("awp_moving_shot", "移动中开枪", "weapon", ["death"], "high"),
+    ("awp_repeek_same_angle", "开枪后在同一位置重复拉出", "weapon", ["death"], "low"),
+    ("awp_close_range_duel", "拿狙近距离对枪", "weapon", ["death"], "low"),
+    ("pistol_spam", "连点过快，准度还没恢复", "weapon", ["death"], "low"),
+    ("deagle_moving_shot", "沙鹰移动开枪", "weapon", ["death"], "high"),
+    ("glock_long_range", "用 Glock 远距离对枪", "weapon", ["death"], "medium"),
+    ("other", "AI 判断，无程序依据", "duel", ["kill", "death", "assist", "round", "match"], "low"),
+]
+PROBLEMS: dict[str, ProblemSpec] = {pid: ProblemSpec(id=pid, label=label, category=cat, applies_to=kinds, reliability=rel)
+            for pid, label, cat, kinds, rel in _SPECS}
+CONTEXT_ONLY: dict[str, str] = {
+    "unused_utility": "单独带道具阵亡与战绩正相关，不能单独定为问题。",
+    "isolated_death": "离队友远、孤立阵亡尚未用回合胜负验证。",
+    "opponent_saw_first": "零和背景，需要结合具体情境。",
+    "opening_death": "零和背景，需要结合具体情境。",
+    "man_advantage": "人数优势时阵亡本身只作背景。",
+    "friendly_flash": "被队友闪中不是本人的问题。",
+}
+
+
+def _finite(value) -> bool:
+    return isinstance(value, (float, int)) and math.isfinite(value)
+
+
+def _json(value) -> str:
+    """证据结构为标量字典；多发子弹、多个道具用 JSON 字符串完整保留。"""
+    return json.dumps(value, ensure_ascii=False, allow_nan=False)
+
+
+def _segment(segments, recoil):
+    # recoil_index 是浮点数；段的上限由下一段起点决定，例如 2.5 仍属于 1–2 段。
+    candidates = [s for s in segments if _finite(s.get("from")) and recoil >= s["from"]
+                  and (s.get("to") is None or recoil < s["to"] + 1)]
+    return max(candidates, key=lambda s: s["from"]) if candidates else None
+
+
+def detect_problems(mm: MatchMoments, baseline: dict | None, cfg: dict) -> ProblemReport:
+    """检测任务 005 的明确规则；缺失值不推断，缺阈值计入 skipped。"""
+    p = cfg["problems"]
+    disabled = list(p["disabled"])
+    hits: list[ProblemHit] = []
+    skipped: Counter = Counter()
+    automatic = cfg["baseline"]["automatic_weapons"]
+
+    def missing(pid):
+        if pid not in disabled:
+            skipped[pid] += 1
+
+    def emit(pid, target, weapon, evidence, thresholds=None):
+        if pid not in disabled:
+            hits.append(ProblemHit(problem=pid, target=target, weapon=weapon,
+                                   evidence={"weapon": weapon, **evidence}, thresholds=thresholds or {}))
+
+    def threshold(pid, weapon, metric, quantile):
+        if pid in disabled:
+            return None
+        value = weapon_threshold(baseline, weapon, metric, quantile)
+        if value is None:
+            missing(pid)
+        return value
+
+    for m in mm.moments:
+        if EXCLUDED_TAGS.intersection(m.tags):
+            continue
+        w, e, d, c = engagement_weapon(m), m.engagement, m.death, m.context
+        audit = {"round": m.round, "tick": m.tick, "kind": m.kind}
+
+        def hit(pid, evidence, thresholds=None):
+            emit(pid, m.id, w, audit | evidence, thresholds)
+
+        if m.kind in ("kill", "death"):
+            if e is None:
+                for pid in ("slow_reaction", "poor_crosshair_placement"):
+                    missing(pid)
+            else:
+                ttd, opp = e.time_to_damage_s, e.opponent_time_to_damage_s
+                cap = cfg["aim_stats"]["time_to_damage_max_seconds"]
+                if e.visibility_note not in ("smoke", "blind") and e.player_seen_while_blind is not True:
+                    if not _finite(ttd) or (m.kind == "death" and not _finite(opp)):
+                        missing("slow_reaction")
+                    elif ttd < cap:
+                        limit = threshold("slow_reaction", w, "time_to_damage_ms", "p75")
+                        if limit is not None and ttd * 1000 > limit and (m.kind == "kill" or opp < ttd):
+                            hit("slow_reaction", {"ttd_ms": ttd * 1000,
+                                "opponent_ttd_ms": opp * 1000 if _finite(opp) else None,
+                                "visibility_note": e.visibility_note,
+                                "player_seen_while_blind": e.player_seen_while_blind},
+                                {"ttd_ms": limit, "source": "pro_p75", "ttd_max_seconds": cap,
+                                 "ttd_max_source": "config"})
+                cp = e.crosshair_placement_deg
+                if not _finite(cp):
+                    missing("poor_crosshair_placement")
+                else:
+                    limit = threshold("poor_crosshair_placement", w, "crosshair_placement_deg", "p75")
+                    if limit is not None and cp > limit:
+                        hit("poor_crosshair_placement", {"crosshair_placement_deg": cp},
+                            {"crosshair_placement_deg": limit, "source": "pro_p75"})
+
+                if w in automatic:
+                    late = [s for s in e.shots if s.weapon == w and _finite(s.recoil_index)
+                            and s.recoil_index >= p["spray_late_recoil_index"]]
+                    if len(late) >= p["spray_min_late_shots"]:
+                        segments = spray_segments(baseline, w)
+                        refs = [_segment(segments, s.recoil_index) for s in late]
+                        if any(s is None or not _finite(s.get("hit_pct")) for s in refs):
+                            missing("spray_control")
+                        else:
+                            expected = sum(s["hit_pct"] for s in refs) / len(late)
+                            actual = 100 * sum(s.hit for s in late) / len(late)
+                            if actual < expected - p["spray_margin_pct"]:
+                                hit("spray_control", {"scope": "engagement", "shots": len(late),
+                                    "hits": sum(s.hit for s in late), "hit_pct": actual,
+                                    "recoil_indices": _json([s.recoil_index for s in late]),
+                                    "shot_hits": _json([s.hit for s in late])},
+                                    {"expected_hit_pct": expected, "source": "pro_segments_weighted",
+                                     "pro_hit_pcts": _json([s["hit_pct"] for s in refs]),
+                                     "margin_pct": p["spray_margin_pct"], "min_shots": p["spray_min_late_shots"],
+                                     "min_recoil_index": p["spray_late_recoil_index"], "limits_source": "config"})
+
+        if m.kind == "death":
+            if e is not None:
+                if e.shots and (e.first_shot_stopped is None or e.first_shot_hit is None):
+                    missing("shot_while_moving")
+                if e.contact_type is None:
+                    missing("peeked_into_held_angle")
+                    missing("dry_peek_with_utility")
+                    if "man_advantage" in m.tags:
+                        missing("overpeek_in_advantage")
+                if e.first_shot_stopped is False and e.first_shot_hit is False:
+                    hit("shot_while_moving", {"first_shot_stopped": False, "first_shot_hit": False})
+                if e.contact_type == "peek":
+                    hit("peeked_into_held_angle", {"contact_type": e.contact_type})
+                    if d is None:
+                        missing("dry_peek_with_utility")
+                    if "man_advantage" in m.tags and (m.trade is None or m.trade.traded is None):
+                        missing("overpeek_in_advantage")
+                    if d is not None and {"flashbang", "smokegrenade"}.intersection(d.unused_grenades) and e.opponent_blind is None:
+                        hit("dry_peek_with_utility", {"contact_type": e.contact_type,
+                            "unused_grenades": _json(d.unused_grenades), "opponent_blind": None})
+                    if "man_advantage" in m.tags and m.trade is not None and m.trade.traded is False:
+                        hit("overpeek_in_advantage", {"man_advantage": True, "contact_type": e.contact_type, "traded": False})
+                if w == "deagle" and e.first_shot_stopped is False:
+                    hit("deagle_moving_shot", {"first_shot_stopped": False})
+                if w == "awp" and e.shots:
+                    first = min(e.shots, key=lambda s: s.tick)
+                    if first.scoped is False and not _finite(c.distance):
+                        missing("awp_unscoped_shot")
+                    elif first.scoped is False and c.distance > p["awp_noscope_max_distance_m"]:
+                        hit("awp_unscoped_shot", {"first_shot_tick": first.tick, "scoped": first.scoped,
+                            "distance_m": c.distance}, {"distance_m": p["awp_noscope_max_distance_m"], "source": "config"})
+                if w in automatic:
+                    moving = [s for s in e.shots if s.weapon == w and _finite(s.recoil_index)
+                              and s.recoil_index >= p["spray_moving_min_recoil_index"]]
+                    if len(moving) >= p["spray_moving_min_shots"]:
+                        if any(s.stopped is None for s in moving):
+                            missing("spray_while_moving")
+                        else:
+                            ratio = sum(s.stopped is False for s in moving) / len(moving)
+                            if ratio > p["spray_moving_ratio"]:
+                                hit("spray_while_moving", {"shots": len(moving), "moving_ratio": ratio,
+                                    "moving_shots": sum(s.stopped is False for s in moving),
+                                    "recoil_indices": _json([s.recoil_index for s in moving]),
+                                    "shot_stopped": _json([s.stopped for s in moving])},
+                                    {"moving_ratio": p["spray_moving_ratio"], "min_shots": p["spray_moving_min_shots"],
+                                     "min_recoil_index": p["spray_moving_min_recoil_index"], "source": "config"})
+
+            if "died_without_seeing" in m.tags and d is not None and not m.wallbang and not m.through_smoke and d.blinded is False:
+                hit("died_without_seeing", {"died_without_seeing": True, "wallbang": m.wallbang,
+                    "through_smoke": m.through_smoke, "blinded": d.blinded})
+            blind = e.player_blind if e is not None else None
+            if blind is not None:
+                if blind.blinded_at_event and blind.thrower_role is None:
+                    missing("turned_into_flash")
+                if blind.blinded_at_event and blind.thrower_role in ("opponent", "enemy"):
+                    hit("turned_into_flash", {"blind_source": "engagement.player_blind",
+                        "blinded_at_event": blind.blinded_at_event, "thrower_role": blind.thrower_role})
+            elif d is not None and d.blinded and d.blinded_by_teammate is False:
+                hit("turned_into_flash", {"blind_source": "death", "player_blind": None,
+                    "blinded": d.blinded, "blinded_by_teammate": d.blinded_by_teammate})
+            elif d is not None and d.blinded and d.blinded_by_teammate is None:
+                missing("turned_into_flash")
+            if d is not None and c.side == "T" and c.bomb_planted and {"molotov", "incgrenade"}.intersection(d.unused_grenades):
+                hit("post_plant_utility_unused", {"side": c.side, "bomb_planted": c.bomb_planted,
+                    "unused_grenades": _json(d.unused_grenades)})
+            if "weapon_not_ready" in m.tags:
+                hit("weapon_not_ready", {"weapon_not_ready": True})
+            if w == "glock":
+                if not _finite(c.distance):
+                    missing("glock_long_range")
+                else:
+                    limit = threshold("glock_long_range", w, "distance_m", "p90")
+                    if limit is not None and c.distance > limit:
+                        hit("glock_long_range", {"distance_m": c.distance}, {"distance_m": limit, "source": "pro_p90"})
+
+        if m.kind == "kill":
+            if "trade_kill" in m.tags:
+                hit("good_trade", {"trade_kill": True})
+            if {"saw_opponent_first", "shot_first"}.issubset(m.tags):
+                hit("won_duel_seen_first", {"saw_opponent_first": True, "shot_first": True})
+        if m.kind == "assist" and m.assist is not None and m.assist.flash_assist:
+            hit("flash_assist", {"flash_assist": True})
+
+    for record in mm.missed_trades:
+        emit("missed_trade", f"R{record.round}", None, record.model_dump())
+
+    for w, segments in spray_stats([mm], cfg).items():
+        refs = spray_segments(baseline, w)
+        for s in segments:
+            if s["shots"] < p["spray_min_segment_shots"]:
+                continue
+            ref = next((r for r in refs if r.get("from") == s["from"] and r.get("to") == s["to"]), None)
+            if ref is None or not _finite(ref.get("hit_pct")):
+                missing("spray_control")
+            elif s["hit_pct"] < ref["hit_pct"] - p["spray_margin_pct"]:
+                emit("spray_control", "match", w, {"scope": "match", "segment": f'{s["from"]}–{s["to"] if s["to"] is not None else "+"}',
+                    "from": s["from"], "to": s["to"], "shots": s["shots"], "hit_pct": s["hit_pct"]},
+                    {"expected_hit_pct": ref["hit_pct"], "source": "pro_segment",
+                     "margin_pct": p["spray_margin_pct"], "min_shots": p["spray_min_segment_shots"], "limits_source": "config"})
+
+    return ProblemReport(hits=hits, disabled=disabled, skipped=dict(sorted(skipped.items())),
+                         baseline_source=baseline.get("source") if baseline is not None else None)

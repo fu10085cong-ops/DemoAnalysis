@@ -51,6 +51,8 @@ class Sight:
         v, a = cfg["visibility"], cfg["aim"]
         self.match = match
         self.rate = match.meta.tick_rate
+        self.min_blind = float(cfg["moments"]["min_blind_seconds"])
+        self.blind_min_remaining = float(v["blind_min_remaining_seconds"])
         self.points_s = list(v["body_points_standing"])
         self.points_c = list(v["body_points_crouched"])
         self.side = float(v["body_side_offset"])
@@ -205,6 +207,16 @@ class Sight:
 
     def any_enemy_seen(self, steamid: int, tick: int) -> bool:
         return self.enemies_seen(steamid, [tick])[0]
+
+
+def blinded_at(match: MatchData, p: Any, steamid: int, tick: int) -> bool:
+    """该 tick 是否仍被闪白；p 提供 rate、min_blind、blind_min_remaining，供交火和整场共用。"""
+    b = match.blinds
+    if b.empty:
+        return False
+    remaining = b["duration"] - (tick - b["tick"]) / p.rate
+    return bool(((b["victim"] == steamid).fillna(False) & (b["tick"] <= tick)
+                 & (b["duration"] >= p.min_blind) & (remaining >= p.blind_min_remaining)).any())
 
 
 def angle_between(a: np.ndarray | None, b: np.ndarray | None) -> float | None:

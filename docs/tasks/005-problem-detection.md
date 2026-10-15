@@ -1,6 +1,6 @@
 # 005 问题检测：实现问题目录的前提条件
 
-状态：待做（**依赖 004**：需要 `weapon_threshold`、`spray_segments` 和 v2 基准文件）
+状态：完成
 
 ## 目标
 
@@ -96,15 +96,15 @@
 
 ## 验收标准
 
-- [ ] 新建 `tests/test_problems.py`：
+- [x] 新建 `tests/test_problems.py`：
   - **每个**问题至少一个命中、一个不命中的测试；边界值（恰好等于阈值时**不**命中）至少覆盖 `slow_reaction` 和 `spray_control`；
   - 基准中没有该武器时计入 `skipped`，不报错；
   - 停用的问题不出现在 `hits` 中，并出现在 `disabled` 中；
   - 带排除标签的瞬间不参与检测；
   - `evidence` 和 `thresholds` 中包含规定的键。
   - 可以在 `tests/helpers/` 中新建一个构造 `Moment` 的辅助函数，用关键字参数覆盖默认值。
-- [ ] 全部测试通过：`.venv/Scripts/python.exe -m pytest -q`
-- [ ] 真实 demo 验证（**不加 `--ai`**）：
+- [x] 全部测试通过：`.venv/Scripts/python.exe -m pytest -q`
+- [x] 真实 demo 验证（**不加 `--ai`**）：
   1. 5E Mirage（`g173-n-20261014223216271995270_de_mirage.dem`，玩家 `76561199711881069`）：生成 `_problems.md`。完成报告中列出每个问题的命中次数，并贴出 3 条命中（包含 `evidence`）。
   2. **基准自检**：任选一场职业 demo（例如 `vitality-vs-mouz-m3-dust2.dem`）中的一名选手，统计 `slow_reaction` 和 `poor_crosshair_placement` 的命中数占可判断交火的比例。职业 demo 本身就是基准的一部分，这个比例理论上应该接近 25%。报告实际数值。
 
@@ -119,8 +119,73 @@
 ## 完成报告（GPT 填写）
 
 - 改动的文件及原因：
-- 测试结果：
-- 真实 demo 验证（如有）：
+  - `features/problems.py`：新增 ProblemSpec / ProblemHit / ProblemReport，登记目录全部 25 个编号和 1.4 节背景项；实现明确检测表的 19 个编号、20 种检测（压枪含交火和整场）。交火武器直接复用 004 函数，不重复定义口径。
+  - 枪法阈值按武器读取 p75，Glock 距离取 p90；无基准仍跑通用规则，缺少数据/阈值计入 skipped。默认停用 died_without_seeing，排除四类无效瞬间；致盲优先看 BlindInfo，未知投掷归属不猜。
+  - 单次压枪按逐发所处分段求职业期望，只比较交火武器的子弹；整场复用 spray_stats，按实际武器与分段比较。证据完整保存所用子弹序号、命中/停稳序列、道具列表及阈值；列表以 JSON 字符串保存在标量字典里。
+  - `config/default.toml`：新增 problems 段，所有阈值和停用列表均可严格配置覆盖，AWP 距离与移动比例注明待数据校准。
+  - `report/problems.py` 与 `cli.py`：无需 AI 即生成按问题分组的 `_problems.md`，包含证据、阈值、职业来源、停用和 skipped。未改变 AI 调用流程。
+  - `tests/test_problems.py`：新增 70 项测试，覆盖每条规则正反条件、严格边界、缺基准/缺武器/缺分段、停用与排除、致盲优先级、混合武器、配置覆盖、证据与 CLI 无 AI 输出。复用 004 的 `tests/helpers/moments.py` 及 synthetic 数据。
+  - `docs/features.md` 说明检测口径；`docs/problem_catalog.md` 只补充顶部状态行。未新增依赖。
+- 测试结果：`.venv/Scripts/python.exe -m pytest -q`：**362 passed, 3 skipped**（未设置真实 demo 测试环境变量）。`git diff --check` 通过。
+- 真实 demo 验证：
+  - 两场均运行 `python -m cs2coach analyze ... --player ...`，不加 `--ai`；JSON、事实卡、问题报告均成功生成，demo 原文件只读。最终补充缺少数据计数后，使用这些真实解析结果重新生成问题报告，命中数不变。核对统计保存于 `data/output/problem_validation.json`。
+  - 5E Mirage：`g173-n-20261014223216271995270_de_mirage.dem`，玩家 `76561199711881069`，37 个瞬间，共 **24 条命中**。输出 `data/output/g173-n-20261014223216271995270_de_mirage_76561199711881069_problems.md`。
+
+  | 问题编号 | 命中次数 |
+  |---|---:|
+  | slow_reaction | 7 |
+  | poor_crosshair_placement | 7 |
+  | shot_while_moving | 1 |
+  | peeked_into_held_angle | 0 |
+  | dry_peek_with_utility | 0 |
+  | overpeek_in_advantage | 0 |
+  | died_without_seeing（默认停用） | 0 |
+  | turned_into_flash | 1 |
+  | missed_trade | 2 |
+  | post_plant_utility_unused | 0 |
+  | weapon_not_ready | 3 |
+  | awp_unscoped_shot | 0 |
+  | deagle_moving_shot | 0 |
+  | glock_long_range | 0 |
+  | spray_control（单次交火 / 整场） | 1 / 0 |
+  | spray_while_moving | 0 |
+  | good_trade | 0 |
+  | flash_assist | 0 |
+  | won_duel_seen_first | 2 |
+
+  仅登记的 overspray_at_range、awp_moving_shot、awp_repeek_same_angle、awp_close_range_duel、pistol_spam、other 均为 0。skipped：slow_reaction 14、poor_crosshair_placement 18、peeked_into_held_angle 5、dry_peek_with_utility 5、overpeek_in_advantage 1。
+
+  三条实际命中（保留完整 evidence 与 thresholds）：
+
+  ```json
+  [
+    {
+      "problem": "slow_reaction", "target": "R3-kill1", "weapon": "m4a1_silencer",
+      "evidence": {"weapon": "m4a1_silencer", "round": 3, "tick": 26836, "kind": "kill", "ttd_ms": 812.0, "opponent_ttd_ms": null, "visibility_note": null, "player_seen_while_blind": false},
+      "thresholds": {"ttd_ms": 484.0, "source": "pro_p75", "ttd_max_seconds": 1.0, "ttd_max_source": "config"}
+    },
+    {
+      "problem": "shot_while_moving", "target": "R1-death", "weapon": "usp_silencer",
+      "evidence": {"weapon": "usp_silencer", "round": 1, "tick": 14820, "kind": "death", "first_shot_stopped": false, "first_shot_hit": false},
+      "thresholds": {}
+    },
+    {
+      "problem": "weapon_not_ready", "target": "R9-death", "weapon": "awp",
+      "evidence": {"weapon": "awp", "round": 9, "tick": 59661, "kind": "death", "weapon_not_ready": true},
+      "thresholds": {}
+    }
+  ]
+  ```
+
+  - 职业自检：`vitality-vs-mouz-m3-dust2.dem`，ZywOo `76561198113666193`，40 个瞬间。出枪慢 **4/15 = 26.7%**；准星没提前放好 **6/17 = 35.3%**。可判断分母分别要求有效指标、同武器阈值；TTD 另排除烟雾/被闪白和 ≥1秒，死亡要求对手 TTD 有值。分母没有提前筛掉“对手比自己快”为假的死亡，避免夸大命中率。
+  - 职业 25% 是同武器合并分布高于 p75 的近似比例，不能要求单名选手单场严格等于 25%。该场分母仅 15/17，且 TTD 死亡有额外判定条件；如实记录准星 35.3%，未调阈值迎合预期。
 - 遗留问题 / 需要确认的地方：
+  - 用户明确选择“按 005 检测表实现”，因此 awp_close_range_duel 仅登记，不猜近距离阈值；awp_moving_shot 由通用 shot_while_moving 覆盖，未做独立命中。目录 AWP 未开镜适用栏包含击杀，但本任务表仅列死亡，实现遵循任务表，未改目录正文。
+  - died_without_seeing 的模型部分可见误判仍在，默认停用；AWP 5 米、移动扫射 0.5 等阈值仍待校准。单次交火压枪噪声大，职业末段样本少，命中只是必要条件。
+  - 未实现目录待开发项、训练、AI 选取与检查器；未改变原指标或事实卡。未调用真实 AI，未提交。
 
 ## 审查意见（Claude 填写）
+
+**审查通过（2026-10-15）。** 规则和任务单一致，缺数据时计入 skipped，不去推断，`evidence` 完整。ZywOo 的自检结果（26.7% / 35.3%）在单场样本量下合理。
+
+目录与任务单不一致的地方（`awp_unscoped_shot` 只适用于死亡）已由 Claude 更新目录。阈值的合理性等产品负责人看过实际命中结果后再回头审核。

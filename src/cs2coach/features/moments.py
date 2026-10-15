@@ -26,7 +26,7 @@ from cs2coach.features.models import (
 )
 from cs2coach.features.aim import scoped_before_shot, shot_targets
 from cs2coach.features.aim_stats import aim_stats
-from cs2coach.features.visibility import Sight, angle_between
+from cs2coach.features.visibility import Sight, angle_between, blinded_at
 from cs2coach.parsing.match import MatchData
 from cs2coach.parsing.weapons import is_gun
 from cs2coach.parsing.models import Round, Team
@@ -80,6 +80,7 @@ class _Params:
         self.missed_trade_distance = float(mc["missed_trade_max_distance"])
         self.key_assist_damage = int(mc["key_assist_min_damage"])
         self.min_blind = float(mc["min_blind_seconds"])
+        self.blind_min_remaining = float(cfg["visibility"]["blind_min_remaining_seconds"])
         self.jump_lead = round(mc["jump_lead_seconds"] * self.rate)
         self.still_speed = float(mc["contact_still_speed"])
         self.min_shot_interval: dict[str, float] = cfg["weapons"]["min_shot_interval_seconds"]
@@ -243,6 +244,8 @@ def add_visibility(match: MatchData, p: _Params, sid: int, opponent: int, tick: 
     # 没造成伤害时，锚定在瞬间前一 tick（死亡那一 tick 已经是死亡状态）
     me = sight.first_seen(sid, opponent, my_dmg if my_dmg is not None else tick - 1, floor)
     opp = sight.first_seen(opponent, sid, opp_dmg if opp_dmg is not None else tick - 1, floor)
+    me_blind = blinded_at(match, p, sid, me.tick) if me.tick is not None else None
+    opp_blind = blinded_at(match, p, opponent, opp.tick) if opp.tick is not None else None
 
     def valid(fs):
         return fs.tick is not None and not fs.smoke
@@ -261,12 +264,16 @@ def add_visibility(match: MatchData, p: _Params, sid: int, opponent: int, tick: 
                 note = "seen_before_window"
         else:
             note = "not_seen"
+    if me_blind and note != "smoke":
+        note = "blind"
     upd: dict[str, Any] = {
-        "player_first_seen_tick": me.tick if valid(me) else None,
-        "opponent_first_seen_tick": opp.tick if valid(opp) else None,
+        "player_first_seen_tick": me.tick,
+        "opponent_first_seen_tick": opp.tick,
+        "player_seen_while_blind": me_blind,
+        "opponent_seen_while_blind": opp_blind,
         "visibility_note": note,
     }
-    if valid(me) and valid(opp):
+    if valid(me) and valid(opp) and not me_blind and not opp_blind:
         upd["seen_first_lead_s"] = p.secs(opp.tick - me.tick)
     seen_ticks = [fs.tick for fs in (me, opp) if valid(fs)]
     if seen_ticks:
@@ -276,16 +283,16 @@ def add_visibility(match: MatchData, p: _Params, sid: int, opponent: int, tick: 
         upd["player_speed_at_contact"] = mine
         upd["opponent_speed_at_contact"] = theirs
         upd["contact_type"] = contact_type(mine, theirs, p.still_speed, p.moving_speed)
-    if valid(me) and my_dmg is not None:
+    if valid(me) and not me_blind and my_dmg is not None:
         upd["time_to_damage_s"] = p.secs(my_dmg - me.tick)
         upd["crosshair_placement_deg"] = angle_between(sight.view_vector(sid, me.tick), sight.view_vector(sid, my_dmg))
-    if valid(opp) and opp_dmg is not None:
+    if valid(opp) and not opp_blind and opp_dmg is not None:
         upd["opponent_time_to_damage_s"] = p.secs(opp_dmg - opp.tick)
     if valid(me):
         shot_ticks = [s.tick for s in eng.shots]
         after = [t for t in shot_ticks if t >= me.tick]
         upd["shots_before_seen"] = len(shot_ticks) - len(after)
-        if after:
+        if after and not me_blind:
             upd["seen_to_first_shot_s"] = p.secs(after[0] - me.tick)
             if my_dmg is not None and my_dmg >= after[0]:
                 upd["first_shot_to_damage_s"] = p.secs(my_dmg - after[0])
