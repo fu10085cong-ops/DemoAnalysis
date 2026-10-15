@@ -36,6 +36,7 @@
 - 解析层输出格式见 `docs/parsing.md`；决定性瞬间与各指标的定义、准确度见 `docs/features.md`
 - 工具层在 `src/cs2coach/tools/`（整场摘要、查询工具、引用检查），AI 层在 `src/cs2coach/ai/`（提示词、调用循环）。单元测试用假客户端，不调用真实 API；真实调用会产生费用，运行前先征得用户同意
 - 分步推进，每一步完成后停下来等用户确认；遇到重要的设计取舍时，先列出选项和利弊，再动手
+- **与 GPT（Codex）协作**：Claude 负责和用户沟通、定方案、写任务单、审查改动；GPT 按任务单写代码。规则见 `AGENTS.md`，任务单放在 `docs/tasks/`（格式见其中的 README.md）
 
 ## demoparser2 关键陷阱（详见 docs/fields.md §0、§1）
 - 不同来源（Valve / ESL / 完美 / 5E）的 demo 事件集合差异很大（ESL 赛事 demo 没有 `player_blind`、`buytime_ended`；完美、5E、ESL 的回合事件是 demoparser2 合成的）。**只依赖所有来源都有的数据**，替代方案见 docs/fields.md §2、§3

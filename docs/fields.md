@@ -40,6 +40,7 @@
 | 20 | **5E 的 `player_hurt` 把 USP-S 记成 `hkp2000`、M4A1-S 记成 `m4a1`**（共用栏位的基础型号）；同一 demo 的 `player_death`、`weapon_fire` 是对的，完美的 `player_hurt` 也是对的。已用攻击者当时的 `active_weapon_name` 确认 | 伤害表的武器名是基础型号、而攻击者手持的是同栏位另一把枪时，改成手持的那把 |
 | 21 | **5E 会在第一回合后重开比赛**（2026-10-14 的两个 5E 样本都是如此）：第一回合正常打完、有 round_end，随后重新进入热身、`begin_new_match` 再次触发，记分板和 `total_rounds_played` 清零 | 回合切分在回合号倒退时丢弃被重打的回合，这一回合里的击杀等事件不属于任何回合、一并丢弃；核对脚本把重开前的 round_end 单独列出，不算不一致 |
 | 22 | **中途被截断的 demo 里 `parse_player_info` 是空表**：ESL Pro League S24 Falcons vs NaVi 的 Mirage 因服务器重启被拆成 p1（前 12 回合）、p2（第 13 回合起，`total_rounds_played` 接着算）。p1 没有玩家信息，逐 tick 数据完整；p2 的记分板是两段的累计值，开头 tick 4 有 10 次 world 击杀（恢复备份时的重置，落在冻结期） | 花名册为空时改用逐 tick 数据中出现在 T / CT 的玩家（`roster_names`）；这样会带上热身时进过队伍的教练等人，由覆盖率检查标出。p2 的记分板对不上属正常 |
+| 23 | **开枪那一 tick 的 `is_scoped` 已经是开枪后的状态**：AWP 开枪后自动退镜，`weapon_fire` 所在 tick 的 `is_scoped` 为 False，前 1～3 个 tick 为 True（ESL Vitality vs MOUZ Dust2，40 发 AWP 全部如此，2026-10-15 核实） | 判断"开枪时是否开镜"要读开枪前一 tick（tick − 1） |
 | 11 | `parse_grenades()` 返回所有投掷物实体的逐 tick 轨迹（A 有 51.7 万行，B 有 252 万行），其中还混有 `CWeaponGlock`、`CKnife` 等非投掷物 | MVP 不用它 |
 
 ## 1. 不同来源的差异（重要）
