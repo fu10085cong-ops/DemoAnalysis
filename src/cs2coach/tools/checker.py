@@ -133,7 +133,8 @@ def _describe(moments: list[Moment], records: list) -> str:
     return "；".join(descriptions) if descriptions else "targets 中没有可核对的数据。"
 
 
-def _check_entries(sub: ReportSubmission, mm: MatchMoments, report: ProblemReport, cfg: dict) -> list[Violation]:
+def _check_entries(sub: ReportSubmission, mm: MatchMoments, report: ProblemReport, cfg: dict,
+                   whole_numbers: list[float]) -> list[Violation]:
     out: list[Violation] = []
     by_id = {m.id: m for m in mm.moments}
     actual_hits: dict[str, set[str]] = {}
@@ -141,6 +142,7 @@ def _check_entries(sub: ReportSubmission, mm: MatchMoments, report: ProblemRepor
         actual_hits.setdefault(h.target, set()).add(h.problem)
     disabled = set(report.disabled) | set(cfg["problems"]["disabled"])
     other_paths = []
+    seen_findings: set[str] = set()
 
     def add(path, code, message):
         out.append(Violation(path=path, code=code, message=message))
@@ -148,6 +150,14 @@ def _check_entries(sub: ReportSubmission, mm: MatchMoments, report: ProblemRepor
     for group in ("findings", "patterns", "highlights"):
         for i, entry in enumerate(getattr(sub, group)):
             path, pid = f"{group}[{i}]", entry.problem
+            if group == "findings":
+                if pid in seen_findings:
+                    add(path + ".problem", "duplicate_problem",
+                        f"问题 {pid} 已在前一条 finding 中出现；同一问题只能保留一条代表性交火。")
+                seen_findings.add(pid)
+                if len(entry.targets) > cfg["checker"]["max_finding_targets"]:
+                    add(path + ".targets", "too_many_targets",
+                        f"finding 最多关联 {cfg['checker']['max_finding_targets']} 个 target，实际为 {len(entry.targets)} 个。")
             if pid == "other":
                 other_paths.append(path)
             known = pid in PROBLEMS or pid == "other"
@@ -165,7 +175,7 @@ def _check_entries(sub: ReportSubmission, mm: MatchMoments, report: ProblemRepor
                 add(path + ".targets", "pattern_too_few", f"规律至少需要 2 个不同 target，实际只有 {len(set(entry.targets))} 个。")
 
             moments, records, rounds = [], [], set()
-            allowed = _numeric_leaves(len(entry.targets))
+            allowed = _numeric_leaves(len(entry.targets)) + whole_numbers
             for j, target in enumerate(entry.targets):
                 target_path = f"{path}.targets[{j}]"
                 valid = False
@@ -232,12 +242,12 @@ def _check_entries(sub: ReportSubmission, mm: MatchMoments, report: ProblemRepor
 
 
 def check_submission(sub: ReportSubmission, mm: MatchMoments, report: ProblemReport,
-                     digest: str, cfg: dict) -> list[Violation]:
-    """检查提交内容；总览只引用摘要数值，训练文字不作数字或敏感说法检查。"""
+                     digest: str, cfg: dict, whole_numbers: list[float] | None = None) -> list[Violation]:
+    """检查提交内容；分析可引用整场数值，训练文字不作数字或敏感说法检查。"""
     allowed = [float(m.group()) for m in _NUMBER.finditer(digest) if math.isfinite(float(m.group()))]
     people = {tuple(int(v) for v in m.groups()) for m in _PEOPLE.finditer(digest)}
     out = _number_violations(sub.overview, "overview", allowed, people, "总览数字及人数应来自 digest 原文。", cfg["checker"])
     identifiers = CITATION.findall(sub.overview) + _MOMENT_ID.findall(CITATION.sub(" ", sub.overview))
     if identifiers:
         out.append(Violation(path="overview", code="id_in_text", message="总览中不能写引用编号：" + "、".join(identifiers)))
-    return out + _check_entries(sub, mm, report, cfg)
+    return out + _check_entries(sub, mm, report, cfg, whole_numbers or [])

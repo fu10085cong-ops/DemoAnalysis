@@ -63,6 +63,9 @@ def test_digest_contains_prominence_and_human_evidence_before_moments():
     assert "**突出问题**" in text and "R2-kill1：TTD 812 毫秒" in text
     assert "75 分位 484 毫秒" in text
     assert text.index("## 问题频率") < text.index("## 检测到的问题") < text.index("## 决定性瞬间")
+    assert "只能在打中过对手的交火中判断" in text
+    assert "击杀和死亡的比例不说明问题" in text
+    assert "看见对手到第一次命中" in text and "不按击杀和死亡分开" in text
 
 
 def test_match_target_fact_uses_aggregate_numbers():
@@ -102,7 +105,8 @@ def test_cli_writes_report_and_submission_audit_with_fake_diagnosis(tmp_path, mo
     assert _diagnose(match, mm, cfg, out) == 0
     assert out.read_text(encoding="utf-8") == d.report
     audit = json.loads((tmp_path / "test_player_submission.json").read_text(encoding="utf-8"))
-    assert audit == {"submission": d.submission.model_dump(), "violations_history": [[]], "dropped": []}
+    assert audit == {"submission": d.submission.model_dump(), "violations_history": [[]], "dropped": [],
+                     "raw_calls": d.raw_calls}
 
 
 def test_prompts_keep_metric_definitions_and_require_structured_workflow():
@@ -114,3 +118,5 @@ def test_prompts_keep_metric_definitions_and_require_structured_workflow():
         else:
             assert term in SYSTEM_PROMPT
     assert "[[" not in SYSTEM_PROMPT and "报告结构（Markdown）" not in SYSTEM_PROMPT
+    assert "finding 只讲 1–2 次代表性交火" in SYSTEM_PROMPT
+    assert "不要根据击杀和死亡的分布推断心理状态或压力" in SYSTEM_PROMPT

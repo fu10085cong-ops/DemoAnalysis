@@ -153,7 +153,7 @@ def test_repeated_violation_drops_whole_finding_and_keeps_valid_one(match, mm):
     d = diagnose(match, mm, CFG, BASELINE, provider)
     assert d.repairs == 2 and len(d.violations_history) == 3 and len(d.submission.findings) == 1
     assert d.dropped[0].path == "findings[1]" and d.dropped[0].content["targets"] == ["R99-death"]
-    assert d.dropped[0].violations[0].code == "unknown_target"
+    assert "unknown_target" in {v.code for v in d.dropped[0].violations}
     assert "有 1 条结论未通过数据检查，已删除" in d.report
     assert "R99-death" not in d.report
     assert check_submission(d.submission, mm, d.problems, d.digest, CFG) == []
@@ -194,6 +194,55 @@ def test_structurally_invalid_arguments_are_returned_in_chinese(match, mm):
     assert d.repairs == 1 and d.violations_history[0][0].code == "invalid_submission"
     error = fake.calls[1]["messages"][-1]["content"][0]
     assert error["is_error"] and "缺少必填字段" in error["content"]
+
+
+def test_empty_submissions_do_not_consume_two_repairs_and_raw_calls_are_saved(match, mm):
+    provider, fake = claude([submit_response({}), submit_response({"report": "旧格式"}), submit_response()])
+    d = diagnose(match, mm, CFG, BASELINE, provider)
+    assert d.repairs == 0 and len(d.violations_history) == 3
+    assert all(v[0].message == "提交内容为空，请提交完整对象" for v in d.violations_history[:2])
+    assert d.raw_calls[0] == {"raw_args": "{}", "parsed_args": {}}
+    assert d.raw_calls[1]["parsed_args"] == {"report": "旧格式"}
+    assert "提交内容为空，请提交完整对象" in fake.calls[1]["messages"][-1]["content"][0]["content"]
+
+
+@pytest.mark.parametrize("wrapper", ["report", "submission", "result"])
+def test_single_wrapper_is_unwrapped_without_repair(wrapper, match, mm):
+    wrapped = {wrapper: payload()}
+    provider, fake = claude([submit_response(wrapped)])
+    d = diagnose(match, mm, CFG, BASELINE, provider)
+    assert d.repairs == 0 and d.violations_history == [[]]
+    assert d.submission.model_dump() == payload()
+    assert d.raw_calls[0] == {"raw_args": json.dumps(wrapped, ensure_ascii=False),
+                              "parsed_args": wrapped, "unwrapped": wrapper}
+    assert provider.messages[-1]["content"][0]["is_error"] is False
+    assert len(fake.calls) == 1
+
+
+def test_partial_wrapper_is_checked_as_partial_submission(match, mm):
+    wrapped = {"report": {"overview": "总览。"}}
+    provider, fake = claude([submit_response(wrapped), submit_response()])
+    d = diagnose(match, mm, CFG, BASELINE, provider)
+    assert d.repairs == 1 and d.raw_calls[0]["unwrapped"] == "report"
+    error = fake.calls[1]["messages"][-1]["content"][0]["content"]
+    assert "缺少必填字段" in error and "提交内容为空" not in error
+    assert "report：不允许额外字段" not in error
+
+
+def test_two_top_level_keys_are_not_unwrapped(match, mm):
+    wrapped = {"report": payload(), "note": "附注"}
+    provider, fake = claude([submit_response(wrapped), submit_response()])
+    d = diagnose(match, mm, CFG, BASELINE, provider)
+    assert d.repairs == 0 and "unwrapped" not in d.raw_calls[0]
+    assert d.raw_calls[0]["parsed_args"] == wrapped
+    assert "提交内容为空，请提交完整对象" in fake.calls[1]["messages"][-1]["content"][0]["content"]
+
+
+def test_third_consecutive_empty_submission_counts_as_repair(match, mm):
+    provider, _ = claude([submit_response({}), submit_response({}), submit_response({}), submit_response()])
+    d = diagnose(match, mm, CFG, BASELINE, provider)
+    assert d.repairs == 1 and len(d.raw_calls) == 4
+    assert all(v[0].code == "invalid_submission" for v in d.violations_history[:3])
 
 
 @pytest.mark.parametrize("mutation,expected", [
@@ -247,8 +296,9 @@ def test_patterns_and_highlights_with_violations_are_removed_whole(match, mm):
 def test_excess_other_entries_are_pruned_and_rechecked(match, mm):
     bad = payload(findings=[copy.deepcopy(payload()["findings"][0]) for _ in range(4)])
     d = diagnose(match, mm, CFG, BASELINE, claude([submit_response(bad)] * 3)[0])
-    assert len(d.submission.findings) == 3 and d.dropped[0].path == "findings[3]"
-    assert d.dropped[0].violations[0].code == "too_many_other"
+    assert len(d.submission.findings) == 1
+    assert [item.path for item in d.dropped] == ["findings[1]", "findings[2]", "findings[3]"]
+    assert all("duplicate_problem" in {v.code for v in item.violations} for item in d.dropped)
 
 
 def test_zero_repairs_prunes_immediately(match, mm):
@@ -322,6 +372,24 @@ def test_deepseek_malformed_json_arguments(name, match, mm):
     d = diagnose(match, mm, CFG, BASELINE, OpenAICompatProvider("deepseek", CFG["ai"]["deepseek"], fake))
     assert d.tool_calls[0]["error"] and d.repairs == int(name == "submit_report")
     assert fake.calls[1]["messages"][3]["content"].startswith("错误：")
+    if name == "submit_report":
+        assert d.raw_calls[0] == {"raw_args": "{invalid", "parsed_args": None}
+
+
+def test_deepseek_empty_object_preserves_raw_and_parsed_arguments(match, mm):
+    fake = FakeOpenAI([oa_resp("", "tool_calls", [oa_call("submit_report", "{}")]),
+                       oa_resp("", "tool_calls", [oa_call("submit_report", json.dumps(payload()), "c2")])])
+    d = diagnose(match, mm, CFG, BASELINE, OpenAICompatProvider("deepseek", CFG["ai"]["deepseek"], fake))
+    assert d.repairs == 0 and d.raw_calls[0] == {"raw_args": "{}", "parsed_args": {}}
+    assert "提交内容为空，请提交完整对象" in fake.calls[1]["messages"][3]["content"]
+
+
+def test_deepseek_single_wrapper_uses_inner_report_and_keeps_wire_arguments(match, mm):
+    raw = json.dumps({"report": payload()}, ensure_ascii=False)
+    fake = FakeOpenAI([oa_resp("", "tool_calls", [oa_call("submit_report", raw)])])
+    d = diagnose(match, mm, CFG, BASELINE, OpenAICompatProvider("deepseek", CFG["ai"]["deepseek"], fake))
+    assert d.repairs == 0 and d.submission.model_dump() == payload()
+    assert d.raw_calls == [{"raw_args": raw, "parsed_args": {"report": payload()}, "unwrapped": "report"}]
 
 
 @pytest.mark.parametrize("finish,message", [("length", "max_tokens"), ("content_filter", "拒绝"), ("insufficient_system_resource", "异常")])

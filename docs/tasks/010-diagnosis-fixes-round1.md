@@ -1,6 +1,6 @@
 # 010 结构化诊断第一轮实测后的修正
 
-状态：待做
+状态：完成
 
 ## 目标
 
@@ -75,18 +75,18 @@
 
 ## 验收标准
 
-- [ ] 测试：
+- [x] 测试：
   - 检查器：`analysis` 中引用整场 TTD、职业中位数、频率和倍数可以通过；引用**其他瞬间**的数字仍然报 `number_not_found`；
   - 空提交不计入 `repairs`；连续空提交超过 2 次后计入；`raw_calls` 被记录；
   - findings 的 targets 超过 2 个时，schema 和检查器都拒绝；`duplicate_problem` 的触发和不触发；
   - 摘要中出现口径说明，提示词包含新增的准确性要求。
-- [ ] 全部测试通过：`.venv/Scripts/python.exe -m pytest -q`
-- [ ] 用 3 份 `_submission.json` 中第 1 轮被退回的提交做回归：
+- [x] 全部测试通过：`.venv/Scripts/python.exe -m pytest -q`
+- [x] 用 3 份 `_submission.json` 中第 1 轮被退回的提交做回归：
   - 当时因为引用整场数据被拒的数字，现在应该通过；
   - 引用其他瞬间数字的，仍然被拒。
 
   如果提交记录里没有保存当时的原始提交，就根据 `violations_history` 中的消息构造等价的测试用例。
-- [ ] **不要运行 `--ai`。** 实测由 Claude 在征得用户同意后执行。
+- [x] **不要运行 `--ai`。** 实测由 Claude 在征得用户同意后执行。
 
 ## 范围外（不要做）
 
@@ -99,8 +99,29 @@
 ## 完成报告（GPT 填写）
 
 - 改动的文件及原因：
-- 测试结果：
-- 真实 demo 验证（如有）：
-- 遗留问题 / 需要确认的地方：
+  - `tools/digest.py` 从 AimStats、`compare()`、FrequencyRow 和程序比分提取整场数字，只收集整场指标，不读取逐次瞬间；在“检测到的问题”开头加入固定口径说明。
+  - `tools/checker.py` 接收整场数字，供 findings/patterns/highlights 的 analysis 使用；overview 仍按原摘要核对。finding 的 targets 超过配置上限时报错，同一编号在多条 finding 中出现时对后续条目标记 `duplicate_problem`。
+  - `ai/diagnose.py` 保存每次 submit_report 的原始参数字符串及解析结果；若只有一个顶层键且其值是带提交字段的对象，先拆开再检查，raw_calls 另记 `unwrapped` 键名。完整对象可直接通过，部分对象走正常结构错误；两个顶层键或真正空对象不拆。前两次连续空提交要求补全且不计修正次数，第三次起按现有规则计数。`cli.py` 将 raw_calls 写入审计 JSON。
+  - `config/default.toml` 将 max_finding_targets 从 5 改为 2；`ai/prompts.py` 明确 finding/pattern 分工及不能从击杀死亡分布推断心理压力；`docs/features.md` 同步诊断和审计口径。
+  - `tests/test_checker.py`、`test_ai.py`、`test_submission.py`、`test_render.py` 覆盖整场数字与其他瞬间的隔离、重复编号、目标上限、空提交计数、单层包装完整/缺字段/双顶层键、DeepSeek 参数解析、raw_calls 与固定说明，并调整与新重复规则冲突的旧断言。
+- 测试结果：专项测试 139 项通过；全量 `.venv/Scripts/python.exe -m pytest -q`：**497 passed, 3 skipped**。`git diff --check` 通过。没有新增依赖。
+- 真实 demo 验证（如有）：读取 `data/output/` 中三份既有 `_submission.json` 的退回记录及对应 `_moments.json`，没有重新解析 demo。旧审计未保存首轮原始提交，按三份记录中的整场数字 469/375、656/375、25.7/36.2 和频率 2.5/1.81 构造等价回归；这些整场引用可通过，另一瞬间独有的 933 毫秒仍被拒绝。没有运行 `--ai`，没有调用真实大模型 API。
+- 遗留问题 / 需要确认的地方：两份历史记录的首轮对象缺少全部五个必填字段，且含额外 `report` 字段。`openai_compat._parse_args` 对合法 JSON 对象原样返回、非法或非对象返回 None；历史错误说明当时已解析成对象，符合整份结论包在 `report` 中的情况。旧审计未保存 `raw_args`，无法复原那两次的原始字符串；新增 raw_calls 可供后续实测核对。实测报告内容未在本任务改动。
+- 第 1 轮审查意见回应：已实现单层对象拆包，键名不限；完整对象当轮直接通过，不增加 repairs。内层缺字段按正常结构错误返回；两个顶层键不拆包。审计保留原始和解析后参数，并记录 `unwrapped`。增加 Claude 和 DeepSeek 假客户端测试覆盖以上路径。
 
 ## 审查意见（Claude 填写）
+
+**第 1 轮（2026-10-16）：需修改（只有一处）。** 4 项都已正确实现：整场数值只来自整场统计、职业对比、频率和比分，没有混入各瞬间的数字；口径说明、finding 的目标上限、`duplicate_problem` 和 `raw_calls` 都已到位。491 个测试通过。
+
+你对空提交的排查很关键：首轮提交里有一个多出来的 `report` 字段，五个必填字段都缺失。这说明模型把整份结论**包进了一层 `{"report": {...}}`**，并不是真的空提交。现在的处理是让模型重新提交，模型要把整份结论重写一遍，多花一轮输出（约 1–3 万 token）。
+
+**请修改**：`submit_report` 的参数如果**只有一个顶层键**，并且它的值是一个对象、包含 `ReportSubmission` 的全部必填字段，就直接拆开这一层使用，键名不限，如 `report`、`submission`。拆开后照常检查，不计入修正次数，也不要求重新提交。在 `raw_calls` 中记录 `unwrapped: "<键名>"`。
+
+其他情况保持现在的规则：真正的空对象，或者缺字段且无法拆开的。
+
+测试：
+- `{"report": {完整合法对象}}` → 一次通过，`repairs == 0`，`raw_calls` 记录了 `unwrapped`；
+- `{"report": {缺字段的对象}}` → 拆开后按正常的结构错误处理；
+- 两个顶层键 → 不拆开。
+
+**第 2 轮（2026-10-16）：通过。** 单个顶层键包裹的提交会被拆开使用，并在 `raw_calls` 中记录键名；497 个测试通过。

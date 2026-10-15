@@ -196,7 +196,7 @@ max_highlights = 3
 # other 类结论数量上限（跨问题、规律与亮点合计）
 max_other = 3
 # 单条问题结论关联的目标数量上限
-max_finding_targets = 5
+  max_finding_targets = 2
 # 单条规律关联的目标数量上限，首版最多列举十个
 max_pattern_targets = 10
 # 单条亮点关联的目标数量上限

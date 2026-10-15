@@ -114,6 +114,7 @@ def _diagnose(match, moments, cfg, out: Path) -> int:
         "submission": d.submission.model_dump(),
         "violations_history": [[v.model_dump() for v in group] for group in d.violations_history],
         "dropped": [item.model_dump() for item in d.dropped],
+        "raw_calls": d.raw_calls,
     }, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     print("\n" + d.report)
     u = d.usage

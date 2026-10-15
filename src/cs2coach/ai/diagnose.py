@@ -14,7 +14,7 @@ from cs2coach.features.models import MatchMoments
 from cs2coach.features.problems import FrequencyRow, ProblemReport, detect_problems, problem_frequency
 from cs2coach.parsing.match import MatchData
 from cs2coach.tools.checker import Violation, check_submission
-from cs2coach.tools.digest import build_digest, match_score
+from cs2coach.tools.digest import build_digest, match_score, whole_match_numbers
 from cs2coach.tools.queries import TOOLS, ToolError, run_tool
 from cs2coach.tools.submission import ReportSubmission, SubmissionError, parse_submission, submit_tool
 
@@ -43,6 +43,7 @@ class Diagnosis:
     violations_history: list[list[Violation]] = field(default_factory=list)
     dropped: list[DroppedItem] = field(default_factory=list)
     tool_calls: list[dict[str, Any]] = field(default_factory=list)
+    raw_calls: list[dict[str, Any]] = field(default_factory=list)
     usage: Usage = field(default_factory=Usage)
     repairs: int = 0
 
@@ -56,6 +57,15 @@ def _error_text(violations: list[Violation]) -> str:
         lines.append(f"{path}：")
         lines.extend(f"- [{v.code}] {v.message}" for v in entries)
     return "\n".join([*lines, "请修改后再次调用 submit_report，分析文字中的编号请移到 targets。"])
+
+
+def _submission_args(args: dict[str, Any] | None) -> tuple[dict[str, Any] | None, str | None]:
+    """兼容模型把报告多包一层对象；保留原始参数供审计。"""
+    if args is not None and len(args) == 1:
+        key, value = next(iter(args.items()))
+        if isinstance(value, dict) and set(value).intersection(ReportSubmission.model_fields):
+            return value, key
+    return args, None
 
 
 def _schema_violations(sub: ReportSubmission, schema: dict) -> list[Violation]:
@@ -142,25 +152,28 @@ def diagnose(match: MatchData, mm: MatchMoments, cfg: dict[str, Any], baseline: 
     frequency = problem_frequency(problems, mm, baseline, cfg)
     digest = build_digest(match, mm, baseline, problems, frequency)
     score = match_score(match, mm.player)
+    whole_numbers = whole_match_numbers(mm, baseline, frequency, score)
     provider = provider or make_provider(cfg)
     submission_tool = submit_tool(problems, cfg)
     provider.start(SYSTEM_PROMPT, [digest, USER_INSTRUCTION], [*TOOLS, submission_tool])
     usage, calls, history = Usage(), [], []
+    raw_calls: list[dict[str, Any]] = []
     repairs = 0
+    empty_streak = 0
     model = provider.model
     latest: ReportSubmission | None = None
     latest_violations: list[Violation] = []
 
     def check(candidate):
         return (_schema_violations(candidate, submission_tool["input_schema"])
-                + check_submission(candidate, mm, problems, digest, cfg))
+                + check_submission(candidate, mm, problems, digest, cfg, whole_numbers))
 
     def finish(submission, dropped=None):
         from cs2coach.report.render import render_diagnosis
 
         d = Diagnosis(submission=submission, problems=problems, frequency=frequency, digest=digest,
                       provider=provider.name, model=model, score=score, usage=usage, tool_calls=calls,
-                      repairs=repairs, violations_history=history, dropped=dropped or [])
+                      raw_calls=raw_calls, repairs=repairs, violations_history=history, dropped=dropped or [])
         d.report = render_diagnosis(d, mm, {sid: p.name for sid, p in match.players.items()})
         return d
 
@@ -176,6 +189,7 @@ def diagnose(match: MatchData, mm: MatchMoments, cfg: dict[str, Any], baseline: 
             raise DiagnosisError(f"模型服务异常结束（{turn.detail}），请稍后重试")
 
         submitted = False
+        empty_submission = False
         candidate = None
         violations: list[Violation] = []
         if turn.stop == "tool_use":
@@ -184,14 +198,24 @@ def diagnose(match: MatchData, mm: MatchMoments, cfg: dict[str, Any], baseline: 
             for call in turn.tool_calls:
                 if call.name == "submit_report":
                     submitted = True
+                    args, unwrapped = _submission_args(call.args)
+                    raw_call = {"raw_args": call.raw_args, "parsed_args": call.args}
+                    if unwrapped is not None:
+                        raw_call["unwrapped"] = unwrapped
+                    raw_calls.append(raw_call)
                     if submit_count > 1:
                         violations = [Violation(path="submission", code="multiple_submissions",
                             message="同一条回复只能调用一次 submit_report；收到失败结果后才可修改并重新提交。")]
                     else:
+                        empty_submission = (args is not None and
+                            not set(args).intersection(ReportSubmission.model_fields))
+                        empty_streak = empty_streak + 1 if empty_submission else 0
                         try:
-                            if call.args is None:
+                            if empty_submission:
+                                raise SubmissionError("提交内容为空，请提交完整对象")
+                            if args is None:
                                 raise SubmissionError("提交参数不是合法的 JSON 对象")
-                            candidate = parse_submission(call.args)
+                            candidate = parse_submission(args)
                             violations = check(candidate)
                             latest, latest_violations = candidate, violations
                         except SubmissionError as exc:
@@ -214,10 +238,13 @@ def diagnose(match: MatchData, mm: MatchMoments, cfg: dict[str, Any], baseline: 
             if candidate is not None and not violations:
                 return finish(candidate)
         else:
+            empty_streak = 0
             violations = [Violation(path="submission", code="submission_required",
                 message="必须调用 submit_report 提交结构化结论，不能以自由文本结束。")]
             history.append(violations)
 
+        if empty_submission and empty_streak <= 2:
+            continue
         if repairs < int(ac["max_repairs"]):
             repairs += 1
             if not submitted:

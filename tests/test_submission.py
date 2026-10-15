@@ -79,6 +79,11 @@ def test_schema_limits_follow_configuration():
     assert schema["$defs"]["Highlight"]["properties"]["targets"]["maxItems"] == 3
 
 
+def test_default_finding_target_limit_is_two():
+    schema = submit_tool(report(), load_config())["input_schema"]
+    assert schema["$defs"]["Finding"]["properties"]["targets"]["maxItems"] == 2
+
+
 @pytest.mark.parametrize("target,valid", [("R5", True), ("R5-death", True), ("R5-kill1", True),
     ("R5-assist2", True), ("match", True), ("R5-kill", False), ("[[R5]]", False), ("R5-foo", False)])
 def test_target_pattern(target, valid):

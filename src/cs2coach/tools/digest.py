@@ -49,7 +49,11 @@ def build_digest(match: MatchData, mm: MatchMoments, baseline: dict[str, Any] | 
             lines.append(f"- {row.label}（{row.problem}）：{row.hits} 次，每 10 回合 {row.per_10_rounds:.2f} / 职业 {pro}，"
                          f"{ratio}" + ("，**突出问题**" if row.prominent else ""))
     if problems is not None:
-        lines.extend(["", "## 检测到的问题", "只能从以下命中中选择问题和亮点；other 除外。编号只放在 targets 中。"])
+        lines.extend(["", "## 检测到的问题", "只能从以下命中中选择问题和亮点；other 除外。编号只放在 targets 中。",
+            "检测口径：slow_reaction 和 poor_crosshair_placement 只能在打中过对手的交火中判断；死亡时如果没打中对手就无法判断。"
+            "因此这两类问题在击杀中出现得更多，击杀和死亡的比例不说明问题。"
+            "TTD 是从看见对手到第一次命中的时间，分为“看见→开枪”和“开枪→命中”，不能说成开第一枪用了相同时间。"
+            "频率按每 10 回合计算，与职业比较的是整体频率，不按击杀和死亡分开。"])
         for pid, spec in PROBLEMS.items():
             hits = [h for h in problems.hits if h.problem == pid]
             if hits:
@@ -67,6 +71,32 @@ def build_digest(match: MatchData, mm: MatchMoments, baseline: dict[str, Any] | 
         lines += ["", "## 不参与分析的记录"]
         lines += [f"- [[R{x.round}]] tick {x.tick} {KIND_LABELS.get(x.kind, x.kind)}：{x.reason}" for x in mm.excluded]
     return "\n".join(lines)
+
+
+def whole_match_numbers(mm: MatchMoments, baseline: dict[str, Any] | None,
+                        frequency: list[FrequencyRow], score: tuple[int, int]) -> list[float]:
+    """仅收集整场统计、职业对比、问题频率及比分，排除逐次瞬间。"""
+    values: list[float] = [mm.rounds, *score]
+    stats = mm.aim_stats
+    if stats is not None:
+        for metric in METRICS:
+            _, _, count_field, _ = METRIC_LABELS[metric]
+            value = getattr(stats, metric)
+            values.append(getattr(stats, count_field))
+            if value is not None:
+                values.append(value)
+                comparison = compare(metric, value, baseline)
+                if comparison is not None:
+                    values.extend(comparison[key] for key in
+                                  ("pro_median", "pro_p25", "pro_p75", "better_than_pro_pct"))
+    for row in frequency:
+        values.append(10)
+        values.extend((row.hits, row.per_10_rounds))
+        if row.pro_per_10_rounds is not None:
+            values.append(row.pro_per_10_rounds)
+        if row.ratio is not None:
+            values.append(row.ratio)
+    return values
 
 
 def match_score(match: MatchData, steamid: int) -> tuple[int, int]:

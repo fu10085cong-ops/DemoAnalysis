@@ -143,10 +143,14 @@
 
 `diagnose()` 先生成问题命中和频率，再把“问题频率”“检测到的问题”放入逐次瞬间列表之前。AI 可用 get_moment/get_round 核对细节，最终通过 submit_report 提交 overview、findings、patterns、highlights 和 training_plan；不以自由文本报告作为完成结果。
 
+- “检测到的问题”开头固定说明出枪慢和准星问题只在打中过对手的交火中可判断，不能据击杀/死亡的分布推断心理压力；TTD 是看见到首次命中，频率按每十回合整体比较。
+- finding 最多关联两个代表性 target，同一问题编号只能有一条 finding；pattern 可再列出该问题的全部相关瞬间，分析共同原因。
+- finding、pattern、highlight 的分析可引用程序从整场枪法、职业对比、问题频率和比分收集的数字；逐次瞬间的数字仍只由本条 targets 提供。overview 继续使用摘要数字。
+
 - 解析失败或内容违规会按字段路径返回中文错误；调用流程还在本地核对工具 schema 已声明的编号枚举、数量、长度和 targets 格式，以兼容没有强制 schema 的服务。默认允许两轮修改；第三次仍不合格时，删除有违规的整条 finding/pattern/highlight，保留原文、路径及原因。没有可检查对象或删除后一条 finding 都不剩时抛出 DiagnosisError。查询错误不计入结论修正次数，原服务的拒绝、截断和异常处理保留。
 - 总览违规时由程序按目标玩家比分、击杀数和死亡数生成替换句，并明确标注“AI 总览未通过检查，已替换”。删条和替换后再次检查最终对象，通过后才排版。
 - `report/render.py` 将程序事实卡、检测证据与阈值、突出频率、比分和跳转命令，与 AI 的分析及训练建议分别展示；other 标明“AI 判断，无程序依据”。旧的自由文本引用检查模块已删除，结构化检查器用于拒绝文本编号的正则保持原样。
-- 诊断保留最终 submission、每轮 violations_history、dropped、ProblemReport、FrequencyRow、usage、tool_calls 和 repairs。CLI 保存 `_report.md` 及 `_submission.json`，后者包含提交、违规历史和删除/替换记录，便于核对。
+- `submit_report` 只有一个顶层包装对象时，如 `{"report": {提交字段...}}`，程序识别并检查内层内容，原始参数和拆开的键名仍写入审计。连续两次真正的空提交会收到“提交内容为空，请提交完整对象”，不占用修正次数；第三次起按普通格式错误计数。诊断保留最终 submission、每轮 violations_history、dropped、ProblemReport、FrequencyRow、usage、tool_calls、raw_calls 和 repairs。CLI 保存 `_report.md` 及 `_submission.json`，后者包含提交、违规历史、删除/替换记录及每次 submit_report 的原始参数和解析结果，便于核对。
 
 ## 标签
 

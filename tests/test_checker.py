@@ -6,9 +6,11 @@ from pathlib import Path
 import pytest
 
 from cs2coach.config import ConfigError, load_config
+from cs2coach.baseline import build_baseline
 from cs2coach.features.models import MatchMoments, MissedTrade
-from cs2coach.features.problems import ProblemHit, ProblemReport
+from cs2coach.features.problems import FrequencyRow, ProblemHit, ProblemReport
 from cs2coach.tools.checker import check_submission
+from cs2coach.tools.digest import whole_match_numbers
 from cs2coach.tools.submission import parse_submission
 from tests.helpers.moments import make_mm, make_moment, make_shot
 from tests.helpers.synthetic import B, C
@@ -97,14 +99,86 @@ def test_every_target_requires_matching_problem_hit():
     assert "R2-death" in v[0].message
 
 
+def test_finding_target_limit_and_duplicate_problem():
+    mm = make_mm([make_moment(), make_moment(id="R2-death", round=2),
+                  make_moment(id="R3-death", round=3)], rounds=3)
+    rep = report([hit(target=f"R{n}-death") for n in (1, 2, 3)])
+    s = submit([finding(targets=["R1-death", "R2-death", "R3-death"]),
+                finding(targets=["R2-death"])])
+    v = check(s, mm, rep)
+    assert [(x.path, x.code) for x in v] == [
+        ("findings[0].targets", "too_many_targets"), ("findings[1].problem", "duplicate_problem")]
+    s.findings[0].targets = ["R1-death", "R2-death"]
+    s.findings[1].problem = "other"
+    assert check(s, mm, rep) == []
+    # 同一编号可以分别出现在一条 finding 和一条 pattern 中。
+    s = parse_submission(s.model_dump() | {"patterns": [dict(problem="slow_reaction",
+        targets=["R1-death", "R2-death"], analysis="共同原因值得复盘。") ]})
+    assert check(s, mm, rep) == []
+
+
+def test_whole_match_numbers_allowed_in_all_analysis_but_other_moment_blocked():
+    mm = make_mm([make_moment(), make_moment(id="R2-death", round=2,
+                  engagement={"time_to_damage_s": .933})], rounds=28,
+        aim_stats={"time_to_damage_ms": 469, "time_to_damage_samples": 12,
+                   "crosshair_placement_deg": None, "crosshair_placement_samples": 0,
+                   "counter_strafing_pct": None, "counter_strafing_shots": 0,
+                   "spray_accuracy_pct": None, "spray_shots": 0,
+                   "spotted_accuracy_pct": None, "spotted_shots": 0,
+                   "headshot_accuracy_pct": None, "hits": 0})
+    baseline = build_baseline({"time_to_damage_ms": [350, 400]}, "测试")
+    frequency = [FrequencyRow(problem="slow_reaction", label="出枪慢", hits=7,
+        per_10_rounds=2.5, pro_per_10_rounds=2.5 / 1.81, ratio=1.81, prominent=True)]
+    numbers = whole_match_numbers(mm, baseline, frequency, (12, 16))
+    rep = report([hit(target="R1-death"), hit(target="R2-death"), hit("good_trade", "R1-death")])
+    text = "整场 Time to Damage 469毫秒，职业中位数375毫秒；每10回合2.5次，是职业的1.81倍，比分12:16。"
+    s = submit([finding(analysis=text)],
+        patterns=[dict(problem="slow_reaction", targets=["R1-death", "R2-death"], analysis=text)],
+        highlights=[dict(problem="good_trade", targets=["R1-death"], analysis=text)])
+    assert check_submission(s, mm, rep, "整场汇总。", load_config(), numbers) == []
+    for group in (s.findings, s.patterns, s.highlights):
+        group[0].analysis = "另一次交火的 TTD 是933毫秒。"
+    v = check_submission(s, mm, rep, "整场汇总。", load_config(), numbers)
+    assert [(x.path, x.code) for x in v] == [
+        ("findings[0].analysis", "number_not_found"),
+        ("highlights[0].analysis", "number_not_found")]
+
+
+@pytest.mark.parametrize("metric,value,pro_values,analysis", [
+    ("time_to_damage_ms", 469, [350, 400], "整场 TTD 469毫秒，职业中位数375毫秒。"),
+    ("time_to_damage_ms", 656, [350, 400], "整场 TTD 656毫秒，职业中位数375毫秒。"),
+    ("crosshair_placement_deg", 25.7, [30, 42.4], "整场准星移动25.7度，职业中位数36.2度。"),
+], ids=["history_player_03310441", "history_player_36581033", "history_player_11881069"])
+def test_first_rejection_match_statistics_regression(metric, value, pro_values, analysis):
+    """旧审计没有原始提交，按三份首轮拒绝消息中的整场数字重建。"""
+    stats = {"time_to_damage_ms": None, "time_to_damage_samples": 0,
+             "crosshair_placement_deg": None, "crosshair_placement_samples": 0,
+             "counter_strafing_pct": None, "counter_strafing_shots": 0,
+             "spray_accuracy_pct": None, "spray_shots": 0,
+             "spotted_accuracy_pct": None, "spotted_shots": 0,
+             "headshot_accuracy_pct": None, "hits": 0}
+    stats[metric] = value
+    stats["time_to_damage_samples" if metric == "time_to_damage_ms" else "crosshair_placement_samples"] = 10
+    mm = make_mm([make_moment(), make_moment(id="R2-death", round=2,
+                  engagement={"time_to_damage_s": .933})], rounds=28, aim_stats=stats)
+    baseline = build_baseline({metric: pro_values}, "测试")
+    numbers = whole_match_numbers(mm, baseline, [], (12, 16))
+    s = submit([finding(problem="other", analysis=analysis)])
+    assert check_submission(s, mm, report([]), "另一瞬间 TTD 933 毫秒。", load_config(), numbers) == []
+    s.findings[0].analysis = "另一次交火的 TTD 是933毫秒。"
+    assert "number_not_found" in codes(check_submission(s, mm, report([]), "另一瞬间 TTD 933 毫秒。",
+                                                        load_config(), numbers))
+
+
 def test_too_many_other_across_groups():
     s = submit([finding(problem="other")] * 3,
                patterns=[dict(problem="other", targets=["R1-death", "R2-death"], analysis="需要改进。")])
     mm = make_mm([make_moment(), make_moment(id="R2-death", round=2)], rounds=2)
     v = check(s, mm, report([]))
-    assert codes(v) == {"too_many_other"}
-    assert "4" in v[0].message and "3" in v[0].message
-    assert not check(submit([finding(problem="other")] * 3), rep=report([]))
+    assert codes(v) == {"too_many_other", "duplicate_problem"}
+    excess = next(x for x in v if x.code == "too_many_other")
+    assert "4" in excess.message and "3" in excess.message
+    assert not check(submit([finding(problem="other")]), rep=report([]))
 
 
 @pytest.mark.parametrize("targets", [[], ["R1-death"], ["R1-death", "R1-death"]])
@@ -305,8 +379,9 @@ def test_real_mirage_submissions_regression():
     valid.findings = [f for f in valid.findings if f.problem != "weapon_not_ready"]
     assert check(valid, mm, rep, data["digest"]) == []
     v = check(invalid, mm, rep, data["digest"])
-    assert [x.code for x in v] == ["unknown_target", "precondition_failed", "number_not_found", "phrase_unsupported"]
+    assert [x.code for x in v] == ["unknown_target", "precondition_failed", "duplicate_problem",
+                                 "number_not_found", "phrase_unsupported"]
     assert "28" in v[0].message
     assert "turned_into_flash" in v[1].message
-    assert "650" in v[2].message and "0.812" in v[2].message
-    assert "吃闪" in v[3].message and '"player_blind": false' in v[3].message
+    assert "650" in v[3].message and "0.812" in v[3].message
+    assert "吃闪" in v[4].message and '"player_blind": false' in v[4].message
