@@ -25,8 +25,10 @@ class MatchMeta(BaseModel):
 class PlayerInfo(BaseModel):
     steamid: int
     name: str
-    # 回合进行中坐标非空的 tick 占比；过低说明 demoparser2 没读到该玩家
+    # 在场回合中，回合进行中坐标非空的 tick 占比；过低说明 demoparser2 没读到该玩家
     coverage: float
+    # 不在场的回合（中途掉线、重连前；docs/fields.md 陷阱 24），不计入覆盖率和问题频率
+    absent_rounds: list[int] = []
 
 
 class Round(BaseModel):

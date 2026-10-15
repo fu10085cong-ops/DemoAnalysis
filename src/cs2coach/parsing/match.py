@@ -173,6 +173,7 @@ def parse_match(demo: Path, cfg: dict[str, Any]) -> MatchData:
     match.blinds = build_blinds(event_df(parser, "player_blind"), event_df(parser, "flashbang_detonate"), match)
     match.bomb = build_bomb({name: event_df(parser, name) for name in _BOMB_EVENTS}, match)
     match.grenades = build_grenades({name: event_df(parser, name) for name in (*_GRENADE_START, *_GRENADE_END)}, match)
+    mark_absent_rounds(match, pcfg["absent_team_ratio"], pcfg["max_absent_round_share"], pcfg["min_other_coverage"])
 
     # 购买时间结束的 tick（不依赖 buytime_ended：ESL 没有）
     buytime_ended = event_df(parser, "buytime_ended").get("tick", pd.Series(dtype=int)).astype(int).tolist()
@@ -215,6 +216,54 @@ def build_match(demo_path: Path, meta: MatchMeta, names: dict[int, str], rounds:
     return MatchData(demo_path=demo_path, meta=meta, players=players, rounds=rounds, ticks=ticks,
                      kills=empty, damages=empty, shots=empty, blinds=empty, bomb=empty,
                      warnings=warnings, _spans=spans, _bits=spotted_bits(ticks))
+
+
+def mark_absent_rounds(match: MatchData, absent_ratio: float, max_absent_share: float,
+                       min_coverage: float) -> None:
+    """标出每名玩家不在场的回合，并只用在场回合重新计算覆盖率（docs/fields.md 陷阱 24）。
+
+    中途掉线、重连前的回合里，玩家的行 team_num、血量、坐标都为空。一个回合算"不在场"需同时满足：
+    回合进行中至少 absent_ratio 的 tick 没有队伍；这一回合该玩家没有任何开枪、伤害、击杀或死亡事件。
+    第二条防止把 demoparser2 读不到数据（陷阱 12：玩家其实在打，事件照常有）误当成掉线。
+    不在场的回合超过 max_absent_share 时不做排除，仍按原覆盖率报错或警告。
+    须在击杀、伤害、开枪表建好之后调用。
+    """
+    active: dict[int, set[int]] = {}
+    for df, cols in ((match.kills, ("attacker", "victim")), (match.damages, ("attacker", "victim")),
+                     (match.shots, ("steamid",))):
+        for col in cols:
+            if df.empty or col not in df:
+                continue
+            for sid, rnd in zip(df[col], df["round"]):
+                if pd.notna(sid) and pd.notna(rnd):
+                    active.setdefault(int(sid), set()).add(int(rnd))
+    tick_all = match.ticks["tick"].to_numpy()
+    team_all = pd.to_numeric(match.ticks["team_num"], errors="coerce").to_numpy(dtype="float64")
+    x_all = match.ticks["X"].to_numpy()
+    warnings = list(match.warnings)
+    for sid, info in list(match.players.items()):
+        a, b = match._spans[sid]
+        t, team, x = tick_all[a:b], team_all[a:b], x_all[a:b]
+        absent: list[int] = []
+        for r in match.rounds:
+            start = r.freeze_end_tick if r.freeze_end_tick is not None else r.start_tick
+            sel = (t >= start) & (t <= r.end_tick)
+            no_team = float(np.mean(~np.isin(team[sel], (Team.T, Team.CT)))) if sel.any() else 1.0
+            if no_team >= absent_ratio and r.number not in active.get(sid, set()):
+                absent.append(r.number)
+        if len(absent) > max_absent_share * len(match.rounds):
+            absent = []
+        if not absent:
+            continue
+        present = live_mask(t, [r for r in match.rounds if r.number not in absent])
+        cov = float(np.isfinite(x[present]).mean()) if present.any() else 0.0
+        match.players[sid] = info.model_copy(update={"coverage": cov, "absent_rounds": absent})
+        old = f"（{sid}）数据不完整"
+        warnings = [w for w in warnings if old not in w]
+        if cov < min_coverage:
+            warnings.append(f"玩家 {info.name}（{sid}）数据不完整：在场回合中只有 {cov:.0%} 的 tick 有坐标，"
+                            "与其相关的指标可能不准确")
+    match.warnings = warnings
 
 
 # ---------- 逐 tick 数据 ----------

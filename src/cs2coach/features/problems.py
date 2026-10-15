@@ -336,16 +336,17 @@ def problem_frequency(report: ProblemReport, mm: MatchMoments, baseline: dict | 
         if pid in disabled or spec.category == "highlight":
             continue
         hits = counts[pid]
-        frequency = 10 * hits / mm.rounds if mm.rounds > 0 else 0.0
+        rounds = mm.rounds_played
+        frequency = 10 * hits / rounds if rounds > 0 else 0.0
         rate = rates.get(pid, {})
         pro_hits, pro_rounds = rate.get("hits"), rate.get("rounds")
         valid_rate = (_finite(pro_hits) and _finite(pro_rounds) and
                       pro_hits >= 0 and pro_rounds > 0)
         pro = 10 * pro_hits / pro_rounds if valid_rate else None
-        expected = mm.rounds * pro_hits / pro_rounds if valid_rate else None
+        expected = rounds * pro_hits / pro_rounds if valid_rate else None
         excess = hits - expected if expected is not None else None
         chance = (_poisson_tail(hits, expected) if expected is not None and expected > 0
-                  and mm.rounds > 0 else None)
+                  and rounds > 0 else None)
         ratio = frequency / pro if pro is not None and pro > 0 else None
         prominent = (chance is not None and chance < cfg["problems"]["frequency_max_chance"]
                      and excess >= cfg["problems"]["frequency_min_excess"])

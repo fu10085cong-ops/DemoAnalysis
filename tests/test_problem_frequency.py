@@ -266,3 +266,19 @@ def test_positive_excess_below_minimum_still_needs_more_matches():
     assert row.excess_hits == pytest.approx(1.9)
     assert row.chance < load_config()["problems"]["frequency_max_chance"]
     assert not row.prominent and row.needs_more_matches
+
+
+def test_frequency_uses_rounds_played_when_player_was_absent():
+    # 30 回合中前 3 回合不在场（中途重连）：频率和预期次数按 27 个在场回合计算
+    mm = make_mm(rounds=30, absent_rounds=[1, 2, 3])
+    assert mm.rounds_played == 27
+    baseline = {"problem_rates": {"slow_reaction": {"hits": 1, "rounds": 10}}}
+    r = {x.problem: x for x in problem_frequency(report([hit("slow_reaction")] * 9), mm, baseline,
+                                                  load_config())}["slow_reaction"]
+    assert r.per_10_rounds == pytest.approx(90 / 27) and r.expected_hits == pytest.approx(2.7)
+
+
+def test_pro_rates_use_rounds_played():
+    cfg = load_config()
+    out = problem_rates([make_mm(rounds=20, absent_rounds=[1, 2]), make_mm(rounds=10)], {}, cfg)
+    assert out["slow_reaction"]["rounds"] == 28

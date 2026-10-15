@@ -9,7 +9,7 @@ from typing import Any
 
 from cs2coach.baseline import METRICS, compare
 from cs2coach.config import load_config
-from cs2coach.features.labels import GRENADE_LABELS, KIND_LABELS, ROUND_END_REASONS, tag_label
+from cs2coach.features.labels import GRENADE_LABELS, KIND_LABELS, ROUND_END_REASONS, absent_rounds_note, tag_label
 from cs2coach.features.models import AimStats, BlindInfo, MatchMoments, Moment
 from cs2coach.features.problems import PROBLEMS, FrequencyRow, ProblemReport
 from cs2coach.report.evidence import evidence_sentence
@@ -80,7 +80,7 @@ def build_digest(match: MatchData, mm: MatchMoments, baseline: dict[str, Any] | 
 def whole_match_numbers(mm: MatchMoments, baseline: dict[str, Any] | None,
                         frequency: list[FrequencyRow], score: tuple[int, int]) -> list[float]:
     """仅收集整场统计、职业对比、问题频率及比分，排除逐次瞬间。"""
-    values: list[float] = [mm.rounds, *score]
+    values: list[float] = [mm.rounds, mm.rounds_played, *score]
     stats = mm.aim_stats
     if stats is not None:
         for metric in METRICS:
@@ -132,6 +132,7 @@ def _header(match: MatchData, mm: MatchMoments) -> str:
         f"地图 {mm.map_name}，{mm.rounds} 回合，目标玩家 {mm.player_name}。目标玩家所在队伍比分 {won}:{lost}。",
         "每回合（阵营+胜负）：" + " ".join(results),
         f"回合结束方式包括：{reasons}",
+        *([absent_rounds_note(mm.absent_rounds)] if mm.absent_rounds else []),
     ])
 
 

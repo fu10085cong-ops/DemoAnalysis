@@ -214,9 +214,10 @@ def main(argv: list[str] | None = None) -> int:
 
     results = [check_rounds(m, p), check_scoreboard(m, p), check_blinds(m, p), check_shots(m),
                check_weapons(m), check_buy_end(m, p), check_economy(m), check_grenades(m)]
-    print("\n玩家数据完整性（回合进行中有坐标的 tick 占比）：")
+    print("\n玩家数据完整性（在场回合中，回合进行中有坐标的 tick 占比）：")
     for pl in m.players.values():
-        print(f"   {pl.coverage:>6.1%}  {pl.name}（{pl.steamid}）")
+        absent = f"  不在场回合 {pl.absent_rounds}" if pl.absent_rounds else ""
+        print(f"   {pl.coverage:>6.1%}  {pl.name}（{pl.steamid}）{absent}")
     for w in m.warnings:
         print(f"警告: {w}")
     ok = all(results)

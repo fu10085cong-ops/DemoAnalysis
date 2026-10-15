@@ -21,7 +21,7 @@ player = match.require_player(steamid, cfg["parsing"]["min_target_coverage"])  #
 | 字段 | 内容 |
 |---|---|
 | `meta` | `map_name`、`server_name`、`patch_version`、`tick_rate`、`last_tick` |
-| `players` | `{steamid: PlayerInfo}`，`PlayerInfo` 有 `name`、`coverage`（回合进行中有坐标的 tick 占比）。只含真实玩家，不含 bot |
+| `players` | `{steamid: PlayerInfo}`，`PlayerInfo` 有 `name`、`coverage`（在场回合中，回合进行中有坐标的 tick 占比）、`absent_rounds`（中途掉线或重连前不在场的回合，fields.md 陷阱 24）。只含真实玩家，不含 bot |
 | `rounds` | `list[Round]`，见下 |
 | `warnings` | 不影响运行的问题（如某名玩家数据不完整） |
 

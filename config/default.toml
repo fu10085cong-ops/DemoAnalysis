@@ -11,6 +11,11 @@ min_target_coverage = 0.95
 min_other_coverage = 0.95
 # demo 中没有 mp_buytime 设置时使用的购买时间（秒）；官方竞技模式为 20
 default_buytime_seconds = 20
+# 中途掉线 / 重连（docs/fields.md 陷阱 24）：回合进行中至少这一比例的 tick 没有队伍、
+# 且该玩家这一回合没有任何开枪、伤害、击杀、死亡事件，算"不在场"，不计入覆盖率和问题频率
+absent_team_ratio = 0.5
+# 不在场的回合超过总回合数的这一比例时不做排除（数据多半有别的问题），仍按覆盖率报错
+max_absent_round_share = 0.5
 
 [moments]
 # 交火窗口（动态回溯）：从击杀 / 死亡往前，把双方的开枪和互相伤害串起来，

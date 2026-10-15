@@ -6,7 +6,7 @@ import math
 from collections import Counter
 from collections.abc import Mapping
 
-from cs2coach.features.labels import GRENADE_LABELS, KIND_LABELS, weapon_label
+from cs2coach.features.labels import GRENADE_LABELS, KIND_LABELS, absent_rounds_note, weapon_label
 from cs2coach.features.models import BlindInfo, MatchMoments, MissedTrade, Moment
 from cs2coach.tools.digest import CONTACT_LABELS, VISIBILITY_NOTES
 
@@ -235,7 +235,7 @@ def missed_trade_facts(mt: MissedTrade, names: Mapping[int, str]) -> list[str]:
 def render_facts_file(mm: MatchMoments, names: Mapping[int, str]) -> str:
     """整场所有瞬间及漏补枪的事实卡，顺序沿用特征层输出。"""
     sections = [f"# 事实卡：{mm.player_name} · {mm.map_name}",
-                f"共 {mm.rounds} 回合，{len(mm.moments)} 个瞬间。"]
+                f"共 {mm.rounds} 回合，{len(mm.moments)} 个瞬间。" + absent_rounds_note(mm.absent_rounds)]
     sections.extend(render_moment_card(m, names) for m in mm.moments)
     for mt in mm.missed_trades:
         sections.append(f"### 〔R{mt.round}〕漏补枪\n\n"

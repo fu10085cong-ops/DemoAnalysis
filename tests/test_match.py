@@ -13,6 +13,7 @@ from cs2coach.parsing.match import (
     horizontal_speed,
     live_mask,
     build_blinds,
+    mark_absent_rounds,
     reconstruct_blinds,
     roster_names,
     spotted_masks,
@@ -279,3 +280,35 @@ def test_roster_names_fall_back_to_ticks_when_player_info_is_empty():
     raw = pd.DataFrame({"tick": [1, 1, 2, 2, 2], "steamid": [A, C, A, C, 0],
                         "name": ["old", "c", "new", "c", "bot"], "team_num": [2, 1, 2, 3, 3]})
     assert roster_names(info, raw) == {A: "new", C: "c"}
+
+
+def _two_rounds():
+    return [make_round(1, 1, 10, 100, 120), make_round(2, 121, 130, 220, 240)]
+
+
+def _absent_in_round1(sid):
+    # sid 第 1 回合进行中（tick 10–100）没有队伍、没有坐标：掉线、重连前
+    return {(sid, t): {"team_num": np.nan, "X": np.nan, "health": np.nan, "is_alive": False} for t in range(10, 101)}
+
+
+def test_absent_round_is_excluded_from_coverage():
+    m = make_match(make_ticks(last=240, overrides=_absent_in_round1(C)), rounds=_two_rounds())
+    assert m.players[C].coverage < 0.95 and any(f"（{C}）数据不完整" in w for w in m.warnings)
+    mark_absent_rounds(m, 0.5, 0.5, 0.95)
+    assert m.players[C].absent_rounds == [1] and m.players[C].coverage == 1.0
+    assert not any(f"（{C}）数据不完整" in w for w in m.warnings)
+    assert m.players[A].absent_rounds == [] and m.players[A].coverage == 1.0
+
+
+def test_round_with_events_is_not_absent():
+    # 有开枪事件说明玩家其实在打，只是没读到数据（陷阱 12），不能当成掉线
+    m = make_match(make_ticks(last=240, overrides=_absent_in_round1(C)), rounds=_two_rounds())
+    m.shots = pd.DataFrame({"steamid": pd.array([C], dtype="Int64"), "round": [1]})
+    mark_absent_rounds(m, 0.5, 0.5, 0.95)
+    assert m.players[C].absent_rounds == [] and m.players[C].coverage < 0.95
+
+
+def test_too_many_absent_rounds_are_not_excluded():
+    m = make_match(make_ticks(overrides=_absent_in_round1(C)))  # 只有 1 回合，全部不在场
+    mark_absent_rounds(m, 0.5, 0.5, 0.95)
+    assert m.players[C].absent_rounds == [] and m.players[C].coverage < 0.95

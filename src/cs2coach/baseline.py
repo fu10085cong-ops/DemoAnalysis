@@ -167,7 +167,7 @@ def problem_rates(mms: list[MatchMoments], baseline: dict, cfg: dict) -> dict:
         counts = Counter(h.problem for h in report.hits if h.target != "match")
         hits.update(counts)
         players.update(counts.keys())
-    rounds = sum(mm.rounds for mm in mms)
+    rounds = sum(mm.rounds_played for mm in mms)
     return {pid: {"hits": hits[pid], "rounds": rounds,
                   "per_10_rounds": round(10 * hits[pid] / rounds, 2) if rounds > 0 else 0.0,
                   "player_share_pct": round(100 * players[pid] / len(mms), 1) if mms else 0.0}

@@ -67,6 +67,7 @@ def find_moments(match: MatchData, steamid: int, cfg: dict[str, Any], sight: Sig
         moments=moments, missed_trades=find_missed_trades(match, p, steamid), excluded=excluded,
         aim_stats=aim_stats(match, steamid, cfg, p.shots, p.sight, moments),
         visibility_data_version=p.sight.data_version, visibility_unavailable=p.sight.unavailable_reason,
+        absent_rounds=list(player.absent_rounds),
     )
 
 

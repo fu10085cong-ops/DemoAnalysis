@@ -59,3 +59,11 @@ def tag_label(tag: str) -> str:
     if tag.startswith("clutch_"):
         return "残局" + tag.removeprefix("clutch_")
     return TAG_LABELS.get(tag, tag)
+
+
+def absent_rounds_note(rounds: list[int]) -> str:
+    """目标玩家不在场的回合说明；没有时为空字符串。"""
+    if not rounds:
+        return ""
+    return (f"目标玩家第 {'、'.join(str(r) for r in rounds)} 回合不在场（中途掉线或重连前），"
+            "这些回合不计入统计和问题频率。")

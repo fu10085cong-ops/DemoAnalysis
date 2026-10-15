@@ -274,3 +274,11 @@ def test_game_weapon_names_in_kill_death_and_readiness_sentences(name, display):
     assert f"对手用 {display} 击杀了你。" in lines
     assert (f"你阵亡时武器还不能开枪：上一枪（{display}）到阵亡只有 0.20 秒，"
             "该武器两枪的最短间隔是 1.45 秒。") in lines
+
+
+def test_facts_file_mentions_absent_rounds():
+    from cs2coach.features.labels import absent_rounds_note
+    from tests.helpers.moments import make_mm
+    text = render_facts_file(make_mm(rounds=30, absent_rounds=[1, 2]), {})
+    assert absent_rounds_note([1, 2]) in text and "第 1、2 回合不在场" in text
+    assert absent_rounds_note([]) == ""

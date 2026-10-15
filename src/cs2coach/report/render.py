@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Mapping
 
+from cs2coach.features.labels import absent_rounds_note
 from cs2coach.features.models import MatchMoments
 from cs2coach.features.problems import PROBLEMS
 from cs2coach.report.evidence import evidence_sentence, match_fact
@@ -21,6 +22,7 @@ def render_diagnosis(d: Diagnosis, mm: MatchMoments, names: Mapping[int, str]) -
     by_id = {m.id: m for m in mm.moments}
     lines = [f"# 复盘报告：{mm.player_name} · {mm.map_name}", "",
              f"比分 {d.score[0]}:{d.score[1]} · 模型 {d.provider} / {d.model}", "",
+             *([absent_rounds_note(mm.absent_rounds), ""] if mm.absent_rounds else []),
              "## 总览", "", sub.overview, "", "## 突出问题", ""]
     prominent = [row for row in d.frequency if row.prominent]
     if prominent:

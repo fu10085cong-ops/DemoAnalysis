@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
-from cs2coach.features.labels import KIND_LABELS, tag_label
+from cs2coach.features.labels import KIND_LABELS, absent_rounds_note, tag_label
 from cs2coach.features.models import MatchMoments, Moment
 
 
 def format_moments(mm: MatchMoments) -> str:
     lines = [f"{mm.player_name}（{mm.player}） {mm.map_name}，{mm.rounds} 回合，决定性瞬间 {len(mm.moments)} 个"]
+    if mm.absent_rounds:
+        lines.append(absent_rounds_note(mm.absent_rounds))
     if mm.visibility_unavailable:
         lines.append(f"视野计算不可用（{mm.visibility_unavailable}），Time to Damage 等指标为空")
     if mm.aim_stats is not None:

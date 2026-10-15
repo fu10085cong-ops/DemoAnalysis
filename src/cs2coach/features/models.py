@@ -231,3 +231,10 @@ class MatchMoments(BaseModel):
     # 视野计算用的 awpy-data 版本；为 None 时视野相关指标全部为空，原因见 visibility_unavailable
     visibility_data_version: str | None = None
     visibility_unavailable: str | None = None
+    # 目标玩家不在场的回合（中途掉线、重连前），不计入问题频率
+    absent_rounds: list[int] = []
+
+    @property
+    def rounds_played(self) -> int:
+        """目标玩家在场的回合数。"""
+        return self.rounds - len(self.absent_rounds)
