@@ -1,6 +1,6 @@
 # 007 结构化结论：AI 的提交格式与检查器
 
-状态：待做（在 004 的修改审查通过并提交之后再做，避免改动混在一起）
+状态：完成
 
 ## 目标
 
@@ -146,7 +146,7 @@ require = "not_seen"
 
 ## 验收标准
 
-- [ ] 新建 `tests/test_submission.py` 和 `tests/test_checker.py`：
+- [x] 新建 `tests/test_submission.py` 和 `tests/test_checker.py`：
   - `submit_tool` 的 schema：
     - 所有 object 都有 `additionalProperties: false`；
     - 被停用的编号不在 enum 中；
@@ -162,8 +162,8 @@ require = "not_seen"
     - `training` 中的数字不检查；
     - 总览可以使用摘要中的数字。
   - 每个谓词至少一个满足、一个不满足的测试。
-- [ ] 全部测试通过：`.venv/Scripts/python.exe -m pytest -q`
-- [ ] 真实数据演练（**不调用 AI**）：
+- [x] 全部测试通过：`.venv/Scripts/python.exe -m pytest -q`
+- [x] 真实数据演练（**不调用 AI**）：
   1. 用 5E Mirage（玩家 `76561199711881069`）的 `MatchMoments` 和 `ProblemReport`，**手工写两份提交**：
      - 一份全部基于 `_problems.md` 中真实的命中，应该零违规；
      - 一份故意犯错：编错 target、给没有命中的瞬间安问题、写错数字、在没有被闪的瞬间写"吃闪"。
@@ -181,8 +181,57 @@ require = "not_seen"
 ## 完成报告（GPT 填写）
 
 - 改动的文件及原因：
-- 测试结果：
-- 真实 demo 验证（如有）：
+  - `src/cs2coach/tools/submission.py`：定义 Finding、Pattern、Highlight、ReportSubmission；拒绝额外字段及类型转换，所有字段必填。`parse_submission` 将结构错误转换为包含字段路径的中文 SubmissionError。
+  - `submit_tool` 生成与现有 TOOLS 相同格式的工具定义：每个 object 都有 additionalProperties=false，动态 enum 排除停用编号并区分亮点，targets 使用指定正则，数量与各类文字长度上限从配置读取。未注册进现有工具或诊断流程。
+  - `src/cs2coach/tools/checker.py`：实现任务表的全部 12 类违规；逐 target 核对同问题命中，错误消息包含实际命中编号或实际字段值。other 免前提检查但仍检查数字、敏感说法、类别与数量；规律要求至少两个不同 target。
+  - 数字检查展开 Moment 数值叶子和命中证据/阈值中的 JSON 列表，处理秒/毫秒、比例/百分比及 recoil_index+1；用十进制四舍五入匹配文字精度。先去掉武器显示名，人数按完整配对单独核对；近似表达的容差可配置，训练文字不参与数据检查。
+  - `config/default.toml` 新增 checker 配置、数量/长度上限、容差和十组敏感说法；`config.py` 使用检查器谓词注册表校验名称，同时拒绝无效正则和缺失/额外的对照表字段。未新增依赖。
+  - `tests/test_submission.py`、`tests/test_checker.py`：共 81 项测试，覆盖严格 schema、结构错误、全部违规类型、合法提交、数字换算与容差、十个谓词的正反情况、配置校验和真实数据回归。
+  - `tests/fixtures/mirage_submission_valid.json`、`mirage_submission_invalid.json` 是手工编写的两份提交；`mirage_checker_data.json` 保存真实数据快照，含从原始 37 个瞬间中选取的 7 个相关瞬间、原回合数与漏补记录、这些数据的 ProblemReport，以及完整摘要。纯函数回归测试无需本地 demo。
+- 测试结果：`.venv/Scripts/python.exe -m pytest -q`：**443 passed, 3 skipped**。专项测试 81 项通过；`git diff --check` 通过。环境中未安装 jsonschema，按任务要求手工检查 schema 结构、合法提交的 enum/数量/长度/编号约束和非法值对应的限制，未新增依赖。
+- 真实 demo 验证：
+  - 仅解析 `g173-n-20261014223216271995270_de_mirage.dem`，玩家 `76561199711881069`；复用 005 生成的真实 MatchMoments，使用新解析的 MatchData 调用 `build_digest` 生成摘要（不传职业基准也可生成完整摘要）。未调用 AI，原 demo 只读。
+  - 摘要保存于 `data/output/submission_mirage_digest.md`，与真实数据快照一同用于演练。合法提交使用 slow_reaction、shot_while_moving、weapon_not_ready 的真实命中、两个不同回合的同类规律和真实先发现/先开枪亮点，返回 **0 条违规**。
+  - 错误提交返回 **4 条违规**，完整列表如下（与回归测试实际输出一致）：
+
+  ```json
+[
+  {
+    "path": "findings[0].targets[0]",
+    "code": "unknown_target",
+    "message": "R40-death 不存在，本场共 28 回合；瞬间编号须来自 mm.moments。"
+  },
+  {
+    "path": "findings[1].targets[0]",
+    "code": "precondition_failed",
+    "message": "R11-death 不满足“主动拉出撞上对手架点”（peeked_into_held_angle）：该 target 实际检测到的问题为 turned_into_flash。"
+  },
+  {
+    "path": "findings[2].analysis",
+    "code": "number_not_found",
+    "message": "文字中的数字 650 在允许数据中找不到。R3-kill1 实际数据：{\"alive_own\": 2, \"alive_enemy\": 1, \"trade\": {\"traded\": null, \"traded_by\": null, \"trade_delay_s\": null, \"nearest_teammate_distance\": null, \"is_trade_kill\": false, \"avenged_teammate\": null, \"avenge_delay_s\": null}, \"death.blinded\": null, \"death.weapon_ready\": null, \"time_to_damage_s\": 0.812, \"crosshair_placement_deg\": 3.33, \"visibility_note\": null, \"contact_type\": \"unclear\", \"seen_first_lead_s\": 0.375, \"first_shot_lead_s\": null, \"first_shot_stopped\": false, \"player_blind\": false, \"opponent_blind\": false, \"shot_stopped\": [false, false, true, true], \"recoil_index\": [0.0, 1.0, 2.0, 3.0]}"
+  },
+  {
+    "path": "findings[2].analysis",
+    "code": "phrase_unsupported",
+    "message": "“吃闪”需要至少一个 target 满足 blind，实际均不满足。R3-kill1 实际数据：{\"alive_own\": 2, \"alive_enemy\": 1, \"trade\": {\"traded\": null, \"traded_by\": null, \"trade_delay_s\": null, \"nearest_teammate_distance\": null, \"is_trade_kill\": false, \"avenged_teammate\": null, \"avenge_delay_s\": null}, \"death.blinded\": null, \"death.weapon_ready\": null, \"time_to_damage_s\": 0.812, \"crosshair_placement_deg\": 3.33, \"visibility_note\": null, \"contact_type\": \"unclear\", \"seen_first_lead_s\": 0.375, \"first_shot_lead_s\": null, \"first_shot_stopped\": false, \"player_blind\": false, \"opponent_blind\": false, \"shot_stopped\": [false, false, true, true], \"recoil_index\": [0.0, 1.0, 2.0, 3.0]}"
+  }
+]
+  ```
+
 - 遗留问题 / 需要确认的地方：
+  - 用户已确认接口划分：`parse_submission(args)` 只校验结构，动态数量/长度由工具 schema 约束，内容按任务表由检查器核对；没有添加 cfg 参数或隐式读取配置。008 接入时应保留 schema 约束。
+  - 用户已确认：总览的数字仅来自 digest，人数配对必须在 digest 出现；条目人数须与 targets 中至少一个瞬间完整匹配。总览无 targets，不对其套用逐 target 的敏感说法谓词；训练建议不作比赛数据检查。
+  - 用户已确认：spray_control 的 match target 可用整场 mm.moments 核对敏感说法，但不能据此把任意瞬间数值加入整场允许数字集合。
+  - 规律 targets 的配置上限首版设为 10，其余默认数量按任务单；各类文字长度上限均可配置。总览“三到五句”在工具说明中要求，未增加句子语义判断。
+  - 数字仅核对允许集合，不保证数字与分析中的具体指标语义对应；敏感说法只保证至少一个 target 有所需字段，不判断方向或措辞的所有语义。这是任务规定的首版口径，008 实测后再调整。
+  - 开始时工作区干净，004、005 均已标记完成。此次只改 007 所列文件及本任务单，未改 diagnose、提示词、排版、citations.py、问题检测或指标；未提交、未调用真实 AI。
 
 ## 审查意见（Claude 填写）
+
+**审查通过（2026-10-15）。** 12 类违规都已实现，退回消息附带实际数据，可以据此修改；四舍五入用 Decimal 处理，避开了浮点误差；两份真实数据演练已保存为回归测试。443 个测试通过。
+
+记下来留到 009 实测后再看：
+- 允许的数值集合很宽（瞬间的所有数值叶子及其换算），错误的数字有可能碰巧匹配上。首版可以接受，看实际误放和误杀的情况再收紧。
+- 退回消息中的数据 JSON 较长，会增加 token 消耗。
+

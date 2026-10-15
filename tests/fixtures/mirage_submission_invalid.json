@@ -1,0 +1,29 @@
+{
+  "overview": "这场共有28回合。决定性瞬间共37个。接敌准备值得复盘。",
+  "findings": [
+    {
+      "problem": "slow_reaction",
+      "targets": ["R40-death"],
+      "severity": "high",
+      "analysis": "这次出枪明显偏慢。",
+      "training": "练习目标切换。"
+    },
+    {
+      "problem": "peeked_into_held_angle",
+      "targets": ["R11-death"],
+      "severity": "high",
+      "analysis": "这里的交火处理需要改进。",
+      "training": "复盘接敌时机。"
+    },
+    {
+      "problem": "slow_reaction",
+      "targets": ["R3-kill1"],
+      "severity": "medium",
+      "analysis": "吃闪后首次命中花了650毫秒。",
+      "training": "练习移动控制。"
+    }
+  ],
+  "patterns": [],
+  "highlights": [],
+  "training_plan": ["每天复盘关键交火。"]
+}

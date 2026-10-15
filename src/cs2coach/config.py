@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import tomllib
 from pathlib import Path
 from typing import Any
@@ -17,7 +18,29 @@ def load_config(path: Path | None = None) -> dict[str, Any]:
     cfg = _read(DEFAULT_CONFIG)
     if path is not None:
         _merge(cfg, _read(Path(path)))
+    _validate_checker(cfg["checker"])
     return cfg
+
+
+def _validate_checker(cfg: dict[str, Any]) -> None:
+    """敏感说法允许配置扩展，但谓词名称和正则必须能被检查器执行。"""
+    from cs2coach.tools.checker import PREDICATES
+
+    phrases = cfg["phrases"]
+    if not isinstance(phrases, list):
+        raise ConfigError("配置项 checker.phrases 应为表数组")
+    for i, phrase in enumerate(phrases):
+        name = f"checker.phrases[{i}]"
+        if not isinstance(phrase, dict) or set(phrase) != {"pattern", "require"}:
+            raise ConfigError(f"{name} 必须且只能包含 pattern、require")
+        if not isinstance(phrase["require"], str) or phrase["require"] not in PREDICATES:
+            raise ConfigError(f"{name}.require 是未知谓词：{phrase['require']!r}")
+        if not isinstance(phrase["pattern"], str) or not phrase["pattern"]:
+            raise ConfigError(f"{name}.pattern 应为非空正则字符串")
+        try:
+            re.compile(phrase["pattern"])
+        except re.error as exc:
+            raise ConfigError(f"{name}.pattern 正则无效：{exc}") from None
 
 
 def _read(path: Path) -> dict[str, Any]:

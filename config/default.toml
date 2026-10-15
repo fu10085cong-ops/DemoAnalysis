@@ -176,6 +176,91 @@ spray_moving_min_shots = 4
 # 移动扫射中未停稳子弹的比例阈值（待用数据校准）
 spray_moving_ratio = 0.5
 
+[checker]
+# 一份提交的问题结论数量上限
+max_findings = 6
+# 反复出现的问题数量上限
+max_patterns = 3
+# 亮点数量上限
+max_highlights = 3
+# other 类结论数量上限（跨问题、规律与亮点合计）
+max_other = 3
+# 单条问题结论关联的目标数量上限
+max_finding_targets = 5
+# 单条规律关联的目标数量上限，首版最多列举十个
+max_pattern_targets = 10
+# 单条亮点关联的目标数量上限
+max_highlight_targets = 3
+# 训练计划条目数量上限
+max_training_plan_items = 5
+# 总览文字长度上限（字符），内容应为三到五句
+max_overview_length = 600
+# 问题分析文字长度上限（字符）
+max_finding_analysis_length = 1200
+# 单条训练建议长度上限（字符）
+max_training_length = 600
+# 规律分析文字长度上限（字符）
+max_pattern_analysis_length = 1200
+# 亮点分析文字长度上限（字符）
+max_highlight_analysis_length = 600
+# 每条训练计划文字长度上限（字符）
+max_training_plan_item_length = 600
+# 约、大约、接近、左右等近似表达的相对数值容差，首版为百分之十
+number_relative_tolerance = 0.10
+# 近似数值比较的绝对容差，仅用于消除浮点运算误差
+number_absolute_tolerance = 0.000000001
+
+# 每项 pattern 为敏感说法正则，require 为必须具备的数据谓词；谓词名称严格校验
+[[checker.phrases]]
+# “没看到”类说法只允许几何视野明确未看到
+pattern = "没看到|没看见|没发现"
+require = "not_seen"
+
+[[checker.phrases]]
+# 致盲说法需要交火或死亡致盲记录
+pattern = "被闪|吃闪|闪白|致盲"
+require = "blind"
+
+[[checker.phrases]]
+# 主动拉出需要接触类型证据
+pattern = "干拉|主动拉出|拉出来"
+require = "peek"
+
+[[checker.phrases]]
+# 架点可指本人，也可指主动拉出时的对手
+pattern = "架点|架枪|卡点"
+require = "held"
+
+[[checker.phrases]]
+# 先后看见必须有可用的看见时间差
+pattern = "先看见|先发现|后看见"
+require = "seen_order"
+
+[[checker.phrases]]
+# 先后开枪必须有双方第一枪时间差
+pattern = "先开枪|后开枪"
+require = "shot_order"
+
+[[checker.phrases]]
+# 补枪说法需要补枪字段或漏补枪回合记录
+pattern = "补枪|补回|没人补"
+require = "trade"
+
+[[checker.phrases]]
+# 停稳说法需要首枪或逐枪的停稳数据
+pattern = "急停|停稳|没停"
+require = "stopped"
+
+[[checker.phrases]]
+# 压枪说法需要连射序号达到第二发
+pattern = "压枪|扫射|连射"
+require = "spray"
+
+[[checker.phrases]]
+# 拉栓说法需要死亡时武器明确不能开枪
+pattern = "拉栓|还不能开枪"
+require = "weapon_not_ready"
+
 [ai]
 # 用哪个模型服务：deepseek / claude（各自的设置在下面对应的表里）
 provider = "deepseek"
