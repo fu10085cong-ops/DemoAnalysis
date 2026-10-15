@@ -12,7 +12,7 @@ import sys
 import tomllib
 from pathlib import Path
 
-from cs2coach.baseline import BASELINE_FILE, DEMO_MANIFEST, METRICS, build_baseline, spray_stats, weapon_stats
+from cs2coach.baseline import BASELINE_FILE, DEMO_MANIFEST, METRICS, build_baseline, problem_rates, spray_stats, weapon_stats
 from cs2coach.config import load_config
 from cs2coach.console import ensure_utf8_stdio
 from cs2coach.features.moments import find_moments
@@ -82,6 +82,8 @@ def main(argv: list[str] | None = None) -> int:
               for metric in METRICS}
     baseline = {"version": 2, **build_baseline(values, f"{source}；{len(mms)} 人次"),
                 "demos": demos, "weapons": weapon_stats(mms, cfg), "spray": spray_stats(mms, cfg)}
+    print("使用本次新算出的阈值统计职业问题频率（包含停用规则，排除 match 目标）", flush=True)
+    baseline["problem_rates"] = problem_rates(mms, baseline, cfg)
     args.out.parent.mkdir(parents=True, exist_ok=True)
     temp = args.out.with_suffix(args.out.suffix + ".part")
     temp.write_text(json.dumps(baseline, ensure_ascii=False, indent=2, allow_nan=False) + "\n", encoding="utf-8")
@@ -94,6 +96,7 @@ def main(argv: list[str] | None = None) -> int:
               f"p75={b['time_to_damage_ms']['p75']}，准星 p75={b['crosshair_placement_deg']['p75']}")
     for w, segments in baseline["spray"].items():
         print(f"  {w} 压枪：{json.dumps(segments, ensure_ascii=False)}")
+    print("problem_rates: " + json.dumps(baseline["problem_rates"], ensure_ascii=False, indent=2))
     for item in failed:
         print(f"失败项：{item['member']}：{item['reason']}")
     return 0

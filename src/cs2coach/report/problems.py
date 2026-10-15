@@ -2,12 +2,22 @@
 
 import json
 
-from cs2coach.features.problems import PROBLEMS, ProblemReport
+from cs2coach.features.problems import PROBLEMS, FrequencyRow, ProblemReport
 
 
-def render_problem_report(report: ProblemReport) -> str:
+def render_problem_report(report: ProblemReport, frequencies: list[FrequencyRow] | None = None) -> str:
     lines = ["# 问题检测", "", "命中表示满足目录的必要条件，是否属于失误及其轻重仍需结合情境判断。", "",
              f"职业基准：{report.baseline_source or '无，仅检测不依赖基准的问题'}", ""]
+    if frequencies is not None:
+        lines.extend(["## 频率对比", "", "问题是否突出看频率；单条命中不等于失误。加粗项达到配置的次数和职业倍数阈值。", "",
+                      "| 问题 | 本场次数 | 每 10 回合（本场 / 职业） | 倍数 |",
+                      "|---|---:|---:|---:|"])
+        for row in frequencies:
+            name = f"**{row.label}**" if row.prominent else row.label
+            pro = f"{row.pro_per_10_rounds:.2f}" if row.pro_per_10_rounds is not None else "—"
+            ratio = f"{row.ratio:.2f}×" if row.ratio is not None else "—"
+            lines.append(f"| {name} | {row.hits} | {row.per_10_rounds:.2f} / {pro} | {ratio} |")
+        lines.append("")
     for pid, spec in PROBLEMS.items():
         hits = [h for h in report.hits if h.problem == pid]
         if not hits:

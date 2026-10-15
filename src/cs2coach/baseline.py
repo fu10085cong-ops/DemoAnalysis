@@ -9,6 +9,8 @@ from __future__ import annotations
 import json
 import math
 import statistics
+from collections import Counter
+from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
@@ -149,3 +151,24 @@ def weapon_threshold(baseline: dict | None, weapon: str | None, metric: str, qua
 def spray_segments(baseline: dict | None, weapon: str | None) -> list[dict]:
     """职业同武器的连射发数段，旧基准或缺失武器返回空列表。"""
     return baseline.get("spray", {}).get(weapon, []) if baseline is not None else []
+
+
+def problem_rates(mms: list[MatchMoments], baseline: dict, cfg: dict) -> dict:
+    """用本次新基准检测职业选手，保留停用规则的校准频率，但排除整场目标。"""
+    # 检测器依赖基准读取接口，因此在函数内导入，避免模块循环依赖。
+    from cs2coach.features.problems import DETECTED_PROBLEMS, detect_problems
+
+    calibration = deepcopy(cfg)
+    calibration["problems"]["disabled"] = []
+    calibration["problems"]["spray_match_enabled"] = True
+    hits, players = Counter(), Counter()
+    for mm in mms:
+        report = detect_problems(mm, baseline, calibration)
+        counts = Counter(h.problem for h in report.hits if h.target != "match")
+        hits.update(counts)
+        players.update(counts.keys())
+    rounds = sum(mm.rounds for mm in mms)
+    return {pid: {"hits": hits[pid], "rounds": rounds,
+                  "per_10_rounds": round(10 * hits[pid] / rounds, 2) if rounds > 0 else 0.0,
+                  "player_share_pct": round(100 * players[pid] / len(mms), 1) if mms else 0.0}
+            for pid in DETECTED_PROBLEMS}

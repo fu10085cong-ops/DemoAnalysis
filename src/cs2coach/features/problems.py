@@ -36,6 +36,16 @@ class ProblemReport(BaseModel):
     baseline_source: str | None
 
 
+class FrequencyRow(BaseModel):
+    problem: str
+    label: str
+    hits: int
+    per_10_rounds: float
+    pro_per_10_rounds: float | None
+    ratio: float | None
+    prominent: bool
+
+
 # 登记目录的全部编号；仅下方 detect_problems 中明确实现的规则参与检测。
 _SPECS = [
     ("slow_reaction", "出枪慢", "aim", ["kill", "death"], "medium"),
@@ -66,6 +76,14 @@ _SPECS = [
 ]
 PROBLEMS: dict[str, ProblemSpec] = {pid: ProblemSpec(id=pid, label=label, category=cat, applies_to=kinds, reliability=rel)
             for pid, label, cat, kinds, rel in _SPECS}
+# 用户确认：频率只统计实际实现的规则，待开发、仅登记及 other 不作零频率比较。
+DETECTED_PROBLEMS = (
+    "slow_reaction", "poor_crosshair_placement", "shot_while_moving",
+    "peeked_into_held_angle", "dry_peek_with_utility", "overpeek_in_advantage",
+    "died_without_seeing", "turned_into_flash", "missed_trade", "post_plant_utility_unused",
+    "weapon_not_ready", "awp_unscoped_shot", "deagle_moving_shot", "glock_long_range",
+    "spray_control", "spray_while_moving", "good_trade", "flash_assist", "won_duel_seen_first",
+)
 CONTEXT_ONLY: dict[str, str] = {
     "unused_utility": "单独带道具阵亡与战绩正相关，不能单独定为问题。",
     "isolated_death": "离队友远、孤立阵亡尚未用回合胜负验证。",
@@ -73,6 +91,8 @@ CONTEXT_ONLY: dict[str, str] = {
     "opening_death": "零和背景，需要结合具体情境。",
     "man_advantage": "人数优势时阵亡本身只作背景。",
     "friendly_flash": "被队友闪中不是本人的问题。",
+    "turned_into_flash": "路人并不比职业多，主要反映对手的道具水平。",
+    "weapon_not_ready": "路人与职业一样多，多数是被迫的。",
 }
 
 
@@ -261,7 +281,7 @@ def detect_problems(mm: MatchMoments, baseline: dict | None, cfg: dict) -> Probl
     for record in mm.missed_trades:
         emit("missed_trade", f"R{record.round}", None, record.model_dump())
 
-    for w, segments in spray_stats([mm], cfg).items():
+    for w, segments in (spray_stats([mm], cfg) if p["spray_match_enabled"] else {}).items():
         refs = spray_segments(baseline, w)
         for s in segments:
             if s["shots"] < p["spray_min_segment_shots"]:
@@ -277,3 +297,26 @@ def detect_problems(mm: MatchMoments, baseline: dict | None, cfg: dict) -> Probl
 
     return ProblemReport(hits=hits, disabled=disabled, skipped=dict(sorted(skipped.items())),
                          baseline_source=baseline.get("source") if baseline is not None else None)
+
+
+def problem_frequency(report: ProblemReport, mm: MatchMoments, baseline: dict | None,
+                      cfg: dict) -> list[FrequencyRow]:
+    """每十回合的问题频率与职业对比；不含整场目标、停用项和亮点。"""
+    counts = Counter(h.problem for h in report.hits if h.target != "match")
+    disabled = set(report.disabled) | set(cfg["problems"]["disabled"])
+    rates = baseline.get("problem_rates", {}) if baseline is not None else {}
+    rows = []
+    for pid in DETECTED_PROBLEMS:
+        spec = PROBLEMS[pid]
+        if pid in disabled or spec.category == "highlight":
+            continue
+        hits = counts[pid]
+        frequency = 10 * hits / mm.rounds if mm.rounds > 0 else 0.0
+        pro = rates.get(pid, {}).get("per_10_rounds")
+        if not _finite(pro) or pro < 0:
+            pro = None
+        ratio = frequency / pro if pro is not None and pro > 0 else None
+        rows.append(FrequencyRow(problem=pid, label=spec.label, hits=hits, per_10_rounds=frequency,
+            pro_per_10_rounds=pro, ratio=ratio, prominent=hits >= cfg["problems"]["frequency_min_hits"]
+            and ratio is not None and ratio >= cfg["problems"]["frequency_prominent_ratio"]))
+    return sorted(rows, key=lambda row: (not row.prominent, row.ratio is None, -(row.ratio or 0)))

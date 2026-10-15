@@ -55,7 +55,7 @@ def _analyze(args: argparse.Namespace) -> int:
 
     from cs2coach.features.moments import find_moments
     from cs2coach.baseline import load_baseline
-    from cs2coach.features.problems import detect_problems
+    from cs2coach.features.problems import detect_problems, problem_frequency
     from cs2coach.report.console import format_moments
     from cs2coach.report.facts import render_facts_file
     from cs2coach.report.problems import render_problem_report
@@ -73,7 +73,10 @@ def _analyze(args: argparse.Namespace) -> int:
     facts.write_text(render_facts_file(moments, {sid: p.name for sid, p in match.players.items()}), encoding="utf-8")
     print(f"已写入 {facts}")
     problems = args.out / f"{demo.stem}_{player.steamid}_problems.md"
-    problems.write_text(render_problem_report(detect_problems(moments, load_baseline(), cfg)), encoding="utf-8")
+    baseline = load_baseline()
+    detected = detect_problems(moments, baseline, cfg)
+    frequencies = problem_frequency(detected, moments, baseline, cfg)
+    problems.write_text(render_problem_report(detected, frequencies), encoding="utf-8")
     print(f"已写入 {problems}")
     if not args.ai:
         print("加上 --ai 生成 AI 复盘报告")

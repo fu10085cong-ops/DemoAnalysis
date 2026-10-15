@@ -116,6 +116,9 @@ def test_schema_contract_without_adding_jsonschema_dependency():
     base_report.disabled = []
     schema = submit_tool(base_report, load_config())["input_schema"]
     args = submission()
+    # 历史样例中的背景项已被新配置停用，当前合法提交不再包含它。
+    args["findings"] = [f for f in args["findings"] if f["problem"] != "weapon_not_ready"]
+    assert "weapon_not_ready" not in schema["$defs"]["Finding"]["properties"]["problem"]["enum"]
     assert parse_submission(args).model_dump() == args
     for group in ("findings", "patterns", "highlights"):
         array = schema["properties"][group]

@@ -1496,5 +1496,121 @@
         "hit_pct": null
       }
     ]
+  },
+  "problem_rates": {
+    "slow_reaction": {
+      "hits": 425,
+      "rounds": 3090,
+      "per_10_rounds": 1.38,
+      "player_share_pct": 91.3
+    },
+    "poor_crosshair_placement": {
+      "hits": 501,
+      "rounds": 3090,
+      "per_10_rounds": 1.62,
+      "player_share_pct": 94.7
+    },
+    "shot_while_moving": {
+      "hits": 272,
+      "rounds": 3090,
+      "per_10_rounds": 0.88,
+      "player_share_pct": 83.3
+    },
+    "peeked_into_held_angle": {
+      "hits": 172,
+      "rounds": 3090,
+      "per_10_rounds": 0.56,
+      "player_share_pct": 64.7
+    },
+    "dry_peek_with_utility": {
+      "hits": 46,
+      "rounds": 3090,
+      "per_10_rounds": 0.15,
+      "player_share_pct": 30.7
+    },
+    "overpeek_in_advantage": {
+      "hits": 24,
+      "rounds": 3090,
+      "per_10_rounds": 0.08,
+      "player_share_pct": 14.0
+    },
+    "died_without_seeing": {
+      "hits": 206,
+      "rounds": 3090,
+      "per_10_rounds": 0.67,
+      "player_share_pct": 79.3
+    },
+    "turned_into_flash": {
+      "hits": 126,
+      "rounds": 3090,
+      "per_10_rounds": 0.41,
+      "player_share_pct": 52.0
+    },
+    "missed_trade": {
+      "hits": 250,
+      "rounds": 3090,
+      "per_10_rounds": 0.81,
+      "player_share_pct": 78.0
+    },
+    "post_plant_utility_unused": {
+      "hits": 7,
+      "rounds": 3090,
+      "per_10_rounds": 0.02,
+      "player_share_pct": 4.7
+    },
+    "weapon_not_ready": {
+      "hits": 105,
+      "rounds": 3090,
+      "per_10_rounds": 0.34,
+      "player_share_pct": 40.7
+    },
+    "awp_unscoped_shot": {
+      "hits": 1,
+      "rounds": 3090,
+      "per_10_rounds": 0.0,
+      "player_share_pct": 0.7
+    },
+    "deagle_moving_shot": {
+      "hits": 7,
+      "rounds": 3090,
+      "per_10_rounds": 0.02,
+      "player_share_pct": 4.7
+    },
+    "glock_long_range": {
+      "hits": 16,
+      "rounds": 3090,
+      "per_10_rounds": 0.05,
+      "player_share_pct": 10.0
+    },
+    "spray_control": {
+      "hits": 62,
+      "rounds": 3090,
+      "per_10_rounds": 0.2,
+      "player_share_pct": 33.3
+    },
+    "spray_while_moving": {
+      "hits": 4,
+      "rounds": 3090,
+      "per_10_rounds": 0.01,
+      "player_share_pct": 2.7
+    },
+    "good_trade": {
+      "hits": 312,
+      "rounds": 3090,
+      "per_10_rounds": 1.01,
+      "player_share_pct": 86.7
+    },
+    "flash_assist": {
+      "hits": 115,
+      "rounds": 3090,
+      "per_10_rounds": 0.37,
+      "player_share_pct": 51.3
+    },
+    "won_duel_seen_first": {
+      "hits": 224,
+      "rounds": 3090,
+      "per_10_rounds": 0.72,
+      "player_share_pct": 74.0
+    }
   }
 }

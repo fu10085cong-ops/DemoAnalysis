@@ -7,7 +7,7 @@ import pytest
 
 from cs2coach.config import load_config
 from cs2coach.features.models import MissedTrade
-from cs2coach.features.problems import CONTEXT_ONLY, PROBLEMS, detect_problems, engagement_weapon
+from cs2coach.features.problems import CONTEXT_ONLY, PROBLEMS, detect_problems, engagement_weapon, problem_frequency
 from cs2coach.report.problems import render_problem_report
 from tests.helpers.moments import make_mm, make_moment, make_shot
 from tests.helpers.synthetic import A, B, C
@@ -15,7 +15,11 @@ from tests.helpers.synthetic import A, B, C
 
 @pytest.fixture
 def cfg():
-    return load_config()
+    # 这里验证原有检测条件；默认启用状态由 test_problem_frequency 独立验证。
+    cfg = load_config()
+    cfg["problems"]["disabled"] = ["died_without_seeing"]
+    cfg["problems"]["spray_match_enabled"] = True
+    return cfg
 
 
 @pytest.fixture
@@ -261,7 +265,8 @@ def test_registry_context_and_markdown(cfg, baseline):
     assert len(PROBLEMS) == 25
     for pid in ("awp_close_range_duel", "awp_moving_shot", "overspray_at_range", "pistol_spam", "other"):
         assert pid in PROBLEMS
-    assert {"unused_utility", "isolated_death", "opponent_saw_first", "opening_death", "man_advantage", "friendly_flash"} == CONTEXT_ONLY.keys()
+    assert {"unused_utility", "isolated_death", "opponent_saw_first", "opening_death", "man_advantage", "friendly_flash",
+            "turned_into_flash", "weapon_not_ready"} == CONTEXT_ONLY.keys()
     report = detect_problems(make_mm([make_moment(engagement={"time_to_damage_s": .8})]), baseline, cfg)
     md = render_problem_report(report)
     assert "R1-death" in md and "出枪慢" in md and "手工职业样本" in md
@@ -287,7 +292,8 @@ def test_missing_decision_inputs_are_counted(cfg, baseline):
 
 def test_configured_thresholds_override_defaults(tmp_path, baseline):
     path = tmp_path / "thresholds.toml"
-    path.write_text('[problems]\nawp_noscope_max_distance_m = 11.0\nspray_min_late_shots = 7\n'
+    path.write_text('[problems]\ndisabled = ["died_without_seeing"]\nspray_match_enabled = true\n'
+                    'awp_noscope_max_distance_m = 11.0\nspray_min_late_shots = 7\n'
                     'spray_moving_ratio = 1.0\n', encoding="utf-8")
     cfg = load_config(path)
     mm = make_mm([make_moment(weapon="awp"),
@@ -300,6 +306,7 @@ def test_cli_writes_problem_report_without_ai_or_baseline(tmp_path, monkeypatch,
     from cs2coach.cli import main
     from tests.test_facts import scenario
 
+    cfg = load_config()
     match = scenario()
     mm = make_mm([make_moment(tags=["weapon_not_ready"])])
     monkeypatch.setattr("cs2coach.cli.resolve_demo", lambda path, member=None: path)
@@ -311,5 +318,6 @@ def test_cli_writes_problem_report_without_ai_or_baseline(tmp_path, monkeypatch,
         pytest.fail("无 AI 模式不应进入诊断")
     monkeypatch.setattr("cs2coach.cli._diagnose", unexpected)
     assert main(["analyze", "test.dem", "--player", str(A), "--out", str(tmp_path)]) == 0
-    expected = render_problem_report(detect_problems(mm, None, cfg))
+    detected = detect_problems(mm, None, cfg)
+    expected = render_problem_report(detected, problem_frequency(detected, mm, None, cfg))
     assert (tmp_path / f"test_{A}_problems.md").read_text(encoding="utf-8") == expected

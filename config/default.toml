@@ -157,8 +157,18 @@ scar20 = 120
 g3sg1 = 120
 
 [problems]
-# 已实现但默认停用的问题：几何视野仍可能漏判部分模型
-disabled = ["died_without_seeing"]
+# died_without_seeing：几何视野仍可能漏判部分模型，暂时停用，待用数据校准
+# turned_into_flash：路人并不比职业多，主要反映对手的道具水平，降为背景
+# weapon_not_ready：路人与职业一样多，多数是被迫的，降为背景
+# spray_while_moving：几乎不触发，暂时停用，待用数据校准
+# awp_unscoped_shot：路人样本中零次，暂时停用，待用数据校准
+disabled = ["died_without_seeing", "turned_into_flash", "weapon_not_ready", "spray_while_moving", "awp_unscoped_shot"]
+# 整场同一发数段难以积累足够子弹，暂时关闭；不影响单次交火，待用数据校准
+spray_match_enabled = false
+# 至少命中几次才可能成为突出问题，待用数据校准
+frequency_min_hits = 2
+# 本场每十回合频率达到职业的多少倍才突出，待用数据校准
+frequency_prominent_ratio = 1.5
 # AWP 超过此距离的未开镜射击参与检测（米，待用数据校准）
 awp_noscope_max_distance_m = 5.0
 # 单次交火压枪评价从第 4 发开始，recoil_index 从 0 起算

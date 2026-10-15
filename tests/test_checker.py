@@ -298,6 +298,11 @@ def test_real_mirage_submissions_regression():
     rep = ProblemReport.model_validate(data["problem_report"])
     valid = parse_submission(json.loads((FIXTURES / "mirage_submission_valid.json").read_text(encoding="utf-8")))
     invalid = parse_submission(json.loads((FIXTURES / "mirage_submission_invalid.json").read_text(encoding="utf-8")))
+    # 007 的历史合法样例含 weapon_not_ready；008 将它降为背景且默认停用。
+    legacy = check(valid, mm, rep, data["digest"])
+    assert [(v.path, v.code) for v in legacy] == [
+        ("findings[2].problem", "context_only"), ("findings[2].problem", "disabled_problem")]
+    valid.findings = [f for f in valid.findings if f.problem != "weapon_not_ready"]
     assert check(valid, mm, rep, data["digest"]) == []
     v = check(invalid, mm, rep, data["digest"])
     assert [x.code for x in v] == ["unknown_target", "precondition_failed", "number_not_found", "phrase_unsupported"]
