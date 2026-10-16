@@ -198,3 +198,15 @@ def test_summary_loop_valid_repair_prune_replace_and_unwrap():
     pruned = diagnose_summary(summary, cfg, baseline, FakeProvider([bad_extra]))
     assert len(pruned.submission.findings) == 1
     assert pruned.dropped[0].path == "findings[1]"
+
+
+def test_every_match_claim_checked_against_coverage():
+    # 实测（2026-10-16 正式汇总）："压枪差……每一场都有出现"，实际 12/21 场
+    summary, baseline, cfg = sample()   # slow_reaction 只在 M1、M2 命中，共 3 场
+    digest = build_summary_digest(summary, baseline, cfg)
+    def codes(analysis):
+        sub = parse_submission(submission(analysis=analysis))
+        return [v for v in check_summary_submission(sub, summary, digest, cfg, []) if v.code == "phrase_unsupported"]
+    bad = codes("出枪慢每一场都有出现。")
+    assert bad and "2/3" in bad[0].message
+    assert codes("出枪慢出现在 {freq.slow_reaction.matches_with_hits} 场。") == []

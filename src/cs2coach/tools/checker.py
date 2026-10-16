@@ -89,6 +89,7 @@ _TEXT_MATCH = re.compile(r"第\s*(\d+)\s*场")
 _WEAPONS = re.compile("|".join(re.escape(s) for s in sorted(WEAPON_LABELS.values(), key=len, reverse=True)), re.I)
 _LATIN = re.compile(r"[A-Za-z][A-Za-z0-9]*(?:[ -]+[A-Za-z0-9]+)*")
 _BOOK = re.compile(r"《([^》]+)》")
+_EVERY_MATCH = re.compile(r"每一场|每场都|场场|所有场次|全部场次|每一局都|每局都")
 _EXPLICIT_MATCH = re.compile(r"(?<![A-Za-z0-9_])M\d+(?![A-Za-z0-9_:])")
 # 具体的中文数字加量词；单独的“几次”“这几次”是模糊说法，不算数字，“十几次”“二十几发”算
 _CHINESE_NUMBER = re.compile(r"(?:[两二三四五六七八九十百]+几?|几[十百]+几?)(?:次|发|枪|秒|米|回合|人|场|处|名)")
@@ -287,7 +288,8 @@ def _summary_resolver(summary):
 def _check_entries(sub: ReportSubmission, cfg: dict,
                    resolve, disabled: set[str], slot_factory, summary_count: int = 0,
                    match_maps: dict[str, str] | None = None,
-                   single_map: str | None = None, *, candidates=None) -> list[Violation]:
+                   single_map: str | None = None, *, candidates=None,
+                   match_coverage: dict[str, int] | None = None) -> list[Violation]:
     """candidates(problem) 返回 (该问题全部命中 target, finding 可选的前几名)；None 表示不限（020）。"""
     out: list[Violation] = []
     other_paths = []
@@ -369,6 +371,13 @@ def _check_entries(sub: ReportSubmission, cfg: dict,
                     number = int(match[1])
                     if not 1 <= number <= summary_count:
                         add(text_path, "match_mismatch", f"文字提到第 {number} 场，但汇总只有 {summary_count} 场。")
+                # "每一场都有"要求这个问题在每场都出现（实测：12/21 场被写成"每一场都有出现"）
+                every = _EVERY_MATCH.search(entry.analysis)
+                covered = (match_coverage or {}).get(pid)
+                if every and covered is not None and covered < summary_count:
+                    add(text_path, "phrase_unsupported",
+                        f"“{every.group()}”与数据不符：{PROBLEMS[pid].label if pid in PROBLEMS else pid}出现在 "
+                        f"{covered}/{summary_count} 场。请写成 {{freq.{pid}.matches_with_hits}} 场。")
             out.extend(_slot_violations(entry.analysis, text_path,
                                         slot_factory(pid, entry.targets), cfg))
             if group == "findings":
@@ -484,4 +493,5 @@ def check_summary_submission(sub: ReportSubmission, summary, digest: str, cfg: d
     return (_check_overview(sub, digest, cfg, slots, _SUMMARY_ID, len(summary.matches), set(match_maps.values()))
             + _check_entries(sub, cfg, _summary_resolver(summary), disabled,
                              slots, len(summary.matches), match_maps,
-                             candidates=lambda pid: _summary_candidates(summary, pid, cfg)))
+                             candidates=lambda pid: _summary_candidates(summary, pid, cfg),
+                             match_coverage={r.problem: r.matches_with_hits for r in summary.frequency}))
