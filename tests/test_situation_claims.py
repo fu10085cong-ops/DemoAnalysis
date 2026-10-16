@@ -13,9 +13,9 @@ CFG = load_config()
 
 
 def test_situation_sentence():
-    assert situation_text("CT", 1, 3, True, 47.2) == "CT 方，1v3 残局，对方已下包、回防，回合第 47 秒"
-    assert situation_text("T", 3, 1, True, 70) == "T 方，3v1，人数占优，已下包、守包，回合第 70 秒"
-    assert situation_text("T", 4, 5, False, 12) == "T 方，4v5，人数劣势，未下包，回合第 12 秒"
+    assert situation_text("CT", 1, 3, True, 47.2) == "CT 方，1v3 残局，对方已下包、回防"
+    assert situation_text("T", 3, 1, True, 70) == "T 方，3v1，人数占优，已下包、守包"
+    assert situation_text("T", 4, 5, False, 12) == "T 方，4v5，人数劣势，未下包"
     assert situation_text("CT", 5, 5, None, None) == "CT 方，5v5"
     assert situation_text(None, 5, 5, False, 3) is None
 
@@ -86,4 +86,4 @@ def test_situation_slot_renders_for_moments_and_records():
     resolve = make_slot_resolver(moments(), report(), (1, 0), [], None, targets=("R2-kill1", "R9"))
     out, errors = render_slots("{R2-kill1.situation}；{R9.situation}", resolve)
     assert errors == []
-    assert out == "CT 方，1v3 残局，对方已下包、回防，回合第 10 秒；T 方，2v4，人数劣势，未下包，回合第 89 秒"
+    assert out == "CT 方，1v3 残局，对方已下包、回防；T 方，2v4，人数劣势，未下包"

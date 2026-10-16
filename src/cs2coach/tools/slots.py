@@ -185,8 +185,7 @@ def situation_text(side, own, enemy, planted, round_time) -> str | None:
         parts.append("已下包、守包" if side == "T" else "对方已下包、回防")
     elif planted is False:
         parts.append("未下包")
-    if round_time is not None:
-        parts.append(f"回合第 {round_time:.0f} 秒")
+    # 不含回合时间：AI 常同时写 round_time，放在一起会重复（评测实测"回合第24 秒，T 方……回合第 24 秒"）
     return "，".join(parts)
 
 
@@ -450,8 +449,8 @@ def suggest_slots(resolver, numbers: list[str], limit: int = 2) -> dict[str, lis
 
 
 MOMENT_GUIDE = [
-    ("situation", "**局面完整句**：阵营、人数、是否下包（守包 / 回防）、回合第几秒。讲局势时优先用它，不要自己从人数和阵营推",
-     "CT 方，1v3 残局，对方已下包、回防，回合第 47 秒"),
+    ("situation", "**局面完整句**：阵营、人数、是否下包（守包 / 回防）；不含时间，需要时另写 round_time。"
+     "讲局势时优先用它，不要自己从人数和阵营推", "CT 方，1v3 残局，对方已下包、回防"),
     ("round", "回合", "第 5 回合"), ("side", "阵营", "CT"), ("people", "交火时双方存活人数", "5v4"),
     ("round_time", "回合开始后的秒数，写作“回合第{…round_time}”", "24 秒"),
     ("place / opponent_place", "自己 / 对手所在位置（游戏地名）", "LongA"), ("distance", "与对手的距离", "19 米"),
