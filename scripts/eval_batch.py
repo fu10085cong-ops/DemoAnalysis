@@ -183,6 +183,23 @@ def render_summary(rows: list[dict[str, Any]], label: str, started_at: str) -> s
     return "\n".join(lines) + "\n"
 
 
+def prefetch_map_data() -> str | None:
+    """并行前先下载、解压地图碰撞网格（第一次使用时）。
+
+    awpy 在解压完成后才写"已完成"标记；多个进程同时第一次下载时，后解压的进程会覆盖
+    其他进程正在读的 .mesh，读到不完整的文件后视野计算失败。返回失败原因，成功返回 None。
+    """
+    try:
+        from awpy import data
+
+        maps = data.available_maps()
+        if maps:
+            data.mesh_path(maps[0])  # 解压整个 geometry 包，之后各进程只读
+        return None
+    except Exception as exc:  # 没有网络等：各 case 自己再试，视野不可用时报告里会注明
+        return f"{type(exc).__name__}: {exc}"
+
+
 def confirm(cases: list[dict[str, Any]], provider: str | None, model: str | None,
             ask: Callable[[str], str] = input) -> bool:
     who = f"{provider or '配置默认的服务'} / {model or '配置默认的模型'}"
@@ -191,7 +208,7 @@ def confirm(cases: list[dict[str, Any]], provider: str | None, model: str | None
 
 
 def main(argv: list[str] | None = None, runner: Callable[[list[str]], int] | None = None,
-         ask: Callable[[str], str] = input) -> int:
+         ask: Callable[[str], str] = input, prefetch: Callable[[], str | None] = prefetch_map_data) -> int:
     from cs2coach.console import ensure_utf8_stdio
     ensure_utf8_stdio()
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -216,6 +233,9 @@ def main(argv: list[str] | None = None, runner: Callable[[list[str]], int] | Non
     if not args.yes and not confirm(cases, args.provider, args.model, ask):
         print("已取消。")
         return 1
+    error = prefetch()
+    if error:
+        print(f"警告: 地图数据预下载失败（{error}），各 case 会各自重试", file=sys.stderr)
     started_at = datetime.now().strftime("%Y%m%d-%H%M%S")
     out_root = args.out / f"{started_at}_{case_dir_name(args.label)}"
     rows = run_batch(cases, out_root, args.provider, args.model, runner or subprocess_runner, jobs=jobs)

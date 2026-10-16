@@ -140,6 +140,27 @@ def test_build_summary_skips_one_failed_match(tmp_path, monkeypatch):
     assert len(result.skipped) == 1 and "覆盖率不足" in result.skipped[0].reason
 
 
+def test_build_summary_does_not_cache_match_without_visibility(tmp_path, monkeypatch):
+    from cs2coach import cache
+    demo = tmp_path / "a.dem"
+    demo.write_bytes(b"demo")
+    refs = [DemoRef(path=demo, member=None, match_id="a", map_name="de_dust2", player_name="alice")]
+    monkeypatch.setattr("cs2coach.summary.aggregate.cached",
+                        lambda *args, **kw: cache.cached(*args, cache_dir=tmp_path / "c", **kw))
+    monkeypatch.setattr("cs2coach.summary.aggregate.resolve_demo", lambda path, member=None: path)
+    monkeypatch.setattr("cs2coach.summary.aggregate.parse_match", lambda path, cfg: SimpleNamespace(
+        require_player=lambda sid, coverage: SimpleNamespace(steamid=sid)))
+    reasons = iter(["ValueError: parse error: mesh: truncated body", None])
+    monkeypatch.setattr("cs2coach.features.moments.find_moments", lambda *args:
+                        make_mm(rounds=10).model_copy(update={"visibility_unavailable": next(reasons)}))
+    monkeypatch.setattr("cs2coach.summary.aggregate.detect_problems", lambda *args: report("slow_reaction", 1))
+    monkeypatch.setattr("cs2coach.summary.aggregate.match_score", lambda *args: (6, 4))
+    build_summary(A, refs, load_config(), None)
+    assert not list((tmp_path / "c").glob("*.pkl.gz"))       # 视野失败的结果不写入
+    build_summary(A, refs, load_config(), None)
+    assert len(list((tmp_path / "c").glob("*.pkl.gz"))) == 1  # 重新计算成功后写入
+
+
 def test_summary_cli_writes_and_archives_files(tmp_path, monkeypatch):
     mm = make_mm(rounds=10)
     sample = aggregate_matches(A, [(ref("a"), mm, report("slow_reaction", 1), (6, 4))],

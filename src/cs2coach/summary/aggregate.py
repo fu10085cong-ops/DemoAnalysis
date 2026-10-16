@@ -144,9 +144,11 @@ def build_summary(steamid: int, refs: list[DemoRef], cfg: dict,
                 mm = find_moments(match, player.steamid, cfg)
                 return mm, detect_problems(mm, baseline, cfg), match_score(match, steamid)
 
-            # 同一份 demo、配置和代码不变时直接读缓存（汇总 21 场从约 5 分钟降到十几秒）
+            # 同一份 demo、配置和代码不变时直接读缓存（汇总 21 场从约 5 分钟降到十几秒）；
+            # 视野计算失败（如地图网格下载不完整）的结果不写入，下次重新计算
             key = cache_key(Path(ref.path), ref.member, steamid, cfg)
-            mm, report, score = cached(key, analyse, enabled=use_cache)
+            mm, report, score = cached(key, analyse, enabled=use_cache,
+                                       store=lambda value: value[0].visibility_unavailable is None)
         except Exception as exc:  # 单场坏数据不能中断其余比赛
             skipped.append(SkippedDemo(path=ref.path, member=ref.member,
                                        match_id=ref.match_id, reason=str(exc)))

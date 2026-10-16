@@ -32,3 +32,15 @@ def test_corrupt_file_is_rebuilt_and_missing_demo_not_cached(tmp_path):
     calls = []
     assert cached(None, lambda: calls.append(1) or 5, tmp_path / "c") == 5
     assert cached(None, lambda: calls.append(1) or 5, tmp_path / "c") == 5 and len(calls) == 2
+
+
+def test_result_rejected_by_store_is_not_written(tmp_path):
+    demo = tmp_path / "a.dem"
+    demo.write_bytes(b"x")
+    key = cache_key(demo, None, 7, {})
+    calls = []
+    build = lambda: calls.append(1) or {"ok": len(calls) > 1}  # noqa: E731
+    keep = lambda value: value["ok"]  # noqa: E731
+    assert cached(key, build, tmp_path / "c", store=keep) == {"ok": False}  # 不写入
+    assert cached(key, build, tmp_path / "c", store=keep) == {"ok": True}   # 重新计算后写入
+    assert cached(key, build, tmp_path / "c", store=keep) == {"ok": True} and len(calls) == 2

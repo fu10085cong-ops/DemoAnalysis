@@ -92,10 +92,15 @@ def test_runner_exception_is_recorded(tmp_path):
 def test_main_requires_confirmation_and_writes_under_eval_root(tmp_path):
     path = write_set(tmp_path, SET)
     calls = []
-    assert eb.main(["--set", str(path), "--out", str(tmp_path / "评测")], fake_runner(calls), ask=lambda _: "n") == 1
-    assert calls == []  # 没确认就不跑
-    code = eb.main(["--set", str(path), "--out", str(tmp_path / "评测"), "--label", "试 跑", "--yes"], fake_runner(calls))
+    prefetch = lambda: calls.append("prefetch")  # noqa: E731
+    assert eb.main(["--set", str(path), "--out", str(tmp_path / "评测")], fake_runner(calls), ask=lambda _: "n",
+                   prefetch=prefetch) == 1
+    assert calls == []  # 没确认就不跑，也不下载
+    code = eb.main(["--set", str(path), "--out", str(tmp_path / "评测"), "--label", "试 跑", "--yes"], fake_runner(calls),
+                   prefetch=prefetch)
     assert code == 2  # 有一个 case 失败
+    assert calls[0] == "prefetch" and len(calls) == 3  # 地图数据在所有 case 之前下载
+    calls = calls[1:]
     [run_dir] = list((tmp_path / "评测").iterdir())
     assert run_dir.name.endswith("_试_跑") and (run_dir / "summary.md").is_file()
     assert all(eb.Path(c[c.index("--out") + 1]).is_relative_to(run_dir) for c in calls)  # 不写正式报告目录
@@ -122,3 +127,12 @@ def test_only_filter_and_parallel_keep_order(tmp_path):
     calls = []
     rows = eb.run_batch(cases, tmp_path / "run", None, None, fake_runner(calls), jobs=2)
     assert [r["name"] for r in rows] == ["单场 A", "多场 B"] and len(calls) == 2
+
+
+def test_prefetch_failure_does_not_stop_batch(tmp_path, capsys):
+    path = write_set(tmp_path, SET)
+    calls = []
+    code = eb.main(["--set", str(path), "--out", str(tmp_path / "评测"), "--yes"], fake_runner(calls),
+                   prefetch=lambda: "URLError: 没有网络")
+    assert code == 2 and len(calls) == 2
+    assert "地图数据预下载失败（URLError: 没有网络）" in capsys.readouterr().err

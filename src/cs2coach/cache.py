@@ -47,8 +47,12 @@ def cache_key(demo: Path, member: str | None, steamid: int, cfg: dict[str, Any])
     return hashlib.sha256(json.dumps(parts, sort_keys=True, default=str, ensure_ascii=False).encode()).hexdigest()
 
 
-def cached(key: str | None, build: Callable[[], Any], cache_dir: Path = CACHE_DIR, enabled: bool = True) -> Any:
-    """命中则读取，否则计算并写入；读取失败（文件损坏、版本不兼容）时重新计算。key 为 None 时不缓存。"""
+def cached(key: str | None, build: Callable[[], Any], cache_dir: Path = CACHE_DIR, enabled: bool = True,
+           store: Callable[[Any], bool] | None = None) -> Any:
+    """命中则读取，否则计算并写入；读取失败（文件损坏、版本不兼容）时重新计算。key 为 None 时不缓存。
+
+    store：计算结果不满足时只返回、不写入（例如视野计算临时失败的结果，下次应重新计算）。
+    """
     if key is None:
         return build()
     path = cache_dir / f"{key}.pkl.gz"
@@ -59,7 +63,7 @@ def cached(key: str | None, build: Callable[[], Any], cache_dir: Path = CACHE_DI
         except Exception:
             path.unlink(missing_ok=True)
     value = build()
-    if enabled:
+    if enabled and (store is None or store(value)):
         cache_dir.mkdir(parents=True, exist_ok=True)
         tmp = path.with_suffix(".tmp")
         with gzip.open(tmp, "wb", compresslevel=1) as f:
