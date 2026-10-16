@@ -139,9 +139,17 @@ def _training_violations(text: str, path: str, cfg: dict) -> list[Violation]:
         if match[1].casefold() not in allowed_labels:
             out.append(Violation(path=path, code="unknown_drill",
                 message=f"《{match[1]}》不在练习图白名单中。"))
+    # 练习图的内部编号（如 5e_aim）只能放在 drills 字段里；文字中要写显示名称
+    for drill in cfg["training"]["drills"]:
+        pattern = re.compile(rf"(?<![A-Za-z0-9_]){re.escape(drill['id'])}(?![A-Za-z0-9_])", re.I)
+        if pattern.search(text):
+            out.append(Violation(path=path, code="unknown_drill",
+                message=f"训练文字中写了练习图的内部编号 {drill['id']}；请写名称「{drill['label']}」。"))
+            text = pattern.sub(" ", text)
+    text = _PEOPLE.sub(" ", text)  # 3v2 这类人数写法不是英文名称
     for match in _LATIN.finditer(text):
         token = match.group().strip()
-        if token == "E" and match.start() > 0 and text[match.start() - 1] == "5":
+        if token.casefold() == "e" and match.start() > 0 and text[match.start() - 1] == "5":
             continue
         if token.casefold() not in allowed and not any(match.start() >= b.start(1) and match.end() <= b.end(1)
                                                       for b in _BOOK.finditer(text)):

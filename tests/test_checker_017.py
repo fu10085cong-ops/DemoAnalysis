@@ -121,3 +121,16 @@ def test_016_local_submission_regression():
     assert any("M12 实际地图是 de_dust2" in v.message for v in violations)
     assert any("68% 不是数据中的百分比" in v.message for v in violations)
     assert any("Deagle Duel" in v.message for v in violations)
+
+
+def test_training_text_people_counts_platform_and_drill_ids():
+    # DeepSeek 实测原文（2026-10-16）：人数写法、5E/5e 平台名不应误判；内部编号要提示写名称
+    from cs2coach.tools.checker import _training_violations
+    cfg = load_config()
+    ok = ["之后在 3v2、4v2 局面练习先控图。", "用 5E/完美预瞄训练图练 15 分钟。", "在 5e 的练枪图里练急停。",
+          "在 5E 的练枪图做移动、急停、短点射。"]
+    for text in ok:
+        assert _training_violations(text, "training", cfg) == [], text
+    bad = _training_violations("再进 5e_aim 做移动中保持准星贴墙的练习。", "training", cfg)
+    assert len(bad) == 1 and "内部编号 5e_aim" in bad[0].message and "5E 的练枪图" in bad[0].message
+    assert _training_violations("在 Deagle Duel 练习。", "training", cfg)  # 编造的英文地图名仍然拒绝
