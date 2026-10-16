@@ -224,6 +224,22 @@ class AimStats(BaseModel):
     hits: int
 
 
+class LobbyLine(BaseModel):
+    steamid: int
+    name: str
+    team: int
+    is_target: bool
+    kills: int
+    deaths: int
+    accuracy_pct: float | None
+    aim: AimStats | None
+    opening_kills: int
+    opening_deaths: int
+    trade_kills: int
+    flash_assists: int
+    utility_damage: int
+
+
 class MatchMoments(BaseModel):
     demo: str
     map_name: str
@@ -236,6 +252,7 @@ class MatchMoments(BaseModel):
     missed_trades: list[MissedTrade]
     excluded: list[Excluded]  # 不参与分析的记录（接管 bot、冻结期自杀等）及原因
     aim_stats: AimStats | None = None
+    lobby: list[LobbyLine] = []
     # 视野计算用的 awpy-data 版本；为 None 时视野相关指标全部为空，原因见 visibility_unavailable
     visibility_data_version: str | None = None
     visibility_unavailable: str | None = None

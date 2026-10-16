@@ -150,6 +150,63 @@ min_aim_problems = 2
 # 每类问题或亮点在 AI 摘要中展示的代表性命中上限
 representatives_per_problem = 3
 
+[report.card]
+grade_cutoffs = [20, 40, 60, 80]
+min_ranked = 6
+mark_top = 3
+highlight_priority = ["won_duel_seen_first", "good_trade", "flash_assist"]
+highlight_show_ttd_max_ms = 400
+note = "出枪速度、预瞄、急停、压枪按地图几何判断'看见'，数值和对战平台不同；同场排名可以直接比较。补枪按 {trade_window} 秒窗口统计。"
+
+[[report.card.dimensions]]
+key = "headshot"
+label = "爆头"
+field = "aim.headshot_accuracy_pct"
+direction = "higher"
+problem = ""
+
+[[report.card.dimensions]]
+key = "counter_strafing"
+label = "急停"
+field = "aim.counter_strafing_pct"
+direction = "higher"
+problem = "shot_while_moving"
+
+[[report.card.dimensions]]
+key = "crosshair"
+label = "预瞄"
+field = "aim.crosshair_placement_deg"
+direction = "lower"
+problem = "poor_crosshair_placement"
+
+[[report.card.dimensions]]
+key = "ttd"
+label = "出枪速度"
+field = "aim.time_to_damage_ms"
+direction = "lower"
+problem = "slow_reaction"
+
+[[report.card.dimensions]]
+key = "spotted"
+label = "看到人后的命中"
+field = "aim.spotted_accuracy_pct"
+direction = "higher"
+problem = ""
+
+[[report.card.dimensions]]
+key = "spray"
+label = "压枪"
+field = "aim.spray_accuracy_pct"
+direction = "higher"
+problem = "spray_control"
+
+[[report.card.dimensions]]
+key = "utility"
+label = "道具伤害"
+field = "utility_damage"
+direction = "higher"
+problem = "dry_peek_with_utility"
+
 # 各武器最高移动速度（u/s，规范名）。标"实测"的已用 24 个样本 demo 的速度分布核对（95/99 分位恰好等于该值），
 # 其余样本量不够，取游戏数值
 [counter_strafe.max_speed]

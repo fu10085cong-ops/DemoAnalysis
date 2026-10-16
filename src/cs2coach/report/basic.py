@@ -100,14 +100,19 @@ def _aim_table(mm: MatchMoments, baseline: dict[str, Any] | None) -> list[str]:
 
 
 def render_basic_report(mm: MatchMoments, sections: list[Section], frequency: list[FrequencyRow], score,
-                        baseline: dict[str, Any] | None) -> str:
+                        baseline: dict[str, Any] | None, cfg: dict,
+                        problems: ProblemReport) -> str:
     """基础版报告正文；数字全部来自程序，不含 AI 文字。"""
     kills = sum(m.kind == "kill" for m in mm.moments)
     deaths = sum(m.kind == "death" for m in mm.moments)
     assists = sum(m.kind == "assist" for m in mm.moments)
     lines = [f"# 基础复盘：{mm.player_name} · {mm.map_name}", "",
              f"比分 {score[0]}:{score[1]} · 击杀 {kills}、死亡 {deaths}、关键助攻 {assists} · 程序生成，不含 AI 分析", "",
-             "## 整场枪法", "", *_aim_table(mm, baseline), "", "## 突出问题", ""]
+             ]
+    if mm.lobby:
+        from cs2coach.report.card import render_front
+        lines.extend(render_front(mm, problems, frequency, cfg, baseline))
+    lines.extend(["## 整场枪法", "", *_aim_table(mm, baseline), "", "## 突出问题", ""])
     chosen = {r.problem for r in choose_problems(frequency)}
     if not chosen:
         lines.append("本场没有比职业频率偏多的问题。")

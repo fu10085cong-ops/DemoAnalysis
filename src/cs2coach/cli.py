@@ -243,6 +243,9 @@ def _analyze(args: argparse.Namespace) -> int:
         print(f"警告: {w}", file=sys.stderr)
 
     from cs2coach.features.moments import find_moments
+    from cs2coach.features.lobby import lobby_lines
+    from cs2coach.features.visibility import Sight
+    from cs2coach.features.aim import shot_targets
     from cs2coach.baseline import load_baseline
     from cs2coach.features.problems import detect_problems, problem_frequency
     from cs2coach.report.console import format_moments
@@ -251,7 +254,11 @@ def _analyze(args: argparse.Namespace) -> int:
 
     m = match.meta
     print(f"地图 {m.map_name}，{m.tick_rate} tick，{len(match.rounds)} 个回合，服务器 {m.server_name}\n")
-    moments = find_moments(match, player.steamid, cfg)
+    sight = Sight(match, cfg)
+    shots_with_targets = match.shots.join(shot_targets(match, cfg)[["target", "target_angle"]])
+    moments = find_moments(match, player.steamid, cfg, sight=sight, shots_with_targets=shots_with_targets)
+    moments.lobby = lobby_lines(match, player.steamid, cfg, sight, target_moments=moments,
+                                shots_with_targets=shots_with_targets)
     print(format_moments(moments))
 
     folder = _output_folder(args.out, demo, player.name, player.steamid)
@@ -275,7 +282,7 @@ def _analyze(args: argparse.Namespace) -> int:
     names = {sid: p.name for sid, p in match.players.items()}
     basic = folder / "basic_report.md"
     basic.write_text(render_basic_report(moments, build_l0(moments, detected, frequencies, cfg, names), frequencies,
-                                         match_score(match, player.steamid), baseline), encoding="utf-8")
+                                         match_score(match, player.steamid), baseline, cfg, detected), encoding="utf-8")
     print(f"已写入 {basic}")
     if not args.ai:
         print("加上 --ai 生成 AI 复盘报告")

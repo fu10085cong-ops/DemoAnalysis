@@ -202,7 +202,7 @@ def test_cli_writes_moments_and_facts_without_ai(tmp_path, monkeypatch):
     mm = find_moments(m, A, CFG)
     monkeypatch.setattr("cs2coach.cli.resolve_demo", lambda path, member=None: path)
     monkeypatch.setattr("cs2coach.parsing.match.parse_match", lambda path, cfg: m)
-    monkeypatch.setattr("cs2coach.features.moments.find_moments", lambda match, sid, cfg: mm)
+    monkeypatch.setattr("cs2coach.features.moments.find_moments", lambda match, sid, cfg, **kwargs: mm)
     assert main(["analyze", "test.dem", "--player", str(A), "--out", str(tmp_path)]) == 0
     folder = tmp_path / f"alice_{A}" / "test"
     expected = folder / "facts.md"
@@ -294,7 +294,8 @@ def test_basic_report_is_program_only(tmp_path):
     mm = find_moments(match, A, CFG)
     problems = detect_problems(mm, None, CFG)
     frequency = problem_frequency(problems, mm, None, CFG)
-    text = render_basic_report(mm, build_l0(mm, problems, frequency, CFG, {}), frequency, (1, 0), None)
+    text = render_basic_report(mm, build_l0(mm, problems, frequency, CFG, {}), frequency, (1, 0), None,
+                               CFG, problems)
     assert text.startswith("# 基础复盘：") and "程序生成，不含 AI 分析" in text
     assert "## 整场枪法" in text and "## 突出问题" in text
     assert "{" not in text  # 没有任何占位符

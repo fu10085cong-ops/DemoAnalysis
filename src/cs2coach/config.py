@@ -22,7 +22,43 @@ def load_config(path: Path | None = None) -> dict[str, Any]:
     _validate_checker(cfg["checker"])
     _validate_training(cfg["training"])
     _validate_visibility(cfg["visibility"])
+    _validate_report_card(cfg["report"]["card"])
     return cfg
+
+
+def _validate_report_card(card: dict[str, Any]) -> None:
+    from cs2coach.features.problems import PROBLEMS
+
+    cutoffs = card["grade_cutoffs"]
+    if (not isinstance(cutoffs, list) or len(cutoffs) != 4 or
+            any(type(x) not in (int, float) or not math.isfinite(x) for x in cutoffs) or
+            not 0 < cutoffs[0] < cutoffs[1] < cutoffs[2] < cutoffs[3] < 100):
+        raise ConfigError("配置项 report.card.grade_cutoffs 应为四个递增的百分位")
+    for key in ("min_ranked", "mark_top"):
+        if type(card[key]) is not int or card[key] < 1:
+            raise ConfigError(f"配置项 report.card.{key} 应为正整数")
+    limit = card["highlight_show_ttd_max_ms"]
+    if type(limit) not in (int, float) or not math.isfinite(limit) or limit < 0:
+        raise ConfigError("配置项 report.card.highlight_show_ttd_max_ms 应为非负有限数")
+    priorities = card["highlight_priority"]
+    if (not isinstance(priorities, list) or len(set(priorities)) != len(priorities) or
+            any(pid not in PROBLEMS or PROBLEMS[pid].category != "highlight" for pid in priorities)):
+        raise ConfigError("配置项 report.card.highlight_priority 应为唯一的高光问题编号数组")
+    note = card["note"]
+    if not isinstance(note, str) or not note or "{trade_window}" not in note or note.count("{") != 1 or note.count("}") != 1:
+        raise ConfigError("配置项 report.card.note 只允许包含 {trade_window} 占位符")
+    dimensions = card["dimensions"]
+    if not isinstance(dimensions, list) or not dimensions or len({d.get("key") for d in dimensions if isinstance(d, dict)}) != len(dimensions):
+        raise ConfigError("配置项 report.card.dimensions 应为编号唯一的表数组")
+    allowed_fields = {"utility_damage", "aim.headshot_accuracy_pct", "aim.counter_strafing_pct",
+                      "aim.crosshair_placement_deg", "aim.time_to_damage_ms", "aim.spotted_accuracy_pct",
+                      "aim.spray_accuracy_pct"}
+    for i, d in enumerate(dimensions):
+        if (not isinstance(d, dict) or set(d) != {"key", "label", "field", "direction", "problem"} or
+                any(not isinstance(d[k], str) or not d[k] for k in ("key", "label")) or
+                d["field"] not in allowed_fields or d["direction"] not in ("higher", "lower") or
+                d["problem"] and d["problem"] not in PROBLEMS):
+            raise ConfigError(f"配置项 report.card.dimensions[{i}] 无效")
 
 
 def _validate_visibility(cfg: dict[str, Any]) -> None:

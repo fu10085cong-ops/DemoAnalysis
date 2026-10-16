@@ -34,9 +34,13 @@ def render_diagnosis(d: Diagnosis, mm: MatchMoments, names: Mapping[int, str],
     labels = drill_labels(cfg or load_config())
     by_id = {m.id: m for m in mm.moments}
     lines = [f"# 复盘报告：{mm.player_name} · {mm.map_name}", "",
-             f"比分 {d.score[0]}:{d.score[1]} · 模型 {d.provider} / {d.model}", "",
+             f"比分 {d.score[0]}:{d.score[1]} · 模型 {d.provider} / {d.model}", ""]
+    if mm.lobby:
+        from cs2coach.report.card import render_front
+        lines.extend(render_front(mm, d.problems, d.frequency, cfg or load_config(), baseline))
+    lines.extend([
              *([absent_rounds_note(mm.absent_rounds), ""] if mm.absent_rounds else []),
-             "## 总览", "", rendered["overview"], "", "## 突出问题", ""]
+             "## 总览", "", rendered["overview"], "", "## 突出问题", ""])
     prominent = [row for row in d.frequency if row.prominent]
     if prominent:
         lines.extend(frequency_table(prominent))

@@ -32,10 +32,12 @@ from cs2coach.parsing.weapons import is_gun
 from cs2coach.parsing.models import Round, Team
 
 
-def find_moments(match: MatchData, steamid: int, cfg: dict[str, Any], sight: Sight | None = None) -> MatchMoments:
+def find_moments(match: MatchData, steamid: int, cfg: dict[str, Any], sight: Sight | None = None,
+                 shots_with_targets: pd.DataFrame | None = None) -> MatchMoments:
     """sight：可注入（测试用）；默认按地图加载 awpy 的地图网格。"""
     p = _Params(match, cfg)
-    p.shots = match.shots.join(shot_targets(match, cfg)[["target", "target_angle"]])
+    p.shots = (shots_with_targets if shots_with_targets is not None else
+               match.shots.join(shot_targets(match, cfg)[["target", "target_angle"]]))
     p.sight = sight if sight is not None else Sight(match, cfg)
     k = match.kills
     moments: list[Moment] = []

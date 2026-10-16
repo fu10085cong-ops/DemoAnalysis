@@ -29,7 +29,7 @@ def test_rerun_moves_both_ai_files_and_keeps_program_outputs(tmp_path, monkeypat
     mm = find_moments(match, A, cfg)
     monkeypatch.setattr("cs2coach.cli.resolve_demo", lambda path, member=None: tmp_path / "inside.dem")
     monkeypatch.setattr("cs2coach.parsing.match.parse_match", lambda path, config: match)
-    monkeypatch.setattr("cs2coach.features.moments.find_moments", lambda *args: mm)
+    monkeypatch.setattr("cs2coach.features.moments.find_moments", lambda *args, **kwargs: mm)
     folder = tmp_path / f"alice_{A}" / "inside"
     folder.mkdir(parents=True)
     stamp = 1792116840

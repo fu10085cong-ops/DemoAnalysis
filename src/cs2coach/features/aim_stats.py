@@ -50,10 +50,10 @@ def aim_stats(match: MatchData, sid: int, cfg: dict[str, Any], shots: pd.DataFra
                      "stopped": (speed / mx < cs["accurate_speed_ratio"]) if speed is not None and mx else None})
     sh = pd.DataFrame(rows, columns=["tick", "weapon", "seen", "hit", "crouched", "stopped"])
 
-    seen = sh[sh["seen"]]
-    rifle_cs = seen[seen["weapon"].isin(RIFLES) & ~seen["crouched"] & seen["stopped"].notna()]
+    seen = sh.loc[sh["seen"].astype(bool)]
+    rifle_cs = seen[seen["weapon"].isin(RIFLES) & ~seen["crouched"].astype(bool) & seen["stopped"].notna()]
     spray = _spray_shots(sh, rate, ac)
-    spray = spray[spray["seen"] & spray["weapon"].isin(RIFLES)]
+    spray = spray.loc[spray["seen"].astype(bool) & spray["weapon"].isin(RIFLES)]
 
     d = match.damages
     gun_hits = d[(d["attacker"] == sid).fillna(False) & (d["attacker_team_num"] != d["victim_team_num"])

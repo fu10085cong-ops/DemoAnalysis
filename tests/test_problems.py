@@ -311,7 +311,7 @@ def test_cli_writes_problem_report_without_ai_or_baseline(tmp_path, monkeypatch,
     mm = make_mm([make_moment(tags=["weapon_not_ready"])])
     monkeypatch.setattr("cs2coach.cli.resolve_demo", lambda path, member=None: path)
     monkeypatch.setattr("cs2coach.parsing.match.parse_match", lambda path, cfg: match)
-    monkeypatch.setattr("cs2coach.features.moments.find_moments", lambda match, sid, cfg: mm)
+    monkeypatch.setattr("cs2coach.features.moments.find_moments", lambda match, sid, cfg, **kwargs: mm)
     monkeypatch.setattr("cs2coach.baseline.load_baseline", lambda: None)
     # 一旦误入 AI 分支就失败，确保无 AI 的新输出不需要密钥或外部请求。
     def unexpected(*args, **kwargs):
