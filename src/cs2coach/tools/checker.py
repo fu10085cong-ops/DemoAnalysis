@@ -47,6 +47,30 @@ PREDICATES: dict[str, Callable[[Moment], bool]] = {
     "never": lambda m: False,
     "death": lambda m: m.kind == "death",
     "kill": lambda m: m.kind == "kill",
+    # 局势说法（2026-10-16 评测：把 5v5 写成"人数劣势"、把 CT 回防写成"守包"）
+    "man_advantage": lambda m: _more(m.context.alive_own, m.context.alive_enemy),
+    "man_disadvantage": lambda m: _more(m.context.alive_enemy, m.context.alive_own),
+    "t_post_plant": lambda m: m.context.side == "T" and m.context.bomb_planted is True,
+    # "都……"类概括，配合 scope = "all" 逐个核对（评测：把一次交火的"先开枪"安到另一次上）
+    "shot_first": lambda m: m.engagement is not None and (m.engagement.first_shot_lead_s or 0) > 0,
+    "seen_first": lambda m: m.engagement is not None and (m.engagement.seen_first_lead_s or 0) > 0,
+    "no_shots": lambda m: m.engagement is not None and m.engagement.shots_fired == 0,
+    "no_hits": lambda m: m.engagement is not None and m.engagement.shots_hit == 0,
+}
+
+
+def _more(a, b) -> bool:
+    return a is not None and b is not None and a > b
+
+
+# 漏补枪记录（回合 target）也能支持的谓词；记录描述的是队友阵亡时的局面
+RECORD_PREDICATES: dict[str, Callable] = {
+    "trade": lambda r: True,
+    "planted": lambda r: r.bomb_planted is True,
+    "not_planted": lambda r: r.bomb_planted is False,
+    "man_advantage": lambda r: _more(r.alive_own, r.alive_enemy),
+    "man_disadvantage": lambda r: _more(r.alive_enemy, r.alive_own),
+    "t_post_plant": lambda r: r.side == "T" and r.bomb_planted is True,
 }
 # 与队友距离的说法：阈值来自配置，漏补枪记录的距离也算
 DISTANCE_PREDICATES = {"teammate_far", "teammate_near"}
@@ -378,14 +402,16 @@ def _check_entries(sub: ReportSubmission, cfg: dict,
                     # 只核对本条 targets 中的瞬间；只有漏补枪记录时（说的是队友阵亡）不适用
                     failing = [m.id for m in moments if not PREDICATES[require](m)]
                     if failing:
+                        detail = ("实际类型：" + "、".join(f"{m.id}={m.kind}" for m in moments)
+                                  if require in ("death", "kill") else
+                                  _describe([m for m in moments if m.id in failing], []))
                         add(text_path, "phrase_unsupported",
                             f"“{match.group()}”要求所有 target 都满足 {require}，"
-                            f"但 {'、'.join(failing)} 不满足（实际类型：{'、'.join(f'{m.id}={m.kind}' for m in moments)}）。")
+                            f"但 {'、'.join(failing)} 不满足；请分开描述每个交火。{detail}")
                     continue
                 supported = (any(PREDICATES[require](m) for m in predicate_moments)
-                             or (require == "trade" and bool(records))
-                             or (require == "planted" and any(r.bomb_planted is True for r in records))
-                             or (require == "not_planted" and any(r.bomb_planted is False for r in records)))
+                             or (require in RECORD_PREDICATES
+                                 and any(RECORD_PREDICATES[require](r) for r in records)))
                 if not supported:
                     actual = _describe(predicate_moments, records)
                     message = ("round_time_s 是已经过去的秒数，请写成\"回合第 N 秒\"。"

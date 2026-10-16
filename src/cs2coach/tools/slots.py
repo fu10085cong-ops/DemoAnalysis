@@ -23,8 +23,8 @@ METRICS = {
 MOMENT_FIELDS = ("round side people round_time place opponent_place distance health opponent_health equip opponent_equip "
                  "ttd seen_to_shot shot_to_hit opponent_ttd crosshair shots hits hit_rate speed "
                  "opponent_speed trade_delay teammate_distance first_hit_shot shot_order seen_order contact "
-                 "value threshold gap").split()
-ROUND_FIELDS = "people round_time distance count".split()
+                 "situation value threshold gap").split()
+ROUND_FIELDS = "situation people round_time distance count".split()
 MATCH_FIELDS = ("score rounds rounds_played kills deaths assists value threshold gap " + " ".join(METRICS) +
                 " " + " ".join(f"{m}_samples" for m in METRICS)).split()
 FREQ_FIELDS = "hits expected excess chance ratio matches_with_hits matches_above_pro".split()
@@ -167,6 +167,29 @@ def count_values(mm: MatchMoments) -> dict[str, int]:
     }
 
 
+def situation_text(side, own, enemy, planted, round_time) -> str | None:
+    """程序给出的局面完整句，AI 不必自己从阵营、人数、是否下包推断（评测：CT 回防被写成"守包"）。"""
+    if side not in ("T", "CT") or own is None or enemy is None:
+        return None
+    parts = [f"{side} 方"]
+    people = f"{own}v{enemy}"
+    if own == 1 and enemy >= 1:
+        parts.append(f"{people} 残局")
+    elif own > enemy:
+        parts.append(f"{people}，人数占优")
+    elif own < enemy:
+        parts.append(f"{people}，人数劣势")
+    else:
+        parts.append(people)
+    if planted is True:
+        parts.append("已下包、守包" if side == "T" else "对方已下包、回防")
+    elif planted is False:
+        parts.append("未下包")
+    if round_time is not None:
+        parts.append(f"回合第 {round_time:.0f} 秒")
+    return "，".join(parts)
+
+
 def _missing(slot, source):
     note = source.engagement.visibility_note if isinstance(source, Moment) and source.engagement else None
     return SlotError("slot_unavailable", slot, f"{slot} 没有可用值" + (f"（visibility_note={note}）" if note else "。"))
@@ -180,6 +203,7 @@ def _moment_value(m: Moment, field: str, slot: str):
         "people": (f"{c.alive_own}v{c.alive_enemy}", "text"),
         "round_time": (c.round_time_s, "round_seconds"), "distance": (c.distance, "m"),
         "place": (c.place, "text"), "opponent_place": (c.opponent_place, "text"),
+        "situation": (situation_text(c.side, c.alive_own, c.alive_enemy, c.bomb_planted, c.round_time_s), "text"),
         "health": (c.own_health_before, "count"), "opponent_health": (c.opponent_health_before, "count"),
         "equip": (c.own_equip_value, "count"), "opponent_equip": (c.opponent_equip_value, "count"),
         "ttd": (e.time_to_damage_s * 1000 if e and e.time_to_damage_s is not None else None, "ms"),
@@ -347,7 +371,9 @@ def make_slot_resolver(mm: MatchMoments | None = None, report: ProblemReport | N
             if index is not None and not 1 <= index <= len(records):
                 return SlotError("slot_unavailable", slot, f"漏补记录序号超出范围，共 {len(records)} 条。")
             record = records[(index or 1) - 1]
-            value = {"people": f"{record.alive_own}v{record.alive_enemy}" if record.alive_own is not None and record.alive_enemy is not None else None,
+            value = {"situation": situation_text(record.side, record.alive_own, record.alive_enemy,
+                                                 record.bomb_planted, record.round_time_s),
+                     "people": f"{record.alive_own}v{record.alive_enemy}" if record.alive_own is not None and record.alive_enemy is not None else None,
                      "round_time": record.round_time_s, "distance": record.distance}[field]
             return _fmt(value, "round_seconds" if field == "round_time" else "units" if field == "distance" else "text") if value is not None else _missing(slot, local_mm)
         return SlotError("unknown_slot", slot, "未知占位符对象；可用 match、pro、freq、count、瞬间或漏补回合。")
@@ -424,16 +450,18 @@ def suggest_slots(resolver, numbers: list[str], limit: int = 2) -> dict[str, lis
 
 
 MOMENT_GUIDE = [
+    ("situation", "**局面完整句**：阵营、人数、是否下包（守包 / 回防）、回合第几秒。讲局势时优先用它，不要自己从人数和阵营推",
+     "CT 方，1v3 残局，对方已下包、回防，回合第 47 秒"),
     ("round", "回合", "第 5 回合"), ("side", "阵营", "CT"), ("people", "交火时双方存活人数", "5v4"),
     ("round_time", "回合开始后的秒数，写作“回合第{…round_time}”", "24 秒"),
     ("place / opponent_place", "自己 / 对手所在位置（游戏地名）", "LongA"), ("distance", "与对手的距离", "19 米"),
     ("health / opponent_health", "交火前血量", "53"), ("equip / opponent_equip", "本回合装备价值", "4700"),
     ("ttd", "看见到第一次命中（Time to Damage）", "781 毫秒"),
-    ("seen_to_shot / shot_to_hit", "TTD 拆成的两段：看见→开枪、开枪→命中", "594 毫秒"),
+    ("seen_to_shot / shot_to_hit", "TTD 拆成的两段：看见→开枪、开枪→命中。只是 TTD 的一部分，不要拿它和 threshold 比较", "594 毫秒"),
     ("opponent_ttd", "对手从看见你到第一次打中你", "641 毫秒"),
     ("crosshair", "看见到第一次命中准星转过的角度", "21.7°"),
     ("shots / hits", "瞄准这名对手开的枪数 / 命中数", "6"), ("hit_rate", "这次交火的命中率（程序计算）", "33.3%"),
-    ("first_hit_shot", "第几发第一次命中", "第 8 发"), ("speed / opponent_speed", "接触时速度", "209 单位/秒"),
+    ("first_hit_shot", "第几发**第一次打中**。不是“弹道从第几发开始飘”", "第 8 发"), ("speed / opponent_speed", "接触时速度", "209 单位/秒"),
     ("trade_delay", "被补回或补枪用时", "1.3 秒"), ("teammate_distance", "阵亡时最近存活队友的距离", "480 单位"),
     ("shot_order / seen_order", "谁先开枪 / 谁先看见的完整句（不带句号）", "你先开枪，领先 0.27 秒"),
     ("contact", "接触类型的完整句（谁拉出、谁架点）", "自己移动进入对手视野、对手几乎静止：主动拉出，对手在架点"),
@@ -456,11 +484,13 @@ def slot_guidance(mm: MatchMoments | None = None, summary=None) -> str:
         f"### 瞬间：{{{prefix}.字段}}（只能用本条 targets 中的瞬间）",
         "| 字段 | 含义 | 显示示例 |", "|---|---|---|"]
     lines += [f"| {f} | {m} | {e} |" for f, m, e in MOMENT_GUIDE]
-    lines += ["“职业同武器 75 分位”请用 {瞬间.threshold}，它按本条问题和这次交火的武器取值；不要用 pro.*（那是整场指标）。",
+    lines += ["“职业同武器 75 分位”请用 {瞬间.threshold}，它按本条问题和这次交火的武器取值，比较对象是 {瞬间.value}"
+              "（出枪慢时就是整个 TTD），不要拿 seen_to_shot 等分段去比；不要用 pro.*（那是整场指标）。",
+              "两个交火的特征要分开写：一次先开枪、一次同时开枪，就不能写“都先开枪”。程序会核对“都……”“始终……”是否对每个交火都成立。",
         "",
         "### 漏补回合：{R9.字段}（只能用本条 targets 中的回合）",
         "count：本回合漏补次数。一个回合只有一条记录时可直接写 {R9.distance}；有多条时写 {R9[1].distance}、{R9[2].distance}。"
-        "字段：people（人数）、round_time（回合第几秒）、distance（与阵亡队友的距离，单位）。",
+        "字段：situation（队友阵亡时的局面完整句）、people（人数）、round_time（回合第几秒）、distance（与阵亡队友的距离，单位）。",
         "",
         "### 整场：{match.字段}（多场时为整批合计或各场中位数）",
         "score（比分）、rounds（总回合）、rounds_played（在场回合）、kills、deaths、assists；"

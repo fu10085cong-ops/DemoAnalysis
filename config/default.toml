@@ -348,6 +348,41 @@ pattern = "下包前|下包之前|没下包|未下包|包还没下"
 require = "not_planted"
 
 [[checker.phrases]]
+# 人数优劣的说法需有对应的人数（评测：5v5 被写成"人数劣势"）
+pattern = "人数劣势|少打多|以少打多|人数落后|人少"
+require = "man_disadvantage"
+
+[[checker.phrases]]
+pattern = "人数优势|人数领先|人数占优|多打少|以多打少"
+require = "man_advantage"
+
+[[checker.phrases]]
+# "守包"只能是 T 方下包之后；CT 在下包后是回防、拆包（评测：CT 回防被写成"守包"）
+pattern = "守包|守着包|保护炸弹"
+require = "t_post_plant"
+
+[[checker.phrases]]
+# 以下"都……"概括要求每个引用的交火都成立（评测：两次交火只有一次先开枪，却写成"都先开枪"）
+pattern = "都(?:是)?(?:你)?先开枪|(?:始终|每次)(?:都)?(?:是)?(?:你)?先开枪"
+require = "shot_first"
+scope = "all"
+
+[[checker.phrases]]
+pattern = "都(?:是)?(?:你)?先(?:看见|发现)|(?:始终|每次)(?:都)?(?:是)?(?:你)?先(?:看见|发现)"
+require = "seen_first"
+scope = "all"
+
+[[checker.phrases]]
+pattern = "都没(?:有)?(?:能)?(?:来得及)?开枪|都没(?:有)?开火|(?:始终|每次)都?没(?:有)?开枪"
+require = "no_shots"
+scope = "all"
+
+[[checker.phrases]]
+pattern = "都没(?:有)?(?:打中|命中)|都一发(?:未|没)中|(?:始终|都)(?:拿|打)不(?:到|出)伤害|(?:始终|都)没(?:有)?打出伤害|全部(?:打空|落空)"
+require = "no_hits"
+scope = "all"
+
+[[checker.phrases]]
 # round_time_s 只有已过时间，不能据此推算回合剩余时间
 pattern = "回合还剩"
 require = "never"
