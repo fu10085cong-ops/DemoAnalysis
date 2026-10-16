@@ -1,105 +1,184 @@
 # 职业基准清单：路径相对仓库根目录，Mirage p1/p2 按两份 demo 处理。
 [[demos]]
-archive = "data/demos/esl-pro-league-season-24-vitality-vs-mouz-bo5-HHVdkDbJrwRclevPphxD2-.rar"
+archive = "data/demos/pro_demo/esl-pro-league-season-24-vitality-vs-mouz-bo5-HHVdkDbJrwRclevPphxD2-.rar"
 member = "vitality-vs-mouz-m1-cache.dem"
 event = "ESL Pro League S24"
 teams = "Vitality vs MOUZ"
 map = "de_cache"
 
 [[demos]]
-archive = "data/demos/esl-pro-league-season-24-vitality-vs-mouz-bo5-HHVdkDbJrwRclevPphxD2-.rar"
+archive = "data/demos/pro_demo/esl-pro-league-season-24-vitality-vs-mouz-bo5-HHVdkDbJrwRclevPphxD2-.rar"
 member = "vitality-vs-mouz-m2-inferno.dem"
 event = "ESL Pro League S24"
 teams = "Vitality vs MOUZ"
 map = "de_inferno"
 
 [[demos]]
-archive = "data/demos/esl-pro-league-season-24-vitality-vs-mouz-bo5-HHVdkDbJrwRclevPphxD2-.rar"
+archive = "data/demos/pro_demo/esl-pro-league-season-24-vitality-vs-mouz-bo5-HHVdkDbJrwRclevPphxD2-.rar"
 member = "vitality-vs-mouz-m3-dust2.dem"
 event = "ESL Pro League S24"
 teams = "Vitality vs MOUZ"
 map = "de_dust2"
 
 [[demos]]
-archive = "data/demos/esl-pro-league-season-24-falcons-vs-natus-vincere-bo3-3Y4ykAiGXZrr2p0dvri2C9.rar"
+archive = "data/demos/pro_demo/esl-pro-league-season-24-falcons-vs-natus-vincere-bo3-3Y4ykAiGXZrr2p0dvri2C9.rar"
 member = "falcons-vs-natus-vincere-m1-inferno.dem"
 event = "ESL Pro League S24"
 teams = "Falcons vs NaVi"
 map = "de_inferno"
 
 [[demos]]
-archive = "data/demos/esl-pro-league-season-24-falcons-vs-natus-vincere-bo3-3Y4ykAiGXZrr2p0dvri2C9.rar"
+archive = "data/demos/pro_demo/esl-pro-league-season-24-falcons-vs-natus-vincere-bo3-3Y4ykAiGXZrr2p0dvri2C9.rar"
 member = "falcons-vs-natus-vincere-m2-anubis.dem"
 event = "ESL Pro League S24"
 teams = "Falcons vs NaVi"
 map = "de_anubis"
 
 [[demos]]
-archive = "data/demos/esl-pro-league-season-24-falcons-vs-natus-vincere-bo3-3Y4ykAiGXZrr2p0dvri2C9.rar"
+archive = "data/demos/pro_demo/esl-pro-league-season-24-falcons-vs-natus-vincere-bo3-3Y4ykAiGXZrr2p0dvri2C9.rar"
 member = "falcons-vs-natus-vincere-m3-mirage-p1.dem"
 event = "ESL Pro League S24"
 teams = "Falcons vs NaVi"
 map = "de_mirage"
 
 [[demos]]
-archive = "data/demos/esl-pro-league-season-24-falcons-vs-natus-vincere-bo3-3Y4ykAiGXZrr2p0dvri2C9.rar"
+archive = "data/demos/pro_demo/esl-pro-league-season-24-falcons-vs-natus-vincere-bo3-3Y4ykAiGXZrr2p0dvri2C9.rar"
 member = "falcons-vs-natus-vincere-m3-mirage-p2.dem"
 event = "ESL Pro League S24"
 teams = "Falcons vs NaVi"
 map = "de_mirage"
 
 [[demos]]
-archive = "data/demos/esl-pro-league-season-24-falcons-vs-spirit-bo3-7qoiS3mfVYinuAhEY9FtFF.rar"
+archive = "data/demos/pro_demo/esl-pro-league-season-24-falcons-vs-spirit-bo3-7qoiS3mfVYinuAhEY9FtFF.rar"
 member = "falcons-vs-spirit-m1-mirage.dem"
 event = "ESL Pro League S24"
 teams = "Falcons vs Spirit"
 map = "de_mirage"
 
 [[demos]]
-archive = "data/demos/esl-pro-league-season-24-falcons-vs-spirit-bo3-7qoiS3mfVYinuAhEY9FtFF.rar"
+archive = "data/demos/pro_demo/esl-pro-league-season-24-falcons-vs-spirit-bo3-7qoiS3mfVYinuAhEY9FtFF.rar"
 member = "falcons-vs-spirit-m2-anubis.dem"
 event = "ESL Pro League S24"
 teams = "Falcons vs Spirit"
 map = "de_anubis"
 
 [[demos]]
-archive = "data/demos/esl-pro-league-season-24-mouz-vs-spirit-bo3-sqctTxs0ADRlg-g18Xysab.rar"
+archive = "data/demos/pro_demo/esl-pro-league-season-24-mouz-vs-spirit-bo3-sqctTxs0ADRlg-g18Xysab.rar"
 member = "mouz-vs-spirit-m1-dust2.dem"
 event = "ESL Pro League S24"
 teams = "MOUZ vs Spirit"
 map = "de_dust2"
 
 [[demos]]
-archive = "data/demos/esl-pro-league-season-24-mouz-vs-spirit-bo3-sqctTxs0ADRlg-g18Xysab.rar"
+archive = "data/demos/pro_demo/esl-pro-league-season-24-mouz-vs-spirit-bo3-sqctTxs0ADRlg-g18Xysab.rar"
 member = "mouz-vs-spirit-m2-mirage.dem"
 event = "ESL Pro League S24"
 teams = "MOUZ vs Spirit"
 map = "de_mirage"
 
 [[demos]]
-archive = "data/demos/esl-pro-league-season-24-mouz-vs-spirit-bo3-sqctTxs0ADRlg-g18Xysab.rar"
+archive = "data/demos/pro_demo/esl-pro-league-season-24-mouz-vs-spirit-bo3-sqctTxs0ADRlg-g18Xysab.rar"
 member = "mouz-vs-spirit-m3-nuke.dem"
 event = "ESL Pro League S24"
 teams = "MOUZ vs Spirit"
 map = "de_nuke"
 
 [[demos]]
-archive = "data/demos/esl-pro-league-season-24-vitality-vs-falcons-bo3-tjOq40YPwMI3QHOotPr9e9.rar"
+archive = "data/demos/pro_demo/esl-pro-league-season-24-vitality-vs-falcons-bo3-tjOq40YPwMI3QHOotPr9e9.rar"
 member = "vitality-vs-falcons-m1-anubis.dem"
 event = "ESL Pro League S24"
 teams = "Vitality vs Falcons"
 map = "de_anubis"
 
 [[demos]]
-archive = "data/demos/esl-pro-league-season-24-vitality-vs-falcons-bo3-tjOq40YPwMI3QHOotPr9e9.rar"
+archive = "data/demos/pro_demo/esl-pro-league-season-24-vitality-vs-falcons-bo3-tjOq40YPwMI3QHOotPr9e9.rar"
 member = "vitality-vs-falcons-m2-dust2.dem"
 event = "ESL Pro League S24"
 teams = "Vitality vs Falcons"
 map = "de_dust2"
 
 [[demos]]
-archive = "data/demos/esl-pro-league-season-24-vitality-vs-falcons-bo3-tjOq40YPwMI3QHOotPr9e9.rar"
+archive = "data/demos/pro_demo/esl-pro-league-season-24-vitality-vs-falcons-bo3-tjOq40YPwMI3QHOotPr9e9.rar"
 member = "vitality-vs-falcons-m3-mirage.dem"
 event = "ESL Pro League S24"
 teams = "Vitality vs Falcons"
 map = "de_mirage"
+
+# 2026-10-16 新增：补充 Dust2、Ancient、Nuke 和 FURIA、Aurora、FUT、G2、Astralis、FaZe
+
+[[demos]]
+archive = "data/demos/pro_demo/esl-pro-league-season-24-furia-vs-aurora-bo3-aHdx4LZnSFU_o8let4_hJp.rar"
+member = "furia-vs-aurora-m1-dust2.dem"
+event = "ESL Pro League S24"
+teams = "FURIA vs Aurora"
+map = "de_dust2"
+
+[[demos]]
+archive = "data/demos/pro_demo/esl-pro-league-season-24-furia-vs-aurora-bo3-aHdx4LZnSFU_o8let4_hJp.rar"
+member = "furia-vs-aurora-m2-mirage.dem"
+event = "ESL Pro League S24"
+teams = "FURIA vs Aurora"
+map = "de_mirage"
+
+[[demos]]
+archive = "data/demos/pro_demo/esl-pro-league-season-24-furia-vs-aurora-bo3-aHdx4LZnSFU_o8let4_hJp.rar"
+member = "furia-vs-aurora-m3-nuke.dem"
+event = "ESL Pro League S24"
+teams = "FURIA vs Aurora"
+map = "de_nuke"
+
+[[demos]]
+archive = "data/demos/pro_demo/esports-world-cup-2026-furia-vs-fut-bo3-o4-MY_r0RKTJE9T5M-6UvG.rar"
+member = "furia-vs-fut-m1-ancient.dem"
+event = "Esports World Cup 2026"
+teams = "FURIA vs FUT"
+map = "de_ancient"
+
+[[demos]]
+archive = "data/demos/pro_demo/esports-world-cup-2026-furia-vs-fut-bo3-o4-MY_r0RKTJE9T5M-6UvG.rar"
+member = "furia-vs-fut-m2-nuke.dem"
+event = "Esports World Cup 2026"
+teams = "FURIA vs FUT"
+map = "de_nuke"
+
+[[demos]]
+archive = "data/demos/pro_demo/esports-world-cup-2026-furia-vs-fut-bo3-o4-MY_r0RKTJE9T5M-6UvG.rar"
+member = "furia-vs-fut-m3-dust2.dem"
+event = "Esports World Cup 2026"
+teams = "FURIA vs FUT"
+map = "de_dust2"
+
+[[demos]]
+archive = "data/demos/pro_demo/fissure-playground-3-furia-vs-g2-bo3-HjCesaOmEm1EmqlkTW_ubg.rar"
+member = "furia-vs-g2-m1-ancient.dem"
+event = "FISSURE Playground 3"
+teams = "FURIA vs G2"
+map = "de_ancient"
+
+[[demos]]
+archive = "data/demos/pro_demo/fissure-playground-3-furia-vs-g2-bo3-HjCesaOmEm1EmqlkTW_ubg.rar"
+member = "furia-vs-g2-m2-dust2.dem"
+event = "FISSURE Playground 3"
+teams = "FURIA vs G2"
+map = "de_dust2"
+
+[[demos]]
+archive = "data/demos/pro_demo/stake-ranked-episode-4-astralis-vs-faze-bo3-01LmxwpI2qImVcjx1A0izj.rar"
+member = "astralis-vs-faze-m1-ancient.dem"
+event = "Stake Ranked Episode 4"
+teams = "Astralis vs FaZe"
+map = "de_ancient"
+
+[[demos]]
+archive = "data/demos/pro_demo/stake-ranked-episode-4-astralis-vs-faze-bo3-01LmxwpI2qImVcjx1A0izj.rar"
+member = "astralis-vs-faze-m2-nuke.dem"
+event = "Stake Ranked Episode 4"
+teams = "Astralis vs FaZe"
+map = "de_nuke"
+
+[[demos]]
+archive = "data/demos/pro_demo/stake-ranked-episode-4-astralis-vs-faze-bo3-01LmxwpI2qImVcjx1A0izj.rar"
+member = "astralis-vs-faze-m3-cache.dem"
+event = "Stake Ranked Episode 4"
+teams = "Astralis vs FaZe"
+map = "de_cache"

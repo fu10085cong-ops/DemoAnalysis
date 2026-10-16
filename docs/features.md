@@ -116,7 +116,7 @@
 
 清单在 `baselines/pro_demos.toml`，生成入口为 `scripts/build_baseline.py`。使用与分析用户相同的解析、特征和致盲过滤流程；覆盖率低于 `parsing.min_target_coverage` 的玩家不入样本，某份 demo 失败时整份跳过并打印原因，来源与实际人次写入基准文件。Mirage p1/p2 是同图两段，按两份样本处理，不称为两张不同地图。
 
-当前 v2 来自 ESL Pro League S24 的 5 组对局、15 份 demo，共 150 人次；全部成功，覆盖率为 0 的热身非选手不计入。按 018 的新视野算法重算后，整场 TTD 职业中位数为 391 ms，准星移动中位数为 3.88°；具体分布和每项有效样本数见 `baselines/pro_sample.json`。上方 30 人次表格是旧算法的早期核对记录。
+当前 v2（2026-10-16 扩充）来自 ESL Pro League S24、Esports World Cup 2026、FISSURE Playground 3、Stake Ranked Episode 4 的 9 组对局、26 份 demo，共 260 人次、5620 回合；全部成功，覆盖率为 0 的非选手不计入。地图：Mirage 6、Dust2 6、Nuke 4、Ancient 3、Anubis 3、Inferno 2、Cache 2。整场 TTD 职业中位数 391 ms，准星移动中位数 3.71°。各武器交火样本：AK 2490、M4A1-S 945、M4A4 677、AWP 663、Glock 433、Galil 386、USP 337、沙鹰 287、MP9 172、Tec-9 159、MAC-10 123、Five-SeveN 120、FAMAS 108、双枪 89、P250 68、MP7 32、SSG 08 31（不足 30 的武器不输出阈值，UMP-45 等仍缺）。扩充前（15 份）的数值见 git 历史。具体分布和每项有效样本数见 `baselines/pro_sample.json`。上方 30 人次表格是旧算法的早期核对记录。
 
 - `metrics` 保留每人每份 demo 的整场枪法分布，原 `compare()` 接口兼容。
 - `weapons` 按交火第一枪的武器归组；没开枪时从手持显示名反查规范名，查不到则跳过。只含击杀、死亡且有交火的数据，不含回合结束后、误杀、bot 和世界伤害；交火少于 `baseline.min_engagements`（默认 30）的武器不输出。
