@@ -474,3 +474,32 @@ def test_wrapper_holding_json_string_is_unwrapped(match, mm):
     d = diagnose(match, mm, CFG, BASELINE, provider)
     assert d.repairs == 0 and d.violations_history == [[]] and len(fake.calls) == 1
     assert d.submission.model_dump() == payload() and d.raw_calls[0]["unwrapped"] == "report"
+
+
+def test_format_slips_are_normalized_and_bad_plan_items_dropped(match, mm):
+    # 本地千问实测（2026-10-16）：drills 写显示名称、targets 带占位符序号；训练计划里有无法解析的占位符
+    good = payload()
+    good["findings"][0]["targets"] = ["R1-death[1]"]
+    good["findings"][0]["problem"] = "other"
+    good["findings"][0]["drills"] = []
+    good["training_plan"] = ["每天练15分钟。", "回看 {R10} 的录像。"]
+    provider, _ = claude([submit_response(good)] * 3)
+    d = diagnose(match, mm, CFG, BASELINE, provider)
+    assert d.submission.findings[0].targets == ["R1-death"]
+    assert any("R1-death[1]" in c for c in d.raw_calls[0]["normalized"])
+    assert d.submission.training_plan == ["每天练15分钟。"]
+    assert any(x.path == "training_plan[1]" for x in d.dropped)
+
+
+def test_drill_label_is_mapped_to_id():
+    from cs2coach.ai.diagnose import _normalize_args
+    args = {"findings": [{"drills": ["Aim Botz", "recoil_master"], "targets": ["R5-kill2"]}]}
+    assert _normalize_args(args, CFG) and args["findings"][0]["drills"] == ["aim_botz", "recoil_master"]
+
+
+def test_all_plan_items_dropped_uses_fallback_that_passes(match, mm):
+    bad = payload()
+    bad["training_plan"] = ["回看 {R10} 的录像。"]
+    d = diagnose(match, mm, CFG, BASELINE, claude([submit_response(bad)] * 3)[0])
+    assert d.submission.training_plan == ["按上面各条问题的“怎么练”执行（原训练计划未通过检查，已删除）。"]
+    assert check_submission(d.submission, mm, d.problems, d.digest, CFG, None, d.score, d.frequency, BASELINE) == []

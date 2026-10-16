@@ -91,6 +91,9 @@ _UNIT_ECHO = {"单位/秒": ("单位/秒", "u/s"), "毫秒": ("毫秒", "ms"), "
 # 纯数字（次数、人数、血量等）后面接这些单位，说明把它当成了别的量，例如把"多出的次数"写成百分比
 _UNIT_AFTER_PLAIN = re.compile(r"^\s*(%|％|°|度|毫秒|ms|秒|米)")
 _PLAIN = re.compile(r"^\d+(?:\.\d+)?$")
+# 带单位的数值后面紧跟量词（"17%次""875 毫秒次"），说明拿了一个不相干的占位符来充当次数（本地千问实测）
+_COUNT_AFTER_UNIT = re.compile(r"^\s*(次|发|枪|人|场|回合)")
+_UNIT_END = re.compile(r"(%|°|毫秒|秒|米|单位|单位/秒|倍)$")
 
 
 def _echo_length(rendered: str, rest: str) -> int:
@@ -131,6 +134,9 @@ def render_slots(text: str, resolver: Callable[[str], str | SlotError]) -> tuple
             if result.startswith(lead) and out and out[-1].rstrip(" ").endswith(lead):
                 out[-1] = out[-1].rstrip(" ")[:-len(lead)]
                 break
+        if _UNIT_END.search(result) and (word := _COUNT_AFTER_UNIT.match(rest[_echo_length(result, rest):])):
+            errors.append(SlotError("slot_unit_mismatch", match[0],
+                f"{match[0]} 显示为“{result}”，后面不能接“{word[1]}”：它不是次数。要写次数请用 count.* 或 freq.*.hits。"))
         if _PLAIN.match(result) and (unit := _UNIT_AFTER_PLAIN.match(rest)):
             errors.append(SlotError("slot_unit_mismatch", match[0],
                 f"{match[0]} 显示为纯数字 {result}，后面不能接“{unit[1]}”：它不是百分比、时间、角度或距离。"

@@ -159,7 +159,7 @@ def _summary_ai(summary, cfg: dict, baseline: dict | None, folder: Path) -> int:
         d = diagnose_summary(summary, cfg, baseline, provider)
     except (DiagnosisError, ProviderError) as exc:
         print(f"错误: {exc}", file=sys.stderr)
-        _write_failed_audit(folder / "submission.json", exc)
+        _write_failed_audit(folder / "submission.json", exc, name, model)
         _local_time(name, started, provider)
         return 1
     except Exception as exc:
@@ -199,11 +199,12 @@ def _run_info(d) -> dict:
             "input_tokens": u.input_tokens, "cache_read_tokens": u.cache_read_tokens, "output_tokens": u.output_tokens}
 
 
-def _write_failed_audit(audit_path: Path, exc: Exception) -> None:
+def _write_failed_audit(audit_path: Path, exc: Exception, provider: str = "?", model: str = "?") -> None:
     """生成失败时另存审计（每轮违规、最后一次提交、原始参数），不覆盖上一次成功的 submission.json。"""
     audit = getattr(exc, "audit", None)
     if not audit:
         return
+    audit = {**audit, "run": {"provider": provider, "model": model}}
     failed = audit_path.with_name("submission_failed.json")
     failed.parent.mkdir(parents=True, exist_ok=True)
     failed.write_text(json.dumps(audit, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
@@ -292,7 +293,7 @@ def _diagnose(match, moments, cfg, out: Path) -> int:
         d = diagnose(match, moments, cfg, load_baseline(), provider)
     except (DiagnosisError, ProviderError) as e:
         print(f"错误: {e}", file=sys.stderr)
-        _write_failed_audit(out.with_name("submission.json"), e)
+        _write_failed_audit(out.with_name("submission.json"), e, name, model)
         _local_time(name, started, provider)
         return 1
     except Exception as e:  # 各家 SDK 的网络、认证、限流错误

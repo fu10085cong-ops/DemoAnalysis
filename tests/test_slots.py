@@ -251,3 +251,12 @@ def test_quantile_names_people_and_ambiguous_suggestions():
     message = next(x.message for x in v if x.code == "raw_number")
     assert "1v3 → {R5-kill2.people}" in message
     assert "3 → {R5-kill2.shots}" in message  # 本条瞬间的字段优先于整场计数和频率
+
+
+def test_unit_value_used_as_count_is_flagged():
+    # 本地千问实测："{pro.headshot.p25}次死亡携带未用道具" → "17%次"
+    _, errors = render_slots("{match.spray}次死亡", resolver(overview=True))
+    assert errors and errors[0].code == "slot_unit_mismatch" and "不是次数" in errors[0].message
+    _, errors = render_slots("{match.ttd}毫秒次", resolver(overview=True))  # 先去掉重复单位再判断
+    assert errors and errors[0].code == "slot_unit_mismatch"
+    assert render_slots("{count.unused_utility_deaths}次死亡", resolver(overview=True))[1] == []

@@ -102,8 +102,10 @@ def case_row(case: dict[str, Any], folder: Path, exit_code: int | None, seconds:
     run = (audit or {}).get("run", {})
     report = next(iter(sorted(folder.rglob("report.md"))), None) if folder.exists() else None
     failed = audit_path is not None and audit_path.name == "submission_failed.json"
-    status = "成功" if exit_code == 0 and report is not None else ("失败：" + (error or (audit or {}).get("error")
-                                                                             or f"退出码 {exit_code}"))
+    reason = error or (audit or {}).get("error") or f"退出码 {exit_code}"
+    # 失败原因可能带换行和很长的违规列表；汇总表里只放第一行，完整内容看审计文件
+    reason = reason.splitlines()[0].rstrip("：:")[:80]
+    status = "成功" if exit_code == 0 and report is not None else "失败：" + reason
     return {
         "name": case["name"], "kind": case["kind"], "status": status,
         "model": f"{run.get('provider', '?')} / {run.get('model', '?')}" if run else "?",
@@ -113,7 +115,7 @@ def case_row(case: dict[str, Any], folder: Path, exit_code: int | None, seconds:
         "replaced": sum(d.get("action") == "replaced" for d in dropped),
         "tool_calls": run.get("tool_calls", "-"),
         "tokens": (f"{run['input_tokens']}（{run['cache_read_tokens']}）/ {run['output_tokens']}"
-                   if run else "-"),
+                   if "input_tokens" in run else "-"),  # 失败的审计只有模型名，没有用量
         "seconds": round(seconds, 1),
         "report": _short(report) if report and not failed else (_short(audit_path) if audit_path else "-"),
     }

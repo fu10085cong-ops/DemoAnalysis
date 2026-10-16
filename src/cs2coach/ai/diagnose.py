@@ -80,6 +80,34 @@ def _submission_args(args: dict[str, Any] | None) -> tuple[dict[str, Any] | None
     return args, None
 
 
+def _normalize_args(args: dict[str, Any], cfg: dict) -> list[str]:
+    """把模型常见的格式笔误改成规范写法，返回改了什么（写入审计）。只改格式，不改内容：
+    练习图写了显示名称（"Aim Botz"）时换成编号；引用编号误带了占位符的序号（"R11[1]"）时去掉序号。"""
+    changes: list[str] = []
+    labels = {d["label"].casefold(): d["id"] for d in cfg["training"]["drills"]}
+    for group in ("findings", "patterns", "highlights"):
+        entries = args.get(group)
+        if not isinstance(entries, list):
+            continue
+        for i, entry in enumerate(entries):
+            if not isinstance(entry, dict):
+                continue
+            targets = entry.get("targets")
+            if isinstance(targets, list):
+                fixed = [re.sub(r"\[\d+\]$", "", x) if isinstance(x, str) else x for x in targets]
+                fixed = list(dict.fromkeys(fixed))
+                if fixed != targets:
+                    changes.append(f"{group}[{i}].targets：{targets} → {fixed}")
+                    entry["targets"] = fixed
+            drills = entry.get("drills")
+            if group == "findings" and isinstance(drills, list):
+                fixed = [labels.get(x.casefold(), x) if isinstance(x, str) else x for x in drills]
+                if fixed != drills:
+                    changes.append(f"{group}[{i}].drills：{drills} → {fixed}")
+                    entry["drills"] = fixed
+    return changes
+
+
 def _schema_violations(sub: ReportSubmission, schema: dict) -> list[Violation]:
     """兼容服务未强制 schema 时，在本地核对工具已经声明的格式约束。"""
     violations = []
@@ -145,6 +173,18 @@ def _prune(sub: ReportSubmission, violations: list[Violation], fallback_overview
             else:
                 kept.append(entry)
         setattr(result, group, kept)
+    plan_bad: dict[int, list[Violation]] = {}
+    for v in violations:
+        match = re.match(r"^training_plan\[(\d+)\]", v.path)
+        if match:
+            plan_bad.setdefault(int(match[1]), []).append(v)
+    if plan_bad:
+        for i, item in enumerate(sub.training_plan):
+            if i in plan_bad:
+                dropped.append(DroppedItem(path=f"training_plan[{i}]", content=item, violations=plan_bad[i]))
+        result.training_plan = [item for i, item in enumerate(sub.training_plan) if i not in plan_bad] or [
+            # 兜底句本身也要能通过训练文字检查：不含数字以外的英文词（曾写成“AI 训练计划”被自己拦下）
+            "按上面各条问题的“怎么练”执行（原训练计划未通过检查，已删除）。"]
     overview = [v for v in violations if v.path == "overview"]
     if overview:
         dropped.append(DroppedItem(path="overview", content=sub.overview, violations=overview, action="replaced"))
@@ -235,6 +275,11 @@ def _run_loop(provider, cfg, system_prompt, digest, instruction, tools, submissi
                     raw_call = {"raw_args": call.raw_args, "parsed_args": call.args}
                     if unwrapped is not None:
                         raw_call["unwrapped"] = unwrapped
+                    if isinstance(args, dict):
+                        args = json.loads(json.dumps(args))  # 不改动审计里的原始参数
+                        normalized = _normalize_args(args, cfg)
+                        if normalized:
+                            raw_call["normalized"] = normalized
                     raw_calls.append(raw_call)
                     if submit_count > 1:
                         violations = [Violation(path="submission", code="multiple_submissions",

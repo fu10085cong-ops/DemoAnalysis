@@ -99,3 +99,17 @@ def test_main_requires_confirmation_and_writes_under_eval_root(tmp_path):
     [run_dir] = list((tmp_path / "评测").iterdir())
     assert run_dir.name.endswith("_试_跑") and (run_dir / "summary.md").is_file()
     assert all(eb.Path(c[c.index("--out") + 1]).is_relative_to(run_dir) for c in calls)  # 不写正式报告目录
+
+
+def test_failure_reason_stays_on_one_line(tmp_path):
+    case = {"name": "x", "kind": "analyze", "demo": "a.zip", "player": 1}
+    out = tmp_path / "x" / "p" / "m"
+    out.mkdir(parents=True)
+    (out / "submission_failed.json").write_text(json.dumps({
+        "error": "删除违规结论后仍未通过检查：提交未通过数据检查：\ntraining_plan[2]：\n- [unknown_slot]",
+        "violations_history": [[]], "run": {"provider": "local", "model": "m"}}), encoding="utf-8")
+    row = eb.case_row(case, tmp_path / "x", 1, 1.0)
+    assert row["status"] == "失败：删除违规结论后仍未通过检查：提交未通过数据检查"
+    assert row["model"] == "local / m" and row["tokens"] == "-"
+    table = [line for line in eb.render_summary([row], "t", "0").splitlines() if line.startswith("|")]
+    assert len(table) == 3  # 表头、分隔行、一行数据：失败原因没有把表格撑开
