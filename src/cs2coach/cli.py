@@ -265,6 +265,14 @@ def _analyze(args: argparse.Namespace) -> int:
     frequencies = problem_frequency(detected, moments, baseline, cfg)
     problems.write_text(render_problem_report(detected, frequencies), encoding="utf-8")
     print(f"已写入 {problems}")
+    # 基础版报告（免费档，纯程序）：总是生成，单独成文件，不覆盖 AI 版 report.md
+    from cs2coach.report.basic import build_l0, render_basic_report
+    from cs2coach.tools.digest import match_score
+    names = {sid: p.name for sid, p in match.players.items()}
+    basic = folder / "basic_report.md"
+    basic.write_text(render_basic_report(moments, build_l0(moments, detected, frequencies, cfg, names), frequencies,
+                                         match_score(match, player.steamid), baseline), encoding="utf-8")
+    print(f"已写入 {basic}")
     if not args.ai:
         print("加上 --ai 生成 AI 复盘报告")
         print(f"输出目录：{folder}")

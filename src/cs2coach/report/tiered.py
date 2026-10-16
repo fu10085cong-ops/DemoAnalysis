@@ -1,4 +1,4 @@
-"""分级报告实验（2026-10-16）：L0 纯程序 + L1 弱模型逐个交火改写两三句话。
+"""分级报告实验（2026-10-16）：L1 弱模型逐个交火写两三句话；L0 在 report/basic.py。
 
 L0：突出问题（没有时取多出次数为正的前几项）、程序排出的代表交火、事实卡、程序证据、
 固定说明（config/problem_text.toml）和练习图，全部由程序生成。
@@ -8,24 +8,16 @@ L1：每个代表交火单独调用一次模型，只给这一次交火的事实
 
 from __future__ import annotations
 
-import tomllib
-from dataclasses import dataclass, field
-from pathlib import Path
 from time import perf_counter
-from typing import Any, Callable, Mapping
+from typing import Any, Callable
 
 from cs2coach.features.models import MatchMoments
-from cs2coach.features.problems import PROBLEMS, FrequencyRow, ProblemReport
-from cs2coach.features.ranking import candidate_targets
-from cs2coach.report.evidence import evidence_sentence
-from cs2coach.report.facts import missed_trade_facts, render_moment_card
+from cs2coach.features.problems import FrequencyRow, ProblemReport
+from cs2coach.report.basic import Example, Section, build_l0, choose_problems  # noqa: F401  L0 在 basic.py
 from cs2coach.report.problems import frequency_table
 from cs2coach.tools.checker import Violation, check_submission
-from cs2coach.tools.drills import drill_labels
 from cs2coach.tools.slots import MOMENT_GUIDE, PROBLEM_VALUES, ROUND_FIELDS, SlotError, make_slot_resolver, render_slots
 from cs2coach.tools.submission import parse_submission
-
-TEXT_FILE = Path(__file__).resolve().parents[3] / "config" / "problem_text.toml"
 
 L1_SYSTEM = """你是 CS2 复盘助手，只负责一件小事：根据程序给出的一次交火的事实，用两到三句中文说明这次交火发生了什么、为什么属于指定的问题。
 
@@ -35,66 +27,6 @@ L1_SYSTEM = """你是 CS2 复盘助手，只负责一件小事：根据程序给
 - 讲局势时用 situation 占位符，不要自己判断守包、回防或人数优劣。
 - 不写改进建议，建议由程序给出。不写编号，不用“都”“始终”。
 - 直接输出这两三句话，不要标题、列表或解释。"""
-
-
-@dataclass
-class Example:
-    target: str
-    card: str
-    evidence: str
-    text: str | None = None        # L1 渲染后的文字；None 表示没写成
-    raw: str | None = None         # L1 原始输出（含占位符）
-    attempts: int = 0
-    violations: list[list[str]] = field(default_factory=list)
-    seconds: float = 0.0
-
-
-@dataclass
-class Section:
-    problem: str
-    label: str
-    why: str
-    fix: str
-    drills: list[str]
-    examples: list[Example]
-
-
-def problem_texts(path: Path = TEXT_FILE) -> dict[str, dict[str, str]]:
-    return tomllib.loads(path.read_text(encoding="utf-8"))
-
-
-def choose_problems(frequency: list[FrequencyRow], limit: int = 3) -> list[FrequencyRow]:
-    """突出问题优先；没有突出问题时取多出次数为正的前几项（标注需要更多比赛确认）。"""
-    prominent = [r for r in frequency if r.prominent]
-    if prominent:
-        return prominent[:limit]
-    rest = sorted((r for r in frequency if (r.excess_hits or 0) > 0), key=lambda r: -(r.excess_hits or 0))
-    return rest[:limit]
-
-
-def build_l0(mm: MatchMoments, problems: ProblemReport, frequency: list[FrequencyRow], cfg: dict,
-             names: Mapping[int, str], per_problem: int = 2) -> list[Section]:
-    texts = problem_texts()
-    labels = drill_labels(cfg)
-    moments = {m.id: m for m in mm.moments}
-    sections = []
-    for row in choose_problems(frequency):
-        pid = row.problem
-        text = texts.get(pid, {"why": "", "fix": ""})
-        drills = [labels[d["id"]] for d in cfg["training"]["drills"]
-                  if pid in d["problems"] and "min_aim_problems" not in d]
-        examples = []
-        for target in candidate_targets(mm, problems.hits, pid, per_problem):
-            hit = next(h for h in problems.hits if h.problem == pid and h.target == target)
-            if target in moments:
-                card = render_moment_card(moments[target], names).replace("### ", "#### ", 1)
-            else:  # 漏补回合：用漏补记录的事实
-                rows = [r for r in mm.missed_trades if f"R{r.round}" == target]
-                card = "\n".join([f"#### 〔{target}〕", ""] + [f"- {x}" for r in rows for x in missed_trade_facts(r, names)])
-            examples.append(Example(target=target, card=card,
-                                    evidence=evidence_sentence(hit)))
-        sections.append(Section(pid, PROBLEMS[pid].label, text["why"], text["fix"], drills, examples))
-    return sections
 
 
 def _slot_menu(target: str, problem: str, resolver) -> str:

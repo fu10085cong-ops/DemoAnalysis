@@ -90,7 +90,7 @@ python -m cs2coach summary --player <SteamID64>
 python -m cs2coach summary data/demos/xxx.zip --demo-member some-map.dem --player <SteamID64> --out <临时目录>
 ```
 
-不加 `--ai` 时生成 `moments.json`、`facts.md`、`problems.md`。重新分析同一玩家时，原有的 `report.md` 和 `submission.json` 会按修改时间移入同目录的 `历史版本/`。
+不加 `--ai` 时生成 `moments.json`、`facts.md`、`problems.md`，以及基础版报告 `basic_report.md`（免费档：纯程序生成，不调用 AI；每类问题的固定说明在 `config/problem_text.toml`）。重新分析同一玩家时，原有的 `report.md` 和 `submission.json` 会按修改时间移入同目录的 `历史版本/`。
 
 `summary` 直接从 demo 生成多场程序汇总，不读取单场输出；结果放在 `<输出根目录>/<玩家名>_<SteamID64>/汇总/`，包含 `problems.md` 和 `summary.json`。加 `--ai` 后还会生成 `report.md` 和 `submission.json`。重复运行会归档旧版文件。
 

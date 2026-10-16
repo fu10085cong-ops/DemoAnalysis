@@ -208,7 +208,7 @@ def test_cli_writes_moments_and_facts_without_ai(tmp_path, monkeypatch):
     expected = folder / "facts.md"
     assert expected.read_text(encoding="utf-8") == render_facts_file(mm, NAMES)
     assert json.loads((folder / "moments.json").read_text(encoding="utf-8")) == json.loads(mm.model_dump_json())
-    assert {p.name for p in folder.iterdir()} == {"moments.json", "facts.md", "problems.md"}
+    assert {p.name for p in folder.iterdir()} == {"moments.json", "facts.md", "problems.md", "basic_report.md"}
 
 
 @pytest.mark.parametrize("subject,field", [("你", "player_blind"), ("对手", "opponent_blind")])
@@ -284,3 +284,17 @@ def test_facts_file_mentions_absent_rounds():
     text = render_facts_file(make_mm(rounds=30, absent_rounds=[1, 2]), {})
     assert absent_rounds_note([1, 2]) in text and "第 1、2 回合不在场" in text
     assert absent_rounds_note([]) == ""
+
+
+def test_basic_report_is_program_only(tmp_path):
+    """免费档基础版：不调用 AI，含枪法对比、突出问题或偏多项、固定说明、代表交火和跳转命令。"""
+    from cs2coach.features.problems import detect_problems, problem_frequency
+    from cs2coach.report.basic import build_l0, render_basic_report
+    match = scenario()
+    mm = find_moments(match, A, CFG)
+    problems = detect_problems(mm, None, CFG)
+    frequency = problem_frequency(problems, mm, None, CFG)
+    text = render_basic_report(mm, build_l0(mm, problems, frequency, CFG, {}), frequency, (1, 0), None)
+    assert text.startswith("# 基础复盘：") and "程序生成，不含 AI 分析" in text
+    assert "## 整场枪法" in text and "## 突出问题" in text
+    assert "{" not in text  # 没有任何占位符

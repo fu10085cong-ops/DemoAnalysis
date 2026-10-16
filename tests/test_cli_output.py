@@ -45,7 +45,7 @@ def test_rerun_moves_both_ai_files_and_keeps_program_outputs(tmp_path, monkeypat
     archive = folder / "历史版本"
     assert (archive / f"report_{label}.md").read_text(encoding="utf-8") == "first report.md"
     assert (archive / f"submission_{label}.json").read_text(encoding="utf-8") == "first submission.json"
-    assert {p.name for p in folder.iterdir()} == {"moments.json", "facts.md", "problems.md", "历史版本"}
+    assert {p.name for p in folder.iterdir()} == {"moments.json", "facts.md", "problems.md", "basic_report.md", "历史版本"}
 
     for name in ("report.md", "submission.json"):
         old = folder / name
