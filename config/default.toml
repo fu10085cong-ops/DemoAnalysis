@@ -297,7 +297,7 @@ pattern = "回合还剩"
 require = "never"
 
 [ai]
-# 用哪个模型服务：deepseek / claude（各自的设置在下面对应的表里）
+# 用哪个模型服务：deepseek / claude / local（各自的设置在下面对应的表里）
 provider = "deepseek"
 # 一次诊断最多请求几轮（含工具调用和引用修正）
 max_turns = 10
@@ -314,6 +314,27 @@ model = "deepseek-v4-pro"
 thinking = true
 reasoning_effort = "high"
 max_tokens = 32000
+reasoning_field = "reasoning_content"
+
+[ai.local]
+# Ollama 的 OpenAI 兼容接口地址
+base_url = "http://localhost:11434/v1"
+# 需提前用 Modelfile 创建带 40960 token 上下文的本地模型
+model = "qwen3-14b-40k"
+# 留空表示无需密钥，SDK 使用占位值
+api_key_env = ""
+# 回复 token 上限，包含模型思考过程
+max_tokens = 8192
+# Ollama 返回思考内容的字段名
+reasoning_field = "reasoning"
+# 启动前查询 Ollama 的 num_ctx；其他兼容服务可设为 none
+context_check = "ollama"
+# 为后续输出保留的上下文余量
+context_margin_tokens = 2048
+# 输入估算：字符数乘以此系数得到 token 数
+chars_per_token = 0.76
+# 最多允许的查询工具调用次数（不含 submit_report）
+max_tool_calls = 8
 
 [ai.claude]
 # 凭据：环境变量 ANTHROPIC_API_KEY，或 `ant auth login` 登录后的配置

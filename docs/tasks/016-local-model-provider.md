@@ -1,6 +1,6 @@
 # 016 接入本地模型（Ollama）
 
-状态：待做
+状态：完成
 
 ## 目标
 
@@ -96,9 +96,37 @@ Claude 已在本机实测（2026-10-16，RTX 4070 Ti Super 16 GB，Ollama 0.34.0
 
 ## 完成报告（GPT 填写）
 
-- 改动的文件及原因：
-- 测试结果：
-- 真实 demo 验证（如有）：
-- 遗留问题 / 需要确认的地方：
+- 改动的文件及原因：`config/default.toml` 新增 `[ai.local]` 和 DeepSeek 的 `reasoning_field`；`ai/providers.py`、`ai/openai_compat.py` 接入本地服务、按配置发送 DeepSeek 专属参数、读取对应思考字段，并在 `/api/show` 预检及每轮核对上下文；`ai/diagnose.py`、`summary/diagnose.py` 共用查询次数限制和逐轮 token 记录；`cli.py` 为单场、多场增加 `--provider`，本地调用不读取 `.env`，额外打印耗时和每轮 token；`README.md`、`docs/features.md` 写明用法及上下文规则；`tests/test_local_provider.py` 用假 HTTP/假模型覆盖上述保护。
+- 测试结果：`.venv/Scripts/python.exe -m pytest -q`：546 passed，3 skipped。原有 DeepSeek 测试未修改并通过；`git diff --check` 无空白错误。本机 Ollama 的实际回复在 `model_extra["reasoning"]` 中带有思考内容；保留回传该字段，真实三轮对话正常完成。
+- 真实 demo 验证：运行 `summary --player 76561199703310441 --ai --provider local --out C:\Users\David\AppData\Local\Temp\cs2coach-016-validation`，21 场、在场 438 回合，成功生成 `妮妮孩孩major冠军_76561199703310441\汇总\report.md` 与 `submission.json`。AI 阶段总耗时 **108.9 秒**，三轮 `prompt_tokens` 为 **9902、16578、19578**；调用工具 3 次，修正 2 次，最后删除 1 条 `patterns[0]`。`violations_history` 各轮分别为 13、5、3 项：首轮有 target 数量/格式、无命中及数字错误；次轮仍有无命中和数字错误；末轮仅剩该 pattern 的 3 项数字错误，删除后报告生成。完整日志在 `C:\Users\David\AppData\Local\Temp\cs2coach-016-run.log`。
+
+  总览原文：
+
+  > 妮妮孩孩major冠军在21场比赛中表现总体稳健，取得18胜2负1平的战绩，击杀455次、死亡273次、关键助攻69次。但存在两个突出短板：出枪慢（TTD中位数469ms，高于职业375ms）和准星预判偏差（Crosshair Placement中位数4.26°，高于职业3.83°）。问题集中在de_dust2（68%）和de_inferno（38%），且在21场中19场出现出枪慢问题。
+
+  第一条 finding 原文：
+
+  ```json
+  {
+    "problem": "slow_reaction",
+    "targets": ["M20:R23-kill1", "M12:R4-death"],
+    "severity": "medium",
+    "analysis": "在de_dust2 23回合（M20）和de_inferno 4回合（M12）中，首次命中耗时达969ms，超过职业同武器75分位值近一倍。例如M12回合4，双方5v4且经济相近，对手TTD为641ms，自己慢了328ms，给了对手先伤机会。更好的处理是接敌前将准星放至可能露头位置，控制移动完成首枪。",
+    "training": "在创意工坊地图《Deagle Duel》进行预瞄练习，每组30次共3组。首枪目标切换用时需控制在300ms内，下次复盘检查首次命中耗时。"
+  }
+  ```
+
+- 遗留问题 / 需要确认的地方：第一条 finding 把 `M12` 的地图写成 `de_inferno`，真实数据及程序事实卡均为 `de_dust2`。现有检查器不核对分析文字中的地图名；本任务范围外，留给 Claude 审查后决定是否立新任务。未调用 DeepSeek 或 Claude。
 
 ## 审查意见（Claude 填写）
+
+**审查通过（2026-10-16）。** 本地模型接入正确；上下文保护有效：开始前先查 `num_ctx` 并估算输入，每轮检查 token 数，发现截断立即报错；DeepSeek 的现有测试不改且通过。546 个测试通过。
+
+Claude 对本地报告的核对（千问 14B，与 DeepSeek 版对比）：内容只剩 1 条关键问题和 1 条亮点，至少有 4 处事实或口径错误：
+- 地图写错；
+- 把次数当成百分比（"de_dust2（68%）"）；
+- 把慢的 TTD 说成"仅 812ms"；
+- 编造了创意工坊地图名。
+
+结论：正式报告仍然用 DeepSeek。暴露的检查器漏洞（地图名、百分比口径、练习图名）另行处理。
+

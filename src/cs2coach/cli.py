@@ -6,6 +6,7 @@ import argparse
 import json
 import re
 import sys
+from time import perf_counter
 from datetime import datetime
 from pathlib import Path
 
@@ -57,6 +58,7 @@ def _build_parser() -> argparse.ArgumentParser:
     analyze.add_argument("--out", type=Path, default=Path("data/output"), help="输出目录")
     analyze.add_argument("--config", type=Path, default=None, help="阈值配置文件（TOML），只需写要覆盖的条目")
     analyze.add_argument("--ai", action="store_true", help="调用 AI 生成中文复盘报告（模型在配置的 [ai] 段，需要对应的 API 凭据）")
+    analyze.add_argument("--provider", choices=("deepseek", "claude", "local"), help="覆盖配置中的 AI 模型服务")
     summary = sub.add_parser("summary", help="汇总同一玩家的多场 demo（程序部分）")
     summary.add_argument("demo", nargs="*", type=Path, help="指定 demo；省略时递归扫描 --demos-dir")
     summary.add_argument("--demo-member", action="append", default=[], help="指定压缩包中的 demo；多个路径时按顺序对应")
@@ -65,6 +67,7 @@ def _build_parser() -> argparse.ArgumentParser:
     summary.add_argument("--out", type=Path, default=Path("data/output"), help="输出目录")
     summary.add_argument("--config", type=Path, default=None, help="阈值配置文件（TOML）")
     summary.add_argument("--ai", action="store_true", help="调用 AI 生成多场中文复盘报告")
+    summary.add_argument("--provider", choices=("deepseek", "claude", "local"), help="覆盖配置中的 AI 模型服务")
     return parser
 
 
@@ -97,6 +100,8 @@ def _summary(args: argparse.Namespace) -> int:
     selected = dict(zip(archives, args.demo_member))
     try:
         cfg = load_config(args.config)
+        if args.provider:
+            cfg["ai"]["provider"] = args.provider
         steamid = int(args.player)
         refs = (inspect_player_demos(steamid, [(path, selected.get(path)) for path in args.demo])
                 if args.demo else find_player_demos(steamid, args.demos_dir))
@@ -129,24 +134,30 @@ def _summary(args: argparse.Namespace) -> int:
 
 def _summary_ai(summary, cfg: dict, baseline: dict | None, folder: Path) -> int:
     from cs2coach.ai.diagnose import DiagnosisError
-    from cs2coach.ai.providers import ProviderError
+    from cs2coach.ai.providers import ProviderError, make_provider
     from cs2coach.env import load_env_file
     from cs2coach.summary.diagnose import diagnose_summary
 
-    load_env_file(Path(".env"))
+    if cfg["ai"]["provider"] != "local":
+        load_env_file(Path(".env"))
     name = cfg["ai"]["provider"]
     model = cfg["ai"].get(name, {}).get("model", "?")
     print(f"正在生成多场 AI 复盘报告（{name} / {model}）……", flush=True)
+    started = perf_counter()
+    provider = None
     try:
-        d = diagnose_summary(summary, cfg, baseline)
+        provider = make_provider(cfg) if name == "local" else None
+        d = diagnose_summary(summary, cfg, baseline, provider)
     except (DiagnosisError, ProviderError) as exc:
         print(f"错误: {exc}", file=sys.stderr)
+        _local_time(name, started, provider)
         return 1
     except Exception as exc:
         msg = _api_error_message(exc)
         if msg is None:
             raise
         print(f"错误: {msg}", file=sys.stderr)
+        _local_time(name, started, provider)
         return 1
     _archive_reports(folder, ("report.md", "submission.json"))
     report_file = folder / "report.md"
@@ -157,6 +168,7 @@ def _summary_ai(summary, cfg: dict, baseline: dict | None, folder: Path) -> int:
         "violations_history": [[v.model_dump() for v in group] for group in d.violations_history],
         "dropped": [item.model_dump() for item in d.dropped],
         "raw_calls": d.raw_calls,
+        **({"prompt_tokens_history": d.prompt_tokens_history} if name == "local" else {}),
     }, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     print("\n" + d.report)
     u = d.usage
@@ -164,7 +176,14 @@ def _summary_ai(summary, cfg: dict, baseline: dict | None, folder: Path) -> int:
     print(f"已写入 {audit_file}")
     print(f"{d.provider} / {d.model}，工具调用 {len(d.tool_calls)} 次，结论修正 {d.repairs} 次；"
           f"输入 {u.input_tokens} tokens（其中缓存命中 {u.cache_read_tokens}），输出 {u.output_tokens} tokens")
+    _local_time(name, started, provider)
     return 0
+
+
+def _local_time(name: str, started: float, provider) -> None:
+    if name == "local":
+        tokens = getattr(provider, "prompt_tokens_history", [])
+        print(f"本地模型总耗时 {perf_counter() - started:.1f} 秒；各轮 prompt_tokens：{tokens}")
 
 
 def _analyze(args: argparse.Namespace) -> int:
@@ -176,6 +195,8 @@ def _analyze(args: argparse.Namespace) -> int:
         return 1
     try:
         cfg = load_config(args.config)
+        if args.provider:
+            cfg["ai"]["provider"] = args.provider
         demo = resolve_demo(args.demo, member=args.demo_member)
         print(f"demo: {demo}")
         match = parse_match(demo, cfg)
@@ -225,25 +246,31 @@ def _analyze(args: argparse.Namespace) -> int:
 
 def _diagnose(match, moments, cfg, out: Path) -> int:
     from cs2coach.ai.diagnose import DiagnosisError, diagnose
-    from cs2coach.ai.providers import ProviderError
+    from cs2coach.ai.providers import ProviderError, make_provider
     from cs2coach.baseline import load_baseline
     from cs2coach.env import load_env_file
 
-    load_env_file(Path(".env"))  # API key 可以写在当前目录的 .env 里（已在 .gitignore 中）
+    if cfg["ai"]["provider"] != "local":
+        load_env_file(Path(".env"))  # 远端 API key 可放在 .env，本地模型不需要读取
 
     name = cfg["ai"]["provider"]
     model = cfg["ai"].get(name, {}).get("model", "?")
     print(f"\n正在生成 AI 复盘报告（{name} / {model}）……", flush=True)
+    started = perf_counter()
+    provider = None
     try:
-        d = diagnose(match, moments, cfg, load_baseline())
+        provider = make_provider(cfg) if name == "local" else None
+        d = diagnose(match, moments, cfg, load_baseline(), provider)
     except (DiagnosisError, ProviderError) as e:
         print(f"错误: {e}", file=sys.stderr)
+        _local_time(name, started, provider)
         return 1
     except Exception as e:  # 各家 SDK 的网络、认证、限流错误
         msg = _api_error_message(e)
         if msg is None:
             raise
         print(f"错误: {msg}", file=sys.stderr)
+        _local_time(name, started, provider)
         return 1
 
     out.write_text(d.report, encoding="utf-8")
@@ -253,6 +280,7 @@ def _diagnose(match, moments, cfg, out: Path) -> int:
         "violations_history": [[v.model_dump() for v in group] for group in d.violations_history],
         "dropped": [item.model_dump() for item in d.dropped],
         "raw_calls": d.raw_calls,
+        **({"prompt_tokens_history": d.prompt_tokens_history} if name == "local" else {}),
     }, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     print("\n" + d.report)
     u = d.usage
@@ -260,6 +288,7 @@ def _diagnose(match, moments, cfg, out: Path) -> int:
     print(f"已写入 {audit}")
     print(f"{d.provider} / {d.model}，工具调用 {len(d.tool_calls)} 次，结论修正 {d.repairs} 次；"
           f"输入 {u.input_tokens} tokens（其中缓存命中 {u.cache_read_tokens}），输出 {u.output_tokens} tokens")
+    _local_time(name, started, provider)
     return 0
 
 

@@ -186,3 +186,7 @@
 - 交火中开枪的目标、谁先开枪、瞄准偏差、视野都基于估计的眼睛 / 身体高度，没有 hitbox。
 - 视野只有静态地图几何：烟雾只用于排除，门、可破坏物体不考虑；awpy-data 的地图网格版本可能与 demo 录制时的地图版本不同（输出中记录了 `visibility_data_version`）。
 - 职业基准只覆盖清单中的有限赛事样本，尚不含路人分位及完整职业基准库。
+
+## 本地模型上下文检查
+
+使用 `[ai].provider = "local"` 且 `[ai.local].context_check = "ollama"` 时，生成报告前向本机 Ollama `/api/show` 查询所选模型的 `num_ctx`。系统提示词、摘要、用户指令和工具定义的总字符数乘以 `chars_per_token`，再加输出上限 `max_tokens` 与 `context_margin_tokens`；超过 `num_ctx` 时不请求模型。每轮返回后核对 `usage.prompt_tokens`：若超过 `num_ctx - max_tokens`，或比上一轮减少，则停止并提示更换更大上下文的模型。查询工具调用达到 `max_tool_calls` 后，后续轮次只提供 `submit_report`。`context_check = "none"` 会跳过 Ollama 专用检查。

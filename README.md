@@ -7,7 +7,7 @@ CS2 demo 赛后复盘分析工具：找出玩家的决定性瞬间，用数据�
 - 解析层的输出格式：[docs/parsing.md](docs/parsing.md)
 - 开发约定与架构原则：[CLAUDE.md](CLAUDE.md)
 
-当前阶段：解析层完成（回合、击杀、伤害、开枪、致盲、投掷物、经济与背包都已与 demo 中的独立数据核对，覆盖 ESL、5E、完美共 24 场）；决定性瞬间与指标已实现，包括基于地图几何的视野计算和 Leetify 口径的枪法统计（见 [docs/features.md](docs/features.md)）；AI 诊断已接入（DeepSeek、Claude 可切换），待用真实 API 验证报告质量。
+当前阶段：解析层完成（回合、击杀、伤害、开枪、致盲、投掷物、经济与背包都已与 demo 中的独立数据核对，覆盖 ESL、5E、完美共 24 场）；决定性瞬间与指标已实现，包括基于地图几何的视野计算和 Leetify 口径的枪法统计（见 [docs/features.md](docs/features.md)）；AI 诊断已接入（DeepSeek、Claude、本机 Ollama 可切换）。
 
 ## 环境搭建
 
@@ -92,7 +92,25 @@ python -m cs2coach summary data/demos/xxx.zip --demo-member some-map.dem --playe
 
 不加 `--ai` 时生成 `moments.json`、`facts.md`、`problems.md`。重新分析同一玩家时，原有的 `report.md` 和 `submission.json` 会按修改时间移入同目录的 `历史版本/`。
 
-`summary` 直接从 demo 生成多场程序汇总，不读取单场输出；结果放在 `<输出根目录>/<玩家名>_<SteamID64>/汇总/`，包含 `problems.md` 和 `summary.json`。重复运行会归档旧版文件。本命令没有 AI 选项。
+`summary` 直接从 demo 生成多场程序汇总，不读取单场输出；结果放在 `<输出根目录>/<玩家名>_<SteamID64>/汇总/`，包含 `problems.md` 和 `summary.json`。加 `--ai` 后还会生成 `report.md` 和 `submission.json`。重复运行会归档旧版文件。
+
+### 本地 Ollama 模型
+
+先安装并启动 Ollama，拉取基础模型，再创建一个上下文足够大的模型。新建 `Modelfile`：
+
+```text
+FROM qwen3:14b
+PARAMETER num_ctx 40960
+```
+
+```bash
+ollama pull qwen3:14b
+ollama create qwen3-14b-40k -f Modelfile
+python -m cs2coach analyze data/demos/xxx.dem --player <SteamID64> --ai --provider local
+python -m cs2coach summary --player <SteamID64> --ai --provider local
+```
+
+建议在启动 Ollama 前设置 `OLLAMA_FLASH_ATTENTION=1` 和 `OLLAMA_KV_CACHE_TYPE=q8_0`，并在跑报告时空出约 12–14 GB 显存。Windows PowerShell 可用 `$env:OLLAMA_FLASH_ATTENTION="1"` 和 `$env:OLLAMA_KV_CACHE_TYPE="q8_0"`，然后在同一环境启动 Ollama。`--provider local` 会覆盖配置里的 `[ai].provider`，不需要 API 密钥。默认访问 `http://localhost:11434/v1`；可在 `config/default.toml` 的 `[ai.local]` 中修改模型或地址。程序会在生成前查询模型的 `num_ctx`，并在每轮核对实际输入 token，避免 Ollama 静默截断历史。若使用其他 OpenAI 兼容的本地服务，可把 `context_check` 设为 `"none"`，此时不进行 Ollama 上下文核对。
 
 `--ai` 用哪个模型由 `config/default.toml` 的 `[ai] provider` 决定（默认 `deepseek`），各模型的设置在 `[ai.deepseek]`、`[ai.claude]`。凭据：
 - DeepSeek：环境变量 `DEEPSEEK_API_KEY`（Windows PowerShell：`$env:DEEPSEEK_API_KEY = "sk-..."`）

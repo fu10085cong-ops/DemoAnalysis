@@ -83,4 +83,8 @@ def make_provider(cfg: dict[str, Any], client: Any = None) -> ChatProvider:
         from cs2coach.ai.openai_compat import OpenAICompatProvider
 
         return OpenAICompatProvider("deepseek", cfg["ai"]["deepseek"], client)
-    raise ProviderError(f"未知的 [ai] provider：{name!r}（可选 deepseek、claude）")
+    if name == "local":
+        from cs2coach.ai.openai_compat import OpenAICompatProvider
+
+        return OpenAICompatProvider("local", cfg["ai"]["local"], client)
+    raise ProviderError(f"未知的 [ai] provider：{name!r}（可选 deepseek、claude、local）")

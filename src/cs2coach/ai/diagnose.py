@@ -47,6 +47,7 @@ class Diagnosis:
     raw_calls: list[dict[str, Any]] = field(default_factory=list)
     usage: Usage = field(default_factory=Usage)
     repairs: int = 0
+    prompt_tokens_history: list[int] = field(default_factory=list)
 
 
 def _error_text(violations: list[Violation]) -> str:
@@ -158,6 +159,7 @@ class LoopResult:
     usage: Usage
     repairs: int
     model: str
+    prompt_tokens_history: list[int]
 
 
 def run_diagnosis_loop(provider: ChatProvider, cfg: dict, system_prompt: str, digest: str,
@@ -169,17 +171,23 @@ def run_diagnosis_loop(provider: ChatProvider, cfg: dict, system_prompt: str, di
     usage, calls, history = Usage(), [], []
     raw_calls: list[dict[str, Any]] = []
     repairs = 0
+    prompt_tokens_history: list[int] = []
+    query_count = 0
+    query_limit = ac.get(provider.name, {}).get("max_tool_calls")
+    queries_exhausted = False
     empty_streak = 0
     model = provider.model
     latest: ReportSubmission | None = None
     latest_violations: list[Violation] = []
 
     def finish(submission, dropped=None):
-        return LoopResult(submission, dropped or [], history, raw_calls, calls, usage, repairs, model)
+        return LoopResult(submission, dropped or [], history, raw_calls, calls, usage, repairs,
+                          model, prompt_tokens_history)
 
     for _ in range(int(ac["max_turns"])):
         turn = provider.send()
         usage.add(turn.usage)
+        prompt_tokens_history.append(turn.usage.input_tokens)
         model = turn.model or model
         if turn.stop == "refusal":
             raise DiagnosisError(f"模型拒绝生成（{turn.detail}）")
@@ -223,9 +231,13 @@ def run_diagnosis_loop(provider: ChatProvider, cfg: dict, system_prompt: str, di
                             violations = [Violation(path="submission", code="invalid_submission", message=str(exc))]
                     err = bool(violations)
                     out = _error_text(violations) if err else "提交已通过数据检查。"
+                elif query_limit is not None and query_count >= query_limit:
+                    out, err = "查询次数已用完，请直接调用 submit_report。", True
                 elif call.args is None:
+                    query_count += 1
                     out, err = f"参数不是合法的 JSON 对象：{call.raw_args!r}", True
                 else:
+                    query_count += 1
                     try:
                         out, err = query(call.name, call.args), False
                     except ToolError as exc:
@@ -233,6 +245,10 @@ def run_diagnosis_loop(provider: ChatProvider, cfg: dict, system_prompt: str, di
                 calls.append({"name": call.name, "input": call.args, "error": err})
                 results.append(ToolResult(id=call.id, content=out, is_error=err))
             provider.add_tool_results(results)
+            if query_limit is not None and query_count >= query_limit and not queries_exhausted:
+                queries_exhausted = True
+                provider.add_user("查询次数已用完，请直接提交完整报告，不要再调用查询工具。")
+                provider.limit_to_submission()
             if not submitted:
                 continue
             history.append(violations)
@@ -282,7 +298,8 @@ def diagnose(match: MatchData, mm: MatchMoments, cfg: dict[str, Any], baseline: 
     d = Diagnosis(submission=result.submission, problems=problems, frequency=frequency,
         digest=digest, provider=provider.name, model=result.model, score=score, usage=result.usage,
         tool_calls=result.tool_calls, raw_calls=result.raw_calls, repairs=result.repairs,
-        violations_history=result.violations_history, dropped=result.dropped)
+        violations_history=result.violations_history, dropped=result.dropped,
+        prompt_tokens_history=result.prompt_tokens_history)
     from cs2coach.report.render import render_diagnosis
     d.report = render_diagnosis(d, mm, {sid: p.name for sid, p in match.players.items()})
     return d

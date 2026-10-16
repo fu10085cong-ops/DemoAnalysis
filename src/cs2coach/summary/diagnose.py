@@ -29,6 +29,7 @@ class SummaryDiagnosis:
     raw_calls: list[dict[str, Any]] = field(default_factory=list)
     usage: Usage = field(default_factory=Usage)
     repairs: int = 0
+    prompt_tokens_history: list[int] = field(default_factory=list)
 
 
 def diagnose_summary(summary: PlayerSummary, cfg: dict, baseline: dict | None,
@@ -52,7 +53,8 @@ def diagnose_summary(summary: PlayerSummary, cfg: dict, baseline: dict | None,
     diagnosis = SummaryDiagnosis(submission=result.submission, digest=digest,
         provider=provider.name, model=result.model, usage=result.usage,
         violations_history=result.violations_history, dropped=result.dropped,
-        tool_calls=result.tool_calls, raw_calls=result.raw_calls, repairs=result.repairs)
+        tool_calls=result.tool_calls, raw_calls=result.raw_calls, repairs=result.repairs,
+        prompt_tokens_history=result.prompt_tokens_history)
     from cs2coach.summary.render_report import render_summary_diagnosis
     diagnosis.report = render_summary_diagnosis(diagnosis, summary, baseline)
     return diagnosis
