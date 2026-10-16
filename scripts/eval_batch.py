@@ -1,7 +1,9 @@
 """评测集：用固定的一批比赛重新生成报告，汇总违规、用量和耗时，供人工核对错误率（任务 021）。
 
 用法：python scripts/eval_batch.py [--set data/eval/eval_set.toml] [--provider ...] [--model ...]
-                                   [--label 说明] [--yes]
+                                   [--label 说明] [--only 卢文笙,ZywOo] [--jobs 5] [--yes]
+
+每个 case 在独立进程里运行，输出写到该 case 目录的 run.log；API 模型默认 5 个同时跑，本地模型固定 1 个。
 
 清单格式见 config/eval_set.example.toml。真实调用会产生费用：不加 --yes 时先确认。
 输出在 data/output/评测/<日期时间>_<label>/<case 名>/，不覆盖各玩家文件夹中的正式报告。
@@ -11,9 +13,12 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
+import subprocess
 import sys
 import tomllib
+from concurrent.futures import ThreadPoolExecutor
 from collections import Counter
 from datetime import datetime
 from pathlib import Path
@@ -121,22 +126,45 @@ def case_row(case: dict[str, Any], folder: Path, exit_code: int | None, seconds:
     }
 
 
+def subprocess_runner(argv: list[str]) -> int:
+    """每个 case 一个独立进程，输出写到该 case 目录的 run.log；并行时互不干扰。"""
+    out = Path(argv[argv.index("--out") + 1])
+    out.mkdir(parents=True, exist_ok=True)
+    with open(out / "run.log", "w", encoding="utf-8") as log:
+        return subprocess.run([sys.executable, "-m", "cs2coach", *argv], cwd=ROOT, stdout=log,
+                              stderr=subprocess.STDOUT, env={**os.environ, "PYTHONIOENCODING": "utf-8"}).returncode
+
+
 def run_batch(cases: list[dict[str, Any]], out_root: Path, provider: str | None, model: str | None,
-              runner: Callable[[list[str]], int], clock: Callable[[], float] = perf_counter) -> list[dict[str, Any]]:
-    """逐个运行；单个 case 出错只记录原因，其余继续。"""
-    rows = []
-    for case in cases:
+              runner: Callable[[list[str]], int], clock: Callable[[], float] = perf_counter,
+              jobs: int = 1) -> list[dict[str, Any]]:
+    """运行全部 case（jobs > 1 时并行）；单个 case 出错只记录原因，其余继续。结果按清单顺序。"""
+    def one(case: dict[str, Any]) -> dict[str, Any]:
         folder = out_root / case_dir_name(case["name"])
         folder.mkdir(parents=True, exist_ok=True)
-        print(f"\n=== {case['name']}（{case['kind']}）===", flush=True)
+        print(f"=== 开始 {case['name']}（{case['kind']}）", flush=True)
         started = clock()
         error, code = None, None
         try:
             code = runner(build_argv(case, folder, provider, model))
         except Exception as exc:  # 单个 case 的任何异常都不中断其余
             error = f"{type(exc).__name__}: {exc}"
-        rows.append(case_row(case, folder, code, clock() - started, error))
-    return rows
+        row = case_row(case, folder, code, clock() - started, error)
+        print(f"=== 完成 {case['name']}：{row['status']}（{row['seconds']} 秒）", flush=True)
+        return row
+
+    if jobs <= 1:
+        return [one(case) for case in cases]
+    with ThreadPoolExecutor(max_workers=jobs) as pool:
+        return list(pool.map(one, cases))
+
+
+def select_cases(cases: list[dict[str, Any]], only: str | None) -> list[dict[str, Any]]:
+    """--only 用逗号分隔的关键词筛选 case 名，例如 --only 卢文笙,ZywOo。"""
+    if not only:
+        return cases
+    keys = [k.strip() for k in only.split(",") if k.strip()]
+    return [c for c in cases if any(k in c["name"] for k in keys)]
 
 
 COLUMNS = [("name", "case"), ("kind", "类型"), ("status", "结果"), ("model", "模型"), ("rounds", "各轮违规数"),
@@ -173,20 +201,24 @@ def main(argv: list[str] | None = None, runner: Callable[[list[str]], int] | Non
     ap.add_argument("--label", default="eval", help="这次评测的简短说明，用在输出目录名里")
     ap.add_argument("--out", type=Path, default=OUTPUT_ROOT, help="评测输出根目录")
     ap.add_argument("--yes", action="store_true", help="不再确认，直接运行")
+    ap.add_argument("--only", default=None, help="只跑名字包含这些关键词的 case，逗号分隔")
+    ap.add_argument("--jobs", type=int, default=5, help="同时运行的 case 数；本地模型固定为 1（显卡同一时间只能跑一个）")
     args = ap.parse_args(argv)
     try:
-        cases = load_cases(args.set)
+        cases = select_cases(load_cases(args.set), args.only)
     except EvalSetError as exc:
         print(f"错误: {exc}", file=sys.stderr)
         return 1
+    if not cases:
+        print(f"错误: 没有名字包含 {args.only!r} 的 case", file=sys.stderr)
+        return 1
+    jobs = 1 if args.provider == "local" else max(1, args.jobs)
     if not args.yes and not confirm(cases, args.provider, args.model, ask):
         print("已取消。")
         return 1
     started_at = datetime.now().strftime("%Y%m%d-%H%M%S")
     out_root = args.out / f"{started_at}_{case_dir_name(args.label)}"
-    if runner is None:
-        from cs2coach.cli import main as runner
-    rows = run_batch(cases, out_root, args.provider, args.model, runner)
+    rows = run_batch(cases, out_root, args.provider, args.model, runner or subprocess_runner, jobs=jobs)
     summary = out_root / "summary.md"
     summary.write_text(render_summary(rows, args.label, started_at), encoding="utf-8")
     print(f"\n汇总已写入 {summary}")

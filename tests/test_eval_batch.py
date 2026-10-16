@@ -113,3 +113,12 @@ def test_failure_reason_stays_on_one_line(tmp_path):
     assert row["model"] == "local / m" and row["tokens"] == "-"
     table = [line for line in eb.render_summary([row], "t", "0").splitlines() if line.startswith("|")]
     assert len(table) == 3  # 表头、分隔行、一行数据：失败原因没有把表格撑开
+
+
+def test_only_filter_and_parallel_keep_order(tmp_path):
+    cases = eb.load_cases(write_set(tmp_path, SET))
+    assert [c["name"] for c in eb.select_cases(cases, "多场")] == ["多场 B"]
+    assert eb.select_cases(cases, None) == cases
+    calls = []
+    rows = eb.run_batch(cases, tmp_path / "run", None, None, fake_runner(calls), jobs=2)
+    assert [r["name"] for r in rows] == ["单场 A", "多场 B"] and len(calls) == 2

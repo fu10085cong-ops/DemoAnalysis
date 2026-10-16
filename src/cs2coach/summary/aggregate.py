@@ -8,6 +8,7 @@ from statistics import median
 
 from pydantic import BaseModel, PrivateAttr
 
+from cs2coach.cache import cache_key, cached
 from cs2coach.features.models import AimStats, MatchMoments
 from cs2coach.features.problems import (FrequencyRow, ProblemReport, detect_problems,
                                          frequency_from_counts, problem_frequency)
@@ -123,7 +124,7 @@ def aggregate_matches(steamid: int, games: list[tuple[DemoRef, MatchMoments, Pro
 
 
 def build_summary(steamid: int, refs: list[DemoRef], cfg: dict,
-                  baseline: dict | None) -> PlayerSummary:
+                  baseline: dict | None, use_cache: bool = True) -> PlayerSummary:
     """逐场解析与检测；失败的比赛记录原因，其余比赛继续。"""
     from cs2coach.features.moments import find_moments
 
@@ -136,12 +137,16 @@ def build_summary(steamid: int, refs: list[DemoRef], cfg: dict,
         seen.add(ref.match_id)
         print(f"正在处理 {ref.match_id} …", flush=True)
         try:
-            demo = resolve_demo(ref.path, member=ref.member)
-            match = parse_match(demo, cfg)
-            player = match.require_player(steamid, cfg["parsing"]["min_target_coverage"])
-            mm = find_moments(match, player.steamid, cfg)
-            report = detect_problems(mm, baseline, cfg)
-            score = match_score(match, steamid)
+            def analyse():
+                demo = resolve_demo(ref.path, member=ref.member)
+                match = parse_match(demo, cfg)
+                player = match.require_player(steamid, cfg["parsing"]["min_target_coverage"])
+                mm = find_moments(match, player.steamid, cfg)
+                return mm, detect_problems(mm, baseline, cfg), match_score(match, steamid)
+
+            # 同一份 demo、配置和代码不变时直接读缓存（汇总 21 场从约 5 分钟降到十几秒）
+            key = cache_key(Path(ref.path), ref.member, steamid, cfg)
+            mm, report, score = cached(key, analyse, enabled=use_cache)
         except Exception as exc:  # 单场坏数据不能中断其余比赛
             skipped.append(SkippedDemo(path=ref.path, member=ref.member,
                                        match_id=ref.match_id, reason=str(exc)))

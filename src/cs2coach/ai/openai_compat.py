@@ -80,8 +80,11 @@ class OpenAICompatProvider:
                                     "请改用 num_ctx 更大的 Ollama 模型。")
         else:
             self.num_ctx = None
-        self.params["tools"] = [{"type": "function", "function": {
-            "name": t["name"], "description": t["description"], "parameters": t["input_schema"]}} for t in tools]
+        if tools:
+            self.params["tools"] = [{"type": "function", "function": {
+                "name": t["name"], "description": t["description"], "parameters": t["input_schema"]}} for t in tools]
+        else:  # 纯文本任务（分级报告 L1）：不传工具，部分服务拒绝空的 tools 数组
+            self.params.pop("tools", None)
         self.messages = [{"role": "system", "content": system},
                          {"role": "user", "content": "\n\n".join(user_texts)}]
 
