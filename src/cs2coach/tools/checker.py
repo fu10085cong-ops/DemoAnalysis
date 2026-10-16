@@ -43,7 +43,12 @@ PREDICATES: dict[str, Callable[[Moment], bool]] = {
     "weapon_not_ready": lambda m: m.death is not None and m.death.weapon_ready is False,
     "planted": lambda m: m.context.bomb_planted is True,
     "never": lambda m: False,
+    "death": lambda m: m.kind == "death",
+    "kill": lambda m: m.kind == "kill",
 }
+# 与队友距离的说法：阈值来自配置，漏补枪记录的距离也算
+DISTANCE_PREDICATES = {"teammate_far", "teammate_near"}
+PHRASE_SCOPES = {"any", "all"}
 
 # 从旧引用模块原样迁移，仅用于拒绝分析文字里的引用；检查规则不变。
 CITATION = re.compile(r"\[\[\s*([A-Za-z0-9\-]+)\s*\]\]")
@@ -248,6 +253,13 @@ def _describe(moments: list[Moment], records: list) -> str:
     return "；".join(descriptions) if descriptions else "targets 中没有可核对的数据。"
 
 
+def _teammate_distances(moments: list[Moment], records: list) -> list[float]:
+    """死亡时最近存活队友的距离，加上漏补枪记录中与阵亡队友的距离（游戏单位）。"""
+    out = [round(m.trade.nearest_teammate_distance, 1) for m in moments
+           if m.trade is not None and m.trade.nearest_teammate_distance is not None]
+    return out + [round(r.distance, 1) for r in records]
+
+
 @dataclass
 class _TargetData:
     moments: list[Moment]
@@ -424,6 +436,23 @@ def _check_entries(sub: ReportSubmission, cfg: dict, whole_numbers: list[float],
                 if match is None:
                     continue
                 require = phrase["require"]
+                if require in DISTANCE_PREDICATES:
+                    distances = _teammate_distances(moments, records)
+                    far, near = cfg["checker"]["teammate_far_distance"], cfg["checker"]["teammate_near_distance"]
+                    if not any(d >= far if require == "teammate_far" else d <= near for d in distances):
+                        limit = f"不少于 {far:g}" if require == "teammate_far" else f"不超过 {near:g}"
+                        shown = "、".join(f"{d:g}" for d in distances) or "没有距离数据"
+                        add(text_path, "phrase_unsupported",
+                            f"“{match.group()}”需要至少一个 target 与队友的距离{limit} 单位，实际为：{shown}。")
+                    continue
+                if phrase.get("scope", "any") == "all":
+                    # 只核对本条 targets 中的瞬间；只有漏补枪记录时（说的是队友阵亡）不适用
+                    failing = [m.id for m in moments if not PREDICATES[require](m)]
+                    if failing:
+                        add(text_path, "phrase_unsupported",
+                            f"“{match.group()}”要求所有 target 都满足 {require}，"
+                            f"但 {'、'.join(failing)} 不满足（实际类型：{'、'.join(f'{m.id}={m.kind}' for m in moments)}）。")
+                    continue
                 supported = (any(PREDICATES[require](m) for m in predicate_moments)
                              or (require == "trade" and bool(records))
                              or (require == "planted" and any(r.bomb_planted is True for r in records)))

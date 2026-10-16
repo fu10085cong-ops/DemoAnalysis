@@ -47,7 +47,10 @@ def _validate_training(cfg: dict[str, Any]) -> None:
 
 def _validate_checker(cfg: dict[str, Any]) -> None:
     """敏感说法允许配置扩展，但谓词名称和正则必须能被检查器执行。"""
-    from cs2coach.tools.checker import PREDICATES
+    from cs2coach.tools.checker import DISTANCE_PREDICATES, PHRASE_SCOPES, PREDICATES
+    for key in ("teammate_far_distance", "teammate_near_distance"):
+        if type(cfg.get(key)) not in (int, float) or cfg[key] <= 0:
+            raise ConfigError(f"配置项 checker.{key} 应为正数")
     aliases = cfg["map_aliases"]
     if (not isinstance(aliases, dict) or any(not isinstance(names, list) or not names
             or any(not isinstance(name, str) or not name for name in names)
@@ -62,10 +65,16 @@ def _validate_checker(cfg: dict[str, Any]) -> None:
         raise ConfigError("配置项 checker.phrases 应为表数组")
     for i, phrase in enumerate(phrases):
         name = f"checker.phrases[{i}]"
-        if not isinstance(phrase, dict) or set(phrase) != {"pattern", "require"}:
-            raise ConfigError(f"{name} 必须且只能包含 pattern、require")
-        if not isinstance(phrase["require"], str) or phrase["require"] not in PREDICATES:
+        if (not isinstance(phrase, dict) or not {"pattern", "require"} <= set(phrase)
+                or not set(phrase) <= {"pattern", "require", "scope"}):
+            raise ConfigError(f"{name} 必须包含 pattern、require，可选 scope")
+        if (not isinstance(phrase["require"], str)
+                or phrase["require"] not in PREDICATES.keys() | DISTANCE_PREDICATES):
             raise ConfigError(f"{name}.require 是未知谓词：{phrase['require']!r}")
+        if phrase.get("scope", "any") not in PHRASE_SCOPES:
+            raise ConfigError(f"{name}.scope 应为 any 或 all")
+        if phrase.get("scope") == "all" and phrase["require"] in DISTANCE_PREDICATES:
+            raise ConfigError(f"{name}.scope 不能用于距离谓词")
         if not isinstance(phrase["pattern"], str) or not phrase["pattern"]:
             raise ConfigError(f"{name}.pattern 应为非空正则字符串")
         try:

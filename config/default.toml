@@ -262,10 +262,14 @@ number_relative_tolerance = 0.10
 number_absolute_tolerance = 0.000000001
 # 常见分位数标签，不把“75 分位”或“p90”当成比赛事实数字
 quantile_labels = [25, 50, 75, 90]
+# “站位偏散/离队友远”“离队友近”的距离门槛（游戏单位）。依据补枪概率实测：
+# 阵亡时最近队友 < 300 单位被补回约 34%，> 1000 单位约 5%（docs/product.md「思路分析的方法」）
+teammate_far_distance = 1000.0
+teammate_near_distance = 300.0
 
 [checker.map_aliases]
-de_dust2 = ["de_dust2", "dust2", "沙二", "沙2"]
-de_mirage = ["de_mirage", "mirage", "米拉日"]
+de_dust2 = ["de_dust2", "dust2", "沙二", "沙2", "炙热沙城"]
+de_mirage = ["de_mirage", "mirage", "米拉日", "荒漠迷城"]
 de_inferno = ["de_inferno", "inferno", "炼狱小镇"]
 de_ancient = ["de_ancient", "ancient", "远古遗迹"]
 de_anubis = ["de_anubis", "anubis", "阿努比斯"]
@@ -276,6 +280,7 @@ de_overpass = ["de_overpass", "overpass", "死亡游乐园"]
 de_vertigo = ["de_vertigo", "vertigo", "殒命大厦"]
 
 # 每项 pattern 为敏感说法正则，require 为必须具备的数据谓词；谓词名称严格校验
+# scope 可选：any（默认，至少一个 target 满足）或 all（targets 中的瞬间全部满足）
 [[checker.phrases]]
 # “没看到”类说法只允许几何视野明确未看到
 pattern = "没看到|没看见|没发现"
@@ -335,6 +340,28 @@ require = "planted"
 # round_time_s 只有已过时间，不能据此推算回合剩余时间
 pattern = "回合还剩"
 require = "never"
+
+[[checker.phrases]]
+# 把引用的瞬间统称为死亡时，必须全部是死亡（flash 曾把一次击杀写成“这两次死亡”）
+pattern = "(?:这|两|二|2|几)\\s*(?:次|处)\\s*(?:都是)?(?:死亡|阵亡)|都(?:是)?(?:死亡|阵亡)|(?:两|几)次都(?:被击杀|被杀|阵亡)"
+require = "death"
+scope = "all"
+
+[[checker.phrases]]
+# 把引用的瞬间统称为击杀时，必须全部是击杀
+pattern = "(?:这|两|二|2|几)\\s*(?:次|处)\\s*(?:都是)?击杀|都(?:是|完成了?)?击杀"
+require = "kill"
+scope = "all"
+
+[[checker.phrases]]
+# 说和队友离得远、站位分散，需要有与队友距离足够远的记录
+pattern = "站位(?:偏|太|过于|比较|较)?(?:分)?散|拉得太开|离队友(?:很|太|较|偏|比较)?远|和队友(?:之间)?(?:的)?距离(?:很|太|较|偏|比较)?远|队友(?:都)?离(?:你|得)(?:很|太|较|偏|比较)?远"
+require = "teammate_far"
+
+[[checker.phrases]]
+# 说和队友离得近，需要有与队友距离足够近的记录
+pattern = "离队友(?:很|非常|比较)?近|和队友(?:之间)?(?:的)?距离(?:很|非常|比较)?近|队友就在(?:身边|旁边|附近)|贴着队友"
+require = "teammate_near"
 
 [ai]
 # 用哪个模型服务：deepseek / claude / local（各自的设置在下面对应的表里）
