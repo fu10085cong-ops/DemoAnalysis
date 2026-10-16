@@ -65,10 +65,18 @@
 
 ## 五、可以直接做的事（不调用本地模型）
 
-- 多场汇总的基础版报告：目前只有单场有 `basic_report.md`。
-- "近距离"等说法的漏洞：一条 finding 引用多次交火时，只要求至少一次满足。可以考虑按句子定位是哪一次交火。
-- 补职业 demo 时优先找 Inferno（只有 2 张），以及有 UMP-45 的比赛。
-- 测试数据里的真实玩家名、steamid 需要匿名化（`tests/fixtures/` 中的 `mirage_*`、`016_local_*`、`summary_submission.json` 等），公开仓库之前必须做。
+已写成任务单，交给 Codex 实现（2026-10-16）：
+
+- **022**（`docs/tasks/022-checker-sentence-scope-segments.md`）：检查器的三个漏洞：
+  - 说法按句子核对对应的交火（"近距离"漏洞）；
+  - "慢在哪一段"的说法（mac 首次评测发现的反复错误）；
+  - "残局""回防"的说法。
+- **023**（`docs/tasks/023-summary-basic-report.md`）：多场汇总的基础版报告。
+- **024**（`docs/tasks/024-anonymize-repo-data.md`）：仓库内真实玩家信息匿名化。公开前必须做；git 历史怎么处理另行决定。
+
+没有写成任务单的：
+
+- 补职业 demo 时优先找 Inferno（只有 2 张），以及有 UMP-45 的比赛。需要产品负责人下载 demo，不是代码任务。
 
 ## 六、工作约定
 
