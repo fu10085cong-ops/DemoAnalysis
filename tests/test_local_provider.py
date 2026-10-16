@@ -118,3 +118,22 @@ def test_provider_override_for_both_commands_and_local_factory(monkeypatch, tmp_
     assert cli.main(["summary", "--player", str(A), "--provider", "local",
                      "--ai", "--out", str(tmp_path)]) == 0
     assert seen["provider"] == "local"
+
+
+def test_model_flag_overrides_selected_provider_model(monkeypatch, tmp_path):
+    summary, _, _ = sample()
+    seen = {}
+    def build(sid, refs, config, baseline):
+        seen["ai"] = copy.deepcopy(config["ai"])
+        return summary
+    monkeypatch.setattr(cli, "load_config", lambda path=None: copy.deepcopy(load_config()))
+    monkeypatch.setattr("cs2coach.summary.discover.find_player_demos", lambda *_: ["demo"])
+    monkeypatch.setattr("cs2coach.summary.aggregate.build_summary", build)
+    monkeypatch.setattr("cs2coach.baseline.load_baseline", lambda: None)
+    monkeypatch.setattr(cli, "_summary_ai", lambda *args: 0)
+    assert cli.main(["summary", "--player", str(A), "--provider", "deepseek", "--model", "deepseek-v4-pro",
+                     "--ai", "--out", str(tmp_path)]) == 0
+    assert seen["ai"]["provider"] == "deepseek" and seen["ai"]["deepseek"]["model"] == "deepseek-v4-pro"
+    assert seen["ai"]["local"]["model"] == load_config()["ai"]["local"]["model"]  # 其他服务不受影响
+    assert cli._build_parser().parse_args(["analyze", "x.dem", "--player", str(A),
+                                           "--model", "deepseek-flash"]).model == "deepseek-flash"

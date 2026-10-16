@@ -59,6 +59,7 @@ def _build_parser() -> argparse.ArgumentParser:
     analyze.add_argument("--config", type=Path, default=None, help="阈值配置文件（TOML），只需写要覆盖的条目")
     analyze.add_argument("--ai", action="store_true", help="调用 AI 生成中文复盘报告（模型在配置的 [ai] 段，需要对应的 API 凭据）")
     analyze.add_argument("--provider", choices=("deepseek", "claude", "local"), help="覆盖配置中的 AI 模型服务")
+    analyze.add_argument("--model", default=None, help="覆盖所选模型服务的模型名，例如 deepseek-v4-pro")
     summary = sub.add_parser("summary", help="汇总同一玩家的多场 demo（程序部分）")
     summary.add_argument("demo", nargs="*", type=Path, help="指定 demo；省略时递归扫描 --demos-dir")
     summary.add_argument("--demo-member", action="append", default=[], help="指定压缩包中的 demo；多个路径时按顺序对应")
@@ -68,6 +69,7 @@ def _build_parser() -> argparse.ArgumentParser:
     summary.add_argument("--config", type=Path, default=None, help="阈值配置文件（TOML）")
     summary.add_argument("--ai", action="store_true", help="调用 AI 生成多场中文复盘报告")
     summary.add_argument("--provider", choices=("deepseek", "claude", "local"), help="覆盖配置中的 AI 模型服务")
+    summary.add_argument("--model", default=None, help="覆盖所选模型服务的模型名，例如 deepseek-v4-pro")
     return parser
 
 
@@ -79,6 +81,14 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "summary":
         return _summary(args)
     return 1
+
+
+def _apply_ai_overrides(cfg: dict, args: argparse.Namespace) -> None:
+    """命令行的 --provider / --model 覆盖配置；只改本次运行，不写回配置文件。"""
+    if args.provider:
+        cfg["ai"]["provider"] = args.provider
+    if args.model:
+        cfg["ai"].setdefault(cfg["ai"]["provider"], {})["model"] = args.model
 
 
 def _summary(args: argparse.Namespace) -> int:
@@ -100,8 +110,7 @@ def _summary(args: argparse.Namespace) -> int:
     selected = dict(zip(archives, args.demo_member))
     try:
         cfg = load_config(args.config)
-        if args.provider:
-            cfg["ai"]["provider"] = args.provider
+        _apply_ai_overrides(cfg, args)
         steamid = int(args.player)
         refs = (inspect_player_demos(steamid, [(path, selected.get(path)) for path in args.demo])
                 if args.demo else find_player_demos(steamid, args.demos_dir))
@@ -195,8 +204,7 @@ def _analyze(args: argparse.Namespace) -> int:
         return 1
     try:
         cfg = load_config(args.config)
-        if args.provider:
-            cfg["ai"]["provider"] = args.provider
+        _apply_ai_overrides(cfg, args)
         demo = resolve_demo(args.demo, member=args.demo_member)
         print(f"demo: {demo}")
         match = parse_match(demo, cfg)

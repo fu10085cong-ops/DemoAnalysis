@@ -94,6 +94,16 @@ python -m cs2coach summary data/demos/xxx.zip --demo-member some-map.dem --playe
 
 `summary` 直接从 demo 生成多场程序汇总，不读取单场输出；结果放在 `<输出根目录>/<玩家名>_<SteamID64>/汇总/`，包含 `problems.md` 和 `summary.json`。加 `--ai` 后还会生成 `report.md` 和 `submission.json`。重复运行会归档旧版文件。
 
+### 选择模型
+
+默认用 DeepSeek 的 `deepseek-flash`（便宜，约为 v4-pro 的十分之一）。重要比赛想要更细的分析时，用 `--model` 临时换成 `deepseek-v4-pro`，不用改配置：
+
+```bash
+python -m cs2coach summary --player <SteamID64> --ai --model deepseek-v4-pro
+```
+
+`--provider` 选模型服务（deepseek / claude / local），`--model` 覆盖该服务的模型名，都只对本次运行有效。
+
 ### 本地 Ollama 模型
 
 先安装并启动 Ollama，拉取基础模型，再创建一个上下文足够大的模型。新建 `Modelfile`：

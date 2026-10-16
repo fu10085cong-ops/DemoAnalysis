@@ -375,8 +375,8 @@ max_repairs = 2
 # OpenAI 兼容接口。凭据：环境变量 DEEPSEEK_API_KEY
 base_url = "https://api.deepseek.com"
 api_key_env = "DEEPSEEK_API_KEY"
-# deepseek-v4-pro（推理更强）或 deepseek-flash（更便宜）
-model = "deepseek-v4-pro"
+# 默认 deepseek-flash（便宜）；需要更细的分析时用命令行 --model deepseek-v4-pro（推理更强，约贵十倍）
+model = "deepseek-flash"
 # 思考模式（DeepSeek 默认开启）；推理深度：low / high / max
 thinking = true
 reasoning_effort = "high"
