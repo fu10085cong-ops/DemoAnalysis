@@ -142,7 +142,10 @@ def test_cli_writes_report_and_submission_audit_with_fake_diagnosis(tmp_path, mo
     assert out.read_text(encoding="utf-8") == d.report
     audit = json.loads((tmp_path / "submission.json").read_text(encoding="utf-8"))
     assert audit == {"submission": d.submission.model_dump(), "rendered_submission": d.rendered_submission,
-                     "violations_history": [[]], "dropped": [], "raw_calls": d.raw_calls}
+                     "violations_history": [[]], "dropped": [], "raw_calls": d.raw_calls,
+                     "run": {"provider": d.provider, "model": d.model, "repairs": 0, "tool_calls": len(d.tool_calls),
+                             "input_tokens": d.usage.input_tokens, "cache_read_tokens": d.usage.cache_read_tokens,
+                             "output_tokens": d.usage.output_tokens}}
 
 
 def test_prompts_keep_metric_definitions_and_require_structured_workflow():

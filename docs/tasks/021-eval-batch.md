@@ -1,6 +1,6 @@
 # 021 评测集：固定样例批量生成报告
 
-状态：待做（在 019、020 完成之后做）
+状态：完成
 
 ## 目标
 
@@ -69,11 +69,27 @@ python scripts/eval_batch.py [--set data/eval/eval_set.toml] [--provider ...] [-
 
 ---
 
-## 完成报告（GPT 填写）
+## 完成报告
 
-- 改动的文件及原因：
-- 测试结果：
-- 真实 demo 验证（如有）：
-- 遗留问题 / 需要确认的地方：
+GPT 额度用完，本任务由 Claude 完成（2026-10-16）。
+
+- **改动的文件及原因**：
+  - `scripts/eval_batch.py`（新建）：清单校验，CLI 参数与手动运行相同，逐个运行，单个 case 出错只记录原因，汇总写入 `summary.md`，运行前确认；
+  - `config/eval_set.example.toml`；
+  - `docs/eval_log.md`：记录方法，以及错误怎么分类、怎么计数；
+  - `cli.py`：审计文件新增 `run` 字段（模型、修正次数、工具调用、token），汇总表从这里读取；`tests/test_render.py` 同步；
+  - 测试：`tests/test_eval_batch.py`。
+- **真实评测集**：`data/eval/eval_set.toml`，共 5 个 case：
+  - 完美 Dust2 妮妮孩孩major冠军；
+  - 5E 卢文笙；
+  - 5E 梁孙超；
+  - ESL ZywOo；
+  - 妮妮孩孩major冠军的多场汇总。
+
+  另有 1 个 case 的验收清单 `local_one.toml`。都不入库。
+- **测试结果**：`pytest -q`：583 passed, 3 skipped。
+- **本地验收**：`--provider local`，只跑 1 个 case，成功。各轮违规数 14→5→2，删除 1 条，工具调用 3 次，输入 70004 / 输出 4504 token，用时 171 秒。
 
 ## 审查意见（Claude 填写）
+
+由 Claude 实现，没有经过另一方审查。

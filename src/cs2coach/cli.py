@@ -179,6 +179,7 @@ def _summary_ai(summary, cfg: dict, baseline: dict | None, folder: Path) -> int:
         "violations_history": [[v.model_dump() for v in group] for group in d.violations_history],
         "dropped": [item.model_dump() for item in d.dropped],
         "raw_calls": d.raw_calls,
+        "run": _run_info(d),
         **({"prompt_tokens_history": d.prompt_tokens_history} if name == "local" else {}),
     }, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     print("\n" + d.report)
@@ -189,6 +190,13 @@ def _summary_ai(summary, cfg: dict, baseline: dict | None, folder: Path) -> int:
           f"输入 {u.input_tokens} tokens（其中缓存命中 {u.cache_read_tokens}），输出 {u.output_tokens} tokens")
     _local_time(name, started, provider)
     return 0
+
+
+def _run_info(d) -> dict:
+    """模型、修正次数、工具调用与 token 用量，供评测汇总（scripts/eval_batch.py）读取。"""
+    u = d.usage
+    return {"provider": d.provider, "model": d.model, "repairs": d.repairs, "tool_calls": len(d.tool_calls),
+            "input_tokens": u.input_tokens, "cache_read_tokens": u.cache_read_tokens, "output_tokens": u.output_tokens}
 
 
 def _write_failed_audit(audit_path: Path, exc: Exception) -> None:
@@ -303,6 +311,7 @@ def _diagnose(match, moments, cfg, out: Path) -> int:
         "violations_history": [[v.model_dump() for v in group] for group in d.violations_history],
         "dropped": [item.model_dump() for item in d.dropped],
         "raw_calls": d.raw_calls,
+        "run": _run_info(d),
         **({"prompt_tokens_history": d.prompt_tokens_history} if name == "local" else {}),
     }, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     print("\n" + d.report)

@@ -1,0 +1,15 @@
+# 评测清单示例（任务 021）。复制到 data/eval/eval_set.toml 后填入真实 steamid；
+# data/ 已被 git 忽略，真实清单不入库。运行：python scripts/eval_batch.py --label 说明
+
+[[case]]
+name = "完美 Dust2 单场"
+kind = "analyze"                 # analyze（单场）或 summary（多场）
+demo = "data/demos/perfectworld_demo/xxxxxxxxxxxxxxxxxxx_0.zip"
+player = 76561190000000000
+# demo_member = "some.dem"       # 压缩包中有多个 demo 时指定
+
+[[case]]
+name = "某玩家多场汇总"
+kind = "summary"
+player = 76561190000000001
+# demos = ["data/demos/a.zip", "data/demos/b.zip"]   # 省略时扫描 data/demos 中该玩家的全部比赛
