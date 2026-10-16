@@ -272,6 +272,9 @@ finding_candidates = 3
 # 阵亡时最近队友 < 300 单位被补回约 34%，> 1000 单位约 5%（docs/product.md「思路分析的方法」）
 teammate_far_distance = 1000.0
 teammate_near_distance = 300.0
+# “近距离/短距离”“远距离/中远距离”说法的交火距离门槛（米，与事实卡相同）
+close_range_m = 12.0
+long_range_m = 20.0
 
 [checker.map_aliases]
 de_dust2 = ["de_dust2", "dust2", "沙二", "沙2", "炙热沙城"]
@@ -381,6 +384,16 @@ scope = "all"
 pattern = "都没(?:有)?(?:打中|命中)|都一发(?:未|没)中|(?:始终|都)(?:拿|打)不(?:到|出)伤害|(?:始终|都)没(?:有)?打出伤害|全部(?:打空|落空)"
 require = "no_hits"
 scope = "all"
+
+[[checker.phrases]]
+# 描述交火距离的说法要和实际距离一致（评测：28 米被说成"短距离交火"）。
+# 只匹配“近距离交火/对枪/遭遇”这类描述，不匹配“拉近距离”“近距离时……”这类建议
+pattern = "(?:近距离|短距离|贴脸|近身)(?:的)?(?:交火|对枪|遭遇|接敌|对拼)"
+require = "close_range"
+
+[[checker.phrases]]
+pattern = "(?:远距离|中远距离|长距离)(?:的)?(?:交火|对枪|遭遇|接敌|对拼)"
+require = "long_range"
 
 [[checker.phrases]]
 # round_time_s 只有已过时间，不能据此推算回合剩余时间

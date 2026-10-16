@@ -87,3 +87,24 @@ def test_situation_slot_renders_for_moments_and_records():
     out, errors = render_slots("{R2-kill1.situation}；{R9.situation}", resolve)
     assert errors == []
     assert out == "CT 方，1v3 残局，对方已下包、回防；T 方，2v4，人数劣势，未下包"
+
+
+def test_range_words_and_segment_vs_threshold():
+    # 评测实测：28 米被说成"短距离"；"看见到开枪 406 毫秒，高于职业同武器 75 分位 398 毫秒"
+    mm = make_mm([make_moment(id="R5-death", round=5, context={"distance": 28.3},
+                              engagement={"seen_to_first_shot_s": 0.406})], rounds=5)
+    rep = ProblemReport(hits=[ProblemHit(problem="slow_reaction", target="R5-death", weapon="ak47",
+                                         evidence={"ttd_ms": 891.0}, thresholds={"ttd_ms": 516.0})],
+                        disabled=[], skipped={}, baseline_source="测试")
+    def found(analysis):
+        sub = parse_submission(dict(overview="本场值得复盘。", findings=[dict(problem="slow_reaction",
+            targets=["R5-death"], severity="low", analysis=analysis, training="练。", drills=[])],
+            patterns=[], highlights=[], training_plan=["练。"]))
+        return {v.code for v in check_submission(sub, mm, rep, "地图 de_test。", CFG, None, (1, 0), [], None)}
+    assert "phrase_unsupported" in found("一次短距离交火中出枪偏慢。")
+    assert found("一次远距离交火中出枪偏慢。") == set()
+    # 评测实测的误伤：建议里的“拉近距离”不是在描述这次交火
+    assert found("更好的处理是靠队友配合拉近距离，近距离时再打。") == set()
+    assert "slot_misuse" in found("其中看见到开枪就占{R5-death.seen_to_shot}，高于职业同武器 75 分位{R5-death.threshold}。")
+    assert found("首次命中用了{R5-death.value}，高于职业同武器 75 分位{R5-death.threshold}，"
+                 "其中看见到开枪占{R5-death.seen_to_shot}。") == set()

@@ -73,7 +73,7 @@ RECORD_PREDICATES: dict[str, Callable] = {
     "t_post_plant": lambda r: r.side == "T" and r.bomb_planted is True,
 }
 # 与队友距离的说法：阈值来自配置，漏补枪记录的距离也算
-DISTANCE_PREDICATES = {"teammate_far", "teammate_near"}
+DISTANCE_PREDICATES = {"teammate_far", "teammate_near", "close_range", "long_range"}
 PHRASE_SCOPES = {"any", "all"}
 
 # 从旧引用模块原样迁移，仅用于拒绝分析文字里的引用；检查规则不变。
@@ -95,9 +95,19 @@ _EXPLICIT_MATCH = re.compile(r"(?<![A-Za-z0-9_])M\d+(?![A-Za-z0-9_:])")
 _CHINESE_NUMBER = re.compile(r"(?:[两二三四五六七八九十百]+几?|几[十百]+几?)(?:次|发|枪|秒|米|回合|人|场|处|名)")
 
 
+# TTD 的分段（看见→开枪、开枪→命中）后面紧跟“高于……阈值”，等于拿一段去比整个 TTD 的阈值（评测中出现三次）
+_SEGMENT_VS_THRESHOLD = re.compile(
+    r"\{([^{}]+)\.(seen_to_shot|shot_to_hit)\}[^。；]{0,15}?(?:高于|超过|超出|多于|慢于|大于)[^。；]{0,20}?"
+    r"(?:\{[^{}]+\.threshold\}|分位|阈值)")
+
+
 def _slot_violations(text: str, path: str, resolver, cfg: dict) -> list[Violation]:
     _, errors = render_slots(text, resolver)
     out = [Violation(path=path, code=e.code, message=e.message) for e in errors]
+    for found in _SEGMENT_VS_THRESHOLD.finditer(text):
+        out.append(Violation(path=path, code="slot_misuse",
+            message=f"{{{found[1]}.{found[2]}}} 只是 TTD 的一段，不能和职业阈值比较；阈值对应的是整个 TTD，"
+                    f"请写成“{{{found[1]}.value}} 高于 {{{found[1]}.threshold}}”，分段只用来说明慢在哪一段。"))
     clean = SLOT.sub(" ", text)
     clean = _WEAPONS.sub(" ", clean)
     for names in cfg["checker"]["map_aliases"].values():
@@ -398,6 +408,17 @@ def _check_entries(sub: ReportSubmission, cfg: dict,
                 if match is None:
                     continue
                 require = phrase["require"]
+                if require in ("close_range", "long_range"):
+                    # 交火距离的形容词（评测：13、18 米被说成"近距离"，28 米被说成"短距离"）；
+                    # 只引用漏补回合时没有交火距离，不核对
+                    meters = [round(m.context.distance) for m in moments if m.context.distance is not None]
+                    close, far_m = cfg["checker"]["close_range_m"], cfg["checker"]["long_range_m"]
+                    if meters and not any(d <= close if require == "close_range" else d >= far_m for d in meters):
+                        limit = f"不超过 {close:g} 米" if require == "close_range" else f"不少于 {far_m:g} 米"
+                        add(text_path, "phrase_unsupported",
+                            f"“{match.group()}”需要至少一个 target 的交火距离{limit}，实际为："
+                            f"{'、'.join(f'{d} 米' for d in meters) or '没有距离数据'}。请改用 {{瞬间.distance}} 直接写距离。")
+                    continue
                 if require in DISTANCE_PREDICATES:
                     distances = _teammate_distances(moments, records)
                     far, near = cfg["checker"]["teammate_far_distance"], cfg["checker"]["teammate_near_distance"]
