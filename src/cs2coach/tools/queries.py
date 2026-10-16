@@ -19,7 +19,8 @@ TOOLS: list[dict[str, Any]] = [
         "name": "get_moment",
         "description": (
             "查看一个决定性瞬间的完整数据（JSON）。摘要里的数据不够判断时再用，参数是摘要中的编号，例如 R5-death。"
-            "tick 每秒 64 个。主要字段：context（瞬间前一刻的局势：存活人数、回合时间、装备、手持武器、位置、距离 distance 单位为米）；"
+            "tick 每秒 64 个。主要字段：context（瞬间前一刻的局势：存活人数、装备、手持武器、位置、距离 distance 单位为米；"
+            "round_time_s 是冻结期结束后已经过去的秒数，不是剩余时间）；"
             "engagement.shots（这次交火中瞄准这名对手的每一枪：speed 开枪时水平速度 u/s、max_speed 武器最高速度、stopped 是否停稳、"
             "hit 是否命中、aim_error_deg 子弹方向偏离对手身体中心的角度）；"
             "engagement.player_first_seen_tick / opponent_first_seen_tick（自己 / 对手第一次看见对方的 tick；"

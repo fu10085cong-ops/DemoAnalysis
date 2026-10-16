@@ -75,6 +75,13 @@ def test_digest_contains_prominence_and_human_evidence_before_moments():
     assert "看见对手到第一次命中" in text and "不按击杀和死亡分开" in text
 
 
+def test_single_digest_shows_missed_trade_context():
+    match = scenario()
+    mm = find_moments(match, A, load_config())
+    text = build_digest(match, mm, None)
+    assert "下包前，队友阵亡后 1v1" in text
+
+
 def test_digest_pro_training_notice_only_for_pro_players():
     d, mm, _ = sample()
     cfg = load_config()

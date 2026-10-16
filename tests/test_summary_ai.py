@@ -6,12 +6,14 @@ import pytest
 
 from cs2coach.ai.providers import ToolCall, Turn, Usage
 from cs2coach.config import load_config
+from cs2coach.features.models import MissedTrade
 from cs2coach.features.problems import ProblemHit, ProblemReport
 from cs2coach.summary.aggregate import aggregate_matches
 from cs2coach.summary.diagnose import diagnose_summary
 from cs2coach.summary.digest import build_summary_digest, representative_hits, summary_numbers
 from cs2coach.summary.discover import DemoRef
 from cs2coach.summary.queries import SUMMARY_TOOLS, run_summary_tool
+from cs2coach.summary.render import render_summary_problems
 from cs2coach.tools.checker import check_summary_submission
 from cs2coach.tools.queries import ToolError
 from cs2coach.tools.submission import parse_submission, submit_tool
@@ -89,6 +91,50 @@ def test_representatives_sort_within_match_by_deviation():
         evidence={"ttd_ms": 1200}, thresholds={"ttd_ms": 500}))
     refs = [ref for ref, _ in representative_hits(summary, "slow_reaction", 3)]
     assert refs == ["M2:R1-death", "M1:R2-death", "M1:R1-death"]
+
+
+def test_missed_trade_representatives_prefer_untraded_then_nearby_and_diverse():
+    summary, _, _ = sample()
+    for number, round_no, traded, distance in (
+        ("M1", 2, True, 20), ("M1", 3, False, 100), ("M2", 2, False, 200)):
+        mm, report = summary.detail(number)
+        record = MissedTrade(round=round_no, tick=round_no * 100,
+            teammate=A + 1, killer=A + 2, distance=distance,
+            killer_traded_by_other=traded, side="T", alive_own=2,
+            alive_enemy=3, round_time_s=43, bomb_planted=False)
+        mm.missed_trades.append(record)
+        report.hits.append(ProblemHit(problem="missed_trade", target=f"R{round_no}", weapon=None,
+            evidence=record.model_dump(), thresholds={}))
+    refs = [ref for ref, _ in representative_hits(summary, "missed_trade", 3)]
+    assert refs == ["M1:R3", "M2:R2", "M1:R2"]
+    digest = build_summary_digest(summary, None, load_config())
+    assert "M1:R3：漏补枪记录：第 43 秒，T 方，下包前，队友阵亡后 2v3。" in digest
+    hits = json.loads(run_summary_tool("list_problem_hits", {"problem": "missed_trade"}, summary))
+    assert "下包前，队友阵亡后 2v3" in hits[0]["evidence"]
+
+
+def test_primary_name_and_summary_totals_in_digest_and_checker():
+    summary, baseline, cfg = sample()
+    summary.detail("M1")[0].player_name = "first"
+    summary.detail("M2")[0].player_name = "popular"
+    summary.detail("M3")[0].player_name = "popular"
+    summary.names = ["first", "popular"]
+    assert summary.primary_name == "popular"
+    assert render_summary_problems(summary).startswith("# 多场问题汇总：popular")
+    summary.detail("M3")[0].player_name = "third"
+    summary.names.append("third")
+    assert summary.primary_name == "first"
+    summary.detail("M3")[0].player_name = "popular"
+    for match, kills, deaths in zip(summary.matches, (101, 202, 152), (91, 82, 100)):
+        match.kills, match.deaths = kills, deaths
+    digest = build_summary_digest(summary, baseline, cfg)
+    assert "玩家：popular。用过的名字：first、popular、third。" in digest
+    assert "合计：455 杀、273 死、0 次关键助攻；3 胜、0 负、0 平。" in digest
+    payload = submission(overview="共 455 杀、273 死。")
+    sub = parse_submission(payload)
+    assert check_summary_submission(sub, summary, digest, cfg, summary_numbers(summary, baseline)) == []
+    result = diagnose_summary(summary, cfg, baseline, FakeProvider([payload]))
+    assert result.report.startswith("# 多场复盘：popular · 3 场")
 
 
 def test_summary_queries_and_target_schema():

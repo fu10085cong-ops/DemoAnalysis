@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping
+from typing import Any
 
 from cs2coach.features.labels import GRENADE_LABELS, weapon_label
 from cs2coach.features.problems import ProblemHit
@@ -19,6 +21,20 @@ def _grenades(value) -> str:
         except ValueError:
             return value
     return "、".join(GRENADE_LABELS.get(v, v) for v in value) if isinstance(value, list) else str(value)
+
+
+def missed_trade_context(data: Mapping[str, Any]) -> str:
+    """只拼接已有的漏补局势字段，旧数据缺字段时保持可读。"""
+    parts = []
+    if data.get("round_time_s") is not None:
+        parts.append(f"第 {data['round_time_s']:.0f} 秒")
+    if data.get("side") is not None:
+        parts.append(f"{data['side']} 方")
+    if data.get("bomb_planted") is not None:
+        parts.append("已下包" if data["bomb_planted"] else "下包前")
+    if data.get("alive_own") is not None and data.get("alive_enemy") is not None:
+        parts.append(f"队友阵亡后 {data['alive_own']}v{data['alive_enemy']}")
+    return "，".join(parts) + "。" if parts else ""
 
 
 def evidence_sentence(hit: ProblemHit) -> str:
@@ -45,7 +61,9 @@ def evidence_sentence(hit: ProblemHit) -> str:
     if pid == "turned_into_flash":
         return "记录显示死亡时仍处于致盲中，投掷来源满足对手闪光的检测条件。"
     if pid == "missed_trade":
-        return (f"漏补枪记录：离阵亡队友 {_number(e.get('distance'))} 单位；"
+        context = missed_trade_context(e)
+        return ("漏补枪记录：" + context
+                + f"离阵亡队友 {_number(e.get('distance'))} 单位；"
                 + ("其他队友随后补上。" if e.get("killer_traded_by_other") else "窗口内未由其他队友补上。"))
     if pid == "post_plant_utility_unused":
         return f"T 方已下包，死亡时还携带：{_grenades(e.get('unused_grenades'))}。"

@@ -187,6 +187,11 @@ class MissedTrade(BaseModel):
     killer: int
     distance: float  # 目标玩家与阵亡队友的直线距离（游戏单位）
     killer_traded_by_other: bool  # 击杀者在窗口内被别的队友击杀
+    side: Literal["T", "CT"] | None = None  # 队友阵亡时目标玩家阵营
+    alive_own: int | None = None  # 队友阵亡后，含目标玩家
+    alive_enemy: int | None = None
+    round_time_s: float | None = None  # 冻结期结束后已过秒数
+    bomb_planted: bool | None = None
 
 
 class Excluded(BaseModel):

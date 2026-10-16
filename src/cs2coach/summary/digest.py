@@ -32,19 +32,26 @@ def problem_hits(summary: PlayerSummary, problem: str) -> list[tuple[str, Proble
 
 
 def representative_hits(summary: PlayerSummary, problem: str, limit: int) -> list[tuple[str, ProblemHit]]:
-    """先覆盖不同场次，各场内优先展示偏离阈值最大的命中。"""
+    """先覆盖不同场次；漏补先看是否无人补回和距离，其余按阈值偏离。"""
+    def rank(hit: ProblemHit):
+        if problem == "missed_trade":
+            return (bool(hit.evidence.get("killer_traded_by_other")),
+                    float(hit.evidence.get("distance", math.inf)),
+                    int(hit.evidence.get("tick", 0)))
+        return (-_deviation(hit),)
+
     groups: dict[str, list[tuple[str, ProblemHit]]] = {}
     for ref, hit in problem_hits(summary, problem):
         groups.setdefault(ref.partition(":")[0], []).append((ref, hit))
     for number, items in groups.items():
         moments = {m.id: (m.round, m.tick) for m in summary.detail(number)[0].moments}
-        items.sort(key=lambda item: (-_deviation(item[1]),
+        items.sort(key=lambda item: (rank(item[1]),
                                      moments.get(item[1].target,
                                                  (int(item[1].target.partition("-")[0][1:]), 0))))
     chosen = []
     while len(chosen) < limit and any(groups.values()):
         candidates = [(number, items[0]) for number, items in groups.items() if items]
-        candidates.sort(key=lambda pair: (-_deviation(pair[1][1]), pair[0]))
+        candidates.sort(key=lambda pair: (rank(pair[1][1]), pair[0]))
         used = {ref.partition(":")[0] for ref, _ in chosen}
         number, _ = next(((number, item) for number, item in candidates if number not in used),
                          candidates[0])
@@ -52,11 +59,22 @@ def representative_hits(summary: PlayerSummary, problem: str, limit: int) -> lis
     return chosen
 
 
+def summary_totals(summary: PlayerSummary) -> tuple[int, int, int, int, int, int]:
+    """击杀、死亡、关键助攻和按最终比分划分的胜负平场数。"""
+    matches = summary.matches
+    return (sum(m.kills for m in matches), sum(m.deaths for m in matches),
+            sum(m.assists for m in matches), sum(m.score[0] > m.score[1] for m in matches),
+            sum(m.score[0] < m.score[1] for m in matches),
+            sum(m.score[0] == m.score[1] for m in matches))
+
+
 def build_summary_digest(summary: PlayerSummary, baseline: dict | None, cfg: dict) -> str:
     maps = Counter(match.map_name for match in summary.matches)
     map_text = "、".join(f"{name} {count} 场" for name, count in sorted(maps.items())) or "无"
-    lines = ["## 多场比赛", f"玩家用过的名字：{'、'.join(summary.names) or summary.steamid}。"
-             f"共 {len(summary.matches)} 场，在场 {summary.rounds_played_total} 回合。地图分布：{map_text}。"]
+    kills, deaths, assists, wins, losses, draws = summary_totals(summary)
+    lines = ["## 多场比赛", f"玩家：{summary.primary_name}。用过的名字：{'、'.join(summary.names) or summary.steamid}。",
+             f"共 {len(summary.matches)} 场，在场 {summary.rounds_played_total} 回合。地图分布：{map_text}。",
+             f"合计：{kills} 杀、{deaths} 死、{assists} 次关键助攻；{wins} 胜、{losses} 负、{draws} 平。"]
     note = pro_training_note(summary.steamid, baseline, cfg)
     if note:
         lines.insert(0, note)
@@ -103,7 +121,8 @@ def build_summary_digest(summary: PlayerSummary, baseline: dict | None, cfg: dic
 
 def summary_numbers(summary: PlayerSummary, baseline: dict | None) -> list[float]:
     """条目分析可引用的汇总、每场概况及职业比较数值。"""
-    values = _numeric_leaves([len(summary.matches), summary.rounds_played_total])
+    values = _numeric_leaves([len(summary.matches), summary.rounds_played_total,
+                              *summary_totals(summary)])
     for match in summary.matches:
         values.extend(_numeric_leaves(match.model_dump(exclude={"aim_stats", "prominent_problems"})))
     for row in summary.frequency:

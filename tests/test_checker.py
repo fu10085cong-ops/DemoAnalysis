@@ -311,6 +311,41 @@ def test_round_target_uses_missed_trades_and_supports_trade_phrase():
     assert check(s, mm, report([hit("missed_trade", "R1")])) == []
 
 
+def test_round_target_checks_missed_trade_people_and_plant():
+    row = MissedTrade(round=1, tick=500, teammate=B, killer=C, distance=432.1,
+                      killer_traded_by_other=False, side="T", alive_own=2,
+                      alive_enemy=3, round_time_s=43, bomb_planted=False)
+    mm = make_mm(missed_trades=[row])
+    rep = report([hit("missed_trade", "R1")])
+    def violations(analysis):
+        return check(submit([finding(problem="missed_trade", targets=["R1"], analysis=analysis)]), mm, rep)
+    assert violations("队友阵亡后 2v3，第 43 秒还没下包。") == []
+    assert "number_not_found" in codes(violations("队友阵亡后 3v2。"))
+    assert "phrase_unsupported" in codes(violations("这时已下包。"))
+    assert violations("这时下包前。") == []
+    assert violations("这时没下包。") == []
+    row.bomb_planted = True
+    assert violations("队友阵亡后 2v3，已下包。") == []
+
+
+def test_plant_phrase_and_elapsed_round_time_for_moments():
+    mm = make_mm([make_moment(context={"bomb_planted": False, "round_time_s": 43},
+                              death={"blinded": True, "blind_remaining_s": 0.8})])
+    def violations(analysis):
+        return check(submit([finding(analysis=analysis)]), mm)
+    assert "phrase_unsupported" in codes(violations("已下包。"))
+    assert violations("下包前。") == []
+    assert violations("没下包。") == []
+    assert violations("还没下包。") == []
+    assert violations("未下包。") == []
+    errors = violations("回合还剩 43 秒。")
+    assert "phrase_unsupported" in codes(errors)
+    assert "round_time_s 是已经过去的秒数" in errors[0].message
+    assert violations("致盲还剩 0.8 秒。") == []
+    mm.moments[0].context.bomb_planted = True
+    assert violations("已下包。") == []
+
+
 def test_match_is_only_valid_for_spray_and_uses_aggregate_evidence():
     s = submit([finding(problem="spray_control", targets=["match"], analysis="该发数段命中率20%。")])
     r = report([hit("spray_control", "match", evidence={"hit_pct": 20})])

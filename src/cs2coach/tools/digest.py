@@ -12,7 +12,7 @@ from cs2coach.config import load_config
 from cs2coach.features.labels import GRENADE_LABELS, KIND_LABELS, ROUND_END_REASONS, absent_rounds_note, tag_label
 from cs2coach.features.models import AimStats, BlindInfo, MatchMoments, Moment
 from cs2coach.features.problems import PROBLEMS, FrequencyRow, ProblemReport
-from cs2coach.report.evidence import evidence_sentence
+from cs2coach.report.evidence import evidence_sentence, missed_trade_context
 from cs2coach.report.problems import frequency_table
 from cs2coach.parsing.match import MatchData
 from cs2coach.parsing.models import Team
@@ -98,8 +98,10 @@ def build_digest(match: MatchData, mm: MatchMoments, baseline: dict[str, Any] | 
     if mm.missed_trades:
         lines += ["", "## 漏补（队友阵亡时自己在附近、窗口内在雷达上发现过击杀者，但没有补上；距离不考虑视线，近似）"]
         for t in mm.missed_trades:
+            situ = missed_trade_context(t.model_dump())
             lines.append(f"- [[R{t.round}]] tick {t.tick}：队友 {match.name_of(t.teammate)} 被 {match.name_of(t.killer)} 击杀，"
-                         f"距离 {t.distance:.0f}" + ("，后来别的队友补上了" if t.killer_traded_by_other else ""))
+                         + (situ + " " if situ else "") + f"距离 {t.distance:.0f}"
+                         + ("，后来别的队友补上了" if t.killer_traded_by_other else ""))
     if mm.excluded:
         lines += ["", "## 不参与分析的记录"]
         lines += [f"- [[R{x.round}]] tick {x.tick} {KIND_LABELS.get(x.kind, x.kind)}：{x.reason}" for x in mm.excluded]

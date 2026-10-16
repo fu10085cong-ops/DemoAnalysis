@@ -286,6 +286,16 @@ require = "spray"
 pattern = "拉栓|还不能开枪"
 require = "weapon_not_ready"
 
+[[checker.phrases]]
+# 下包后的描述需有瞬间或漏补记录的下包证据；否定和下包前不触发
+pattern = "(?<!没)(?<!未)(?<!还没)(?:下包后|下包的残局)|(?<!没)(?<!未)(?:已下包|包已下)"
+require = "planted"
+
+[[checker.phrases]]
+# round_time_s 只有已过时间，不能据此推算回合剩余时间
+pattern = "回合还剩"
+require = "never"
+
 [ai]
 # 用哪个模型服务：deepseek / claude（各自的设置在下面对应的表里）
 provider = "deepseek"

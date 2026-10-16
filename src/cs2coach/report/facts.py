@@ -8,6 +8,7 @@ from collections.abc import Mapping
 
 from cs2coach.features.labels import GRENADE_LABELS, KIND_LABELS, absent_rounds_note, weapon_label
 from cs2coach.features.models import BlindInfo, MatchMoments, MissedTrade, Moment
+from cs2coach.report.evidence import missed_trade_context
 from cs2coach.tools.digest import CONTACT_LABELS, VISIBILITY_NOTES
 
 
@@ -229,7 +230,9 @@ def missed_trade_facts(mt: MissedTrade, names: Mapping[int, str]) -> list[str]:
     """漏补只描述窗口内的击杀结果，不评价距离或机会。"""
     who = _named("队友", mt.teammate, names)
     other = "；对手随后被其他队友击杀" if mt.killer_traded_by_other else ""
-    return [f"{who} 阵亡时离你 {mt.distance:.0f} 单位，你在补枪时间窗口内没有击杀击杀他的对手{other}。"]
+    context = missed_trade_context(mt.model_dump())
+    return ([context] if context else []) + [
+        f"{who} 阵亡时离你 {mt.distance:.0f} 单位，你在补枪时间窗口内没有击杀击杀他的对手{other}。"]
 
 
 def render_facts_file(mm: MatchMoments, names: Mapping[int, str]) -> str:

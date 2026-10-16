@@ -22,7 +22,7 @@ def render_summary_diagnosis(d: SummaryDiagnosis, summary: PlayerSummary,
     matches = {match.number: match for match in summary.matches}
     maps = Counter(match.map_name for match in summary.matches)
     map_text = "、".join(f"{name} {count} 场" for name, count in sorted(maps.items()))
-    lines = [f"# 多场复盘：{summary.names[0] if summary.names else summary.steamid} · {len(summary.matches)} 场",
+    lines = [f"# 多场复盘：{summary.primary_name} · {len(summary.matches)} 场",
              "", f"曾用名：{'、'.join(summary.names) or '未知'} · 地图：{map_text or '无'} · "
              f"模型 {d.provider} / {d.model}", "", "## 总览", "", sub.overview,
              "", "## 突出问题", ""]

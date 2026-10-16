@@ -185,6 +185,17 @@ def test_missed_trade():
     assert len(mm.missed_trades) == 1
     t = mm.missed_trades[0]
     assert (t.tick, t.teammate, t.killer, t.killer_traded_by_other) == (150, B, D, False)
+    assert (t.side, t.alive_own, t.alive_enemy, t.round_time_s, t.bomb_planted) == (
+        "T", 1, 1, pytest.approx((150 - 10) / 64, abs=0.01), False)
+
+
+def test_missed_trade_bomb_context_before_and_after_plant():
+    before = scenario()
+    before.bomb = pd.DataFrame([{"tick": 160, "round": 1, "event": "planted"}])
+    assert find_moments(before, A, CFG).missed_trades[0].bomb_planted is False
+    after = scenario()
+    after.bomb = pd.DataFrame([{"tick": 140, "round": 1, "event": "planted"}])
+    assert find_moments(after, A, CFG).missed_trades[0].bomb_planted is True
 
 
 def test_missed_trade_requires_seeing_the_killer():

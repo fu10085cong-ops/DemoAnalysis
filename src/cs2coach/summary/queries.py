@@ -13,7 +13,7 @@ from cs2coach.tools.queries import ToolError
 
 
 SUMMARY_TOOLS: list[dict[str, Any]] = [
-    {"name": "get_moment", "description": "查看指定场次的决定性瞬间完整数据与该场的问题命中。",
+    {"name": "get_moment", "description": "查看指定场次的决定性瞬间完整数据与该场的问题命中。context.round_time_s 是冻结期结束后已经过去的秒数，不是剩余时间。",
      "input_schema": {"type": "object", "properties": {
          "match": {"type": "string", "description": "场次编号，如 M3"},
          "moment_id": {"type": "string", "description": "瞬间编号，如 R9-death"}},

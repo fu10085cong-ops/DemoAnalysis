@@ -40,6 +40,8 @@ PREDICATES: dict[str, Callable[[Moment], bool]] = {
     "spray": lambda m: m.engagement is not None and any(s.recoil_index is not None
                             and math.isfinite(s.recoil_index) and s.recoil_index >= 1 for s in m.engagement.shots),
     "weapon_not_ready": lambda m: m.death is not None and m.death.weapon_ready is False,
+    "planted": lambda m: m.context.bomb_planted is True,
+    "never": lambda m: False,
 }
 
 # 从旧引用模块原样迁移，仅用于拒绝分析文字里的引用；检查规则不变。
@@ -266,6 +268,8 @@ def _check_entries(sub: ReportSubmission, cfg: dict, whole_numbers: list[float],
                         add(text_path, "match_mismatch", f"文字提到第 {number} 场，但汇总只有 {summary_count} 场。")
             description = _describe(moments, records)
             people = {(m.context.alive_own, m.context.alive_enemy) for m in moments}
+            people.update((r.alive_own, r.alive_enemy) for r in records
+                          if r.alive_own is not None and r.alive_enemy is not None)
             out.extend(_number_violations(entry.analysis, text_path, allowed, people, description, cfg["checker"]))
             # 用户确认：match 可用整场逐枪数据核对说法，但不扩大其允许数值集合。
             predicate_moments = moments
@@ -276,10 +280,15 @@ def _check_entries(sub: ReportSubmission, cfg: dict, whole_numbers: list[float],
                 if match is None:
                     continue
                 require = phrase["require"]
-                supported = any(PREDICATES[require](m) for m in predicate_moments) or (require == "trade" and bool(records))
+                supported = (any(PREDICATES[require](m) for m in predicate_moments)
+                             or (require == "trade" and bool(records))
+                             or (require == "planted" and any(r.bomb_planted is True for r in records)))
                 if not supported:
                     actual = _describe(predicate_moments, records)
-                    add(text_path, "phrase_unsupported", f'“{match.group()}”需要至少一个 target 满足 {require}，实际均不满足。{actual}')
+                    message = ("round_time_s 是已经过去的秒数，请写成\"回合第 N 秒\"。"
+                               if require == "never" else
+                               f'“{match.group()}”需要至少一个 target 满足 {require}，实际均不满足。{actual}')
+                    add(text_path, "phrase_unsupported", message)
 
     if len(other_paths) > cfg["checker"]["max_other"]:
         add("findings/patterns/highlights", "too_many_other",

@@ -110,8 +110,7 @@ def _summary(args: argparse.Namespace) -> int:
         return 1
     baseline = load_baseline()
     result = build_summary(steamid, refs, cfg, baseline)
-    folder = _output_folder(args.out, Path("汇总.dem"), result.names[0] if result.names
-                            else refs[0].player_name, steamid)
+    folder = _output_folder(args.out, Path("汇总.dem"), result.primary_name, steamid)
     folder.mkdir(parents=True, exist_ok=True)
     _archive_reports(folder, ("problems.md", "summary.json"))
     problems = folder / "problems.md"

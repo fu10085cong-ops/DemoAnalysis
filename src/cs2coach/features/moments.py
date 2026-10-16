@@ -555,8 +555,24 @@ def find_missed_trades(match: MatchData, p: _Params, sid: int) -> list[MissedTra
             continue
         if not _spotted_by(match, killer, sid, tick, tick + p.trade):
             continue
-        out.append(MissedTrade(round=int(r["round"]), tick=tick, teammate=victim, killer=killer,
-                               distance=round(dist, 1), killer_traded_by_other=len(revenge) > 0))
+        number = int(r["round"])
+        rnd = match.round(number)
+        start = (rnd.freeze_end_tick if rnd.freeze_end_tick is not None else rnd.start_tick) if rnd else tick
+        own = enemy = 0
+        my_team = _int_or_none(me["team_num"])
+        for other in match.players:
+            st = match.state_at(other, tick - 1)
+            if st is None or not st["is_alive"] or other == victim:
+                continue
+            if _int_or_none(st["team_num"]) == my_team:
+                own += 1
+            else:
+                enemy += 1
+        out.append(MissedTrade(round=number, tick=tick, teammate=victim, killer=killer,
+            distance=round(dist, 1), killer_traded_by_other=len(revenge) > 0,
+            side="T" if my_team == Team.T else "CT", alive_own=own, alive_enemy=enemy,
+            round_time_s=round((tick - start) / match.meta.tick_rate, 2),
+            bomb_planted=bomb_planted(match, number, tick)))
     return out
 
 

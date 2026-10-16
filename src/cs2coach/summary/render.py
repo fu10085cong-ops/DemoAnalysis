@@ -31,7 +31,8 @@ def summary_match_table(summary: PlayerSummary) -> list[str]:
 
 def render_summary_problems(summary: PlayerSummary) -> str:
     """频率表、每场概况及跳过原因；不生成 AI 诊断。"""
-    lines = [f"# 多场问题汇总：{', '.join(summary.names) or summary.steamid}", "",
+    lines = [f"# 多场问题汇总：{summary.primary_name}", "",
+             f"曾用名：{'、'.join(summary.names) or '未知'}。", "",
              f"共 {len(summary.matches)} 场，在场 {summary.rounds_played_total} 回合。"
              "频率按在场回合计算；加粗表示多出次数及偶然概率均达到突出阈值。", "",
              "## 汇总频率", "", *summary_frequency_table(summary),

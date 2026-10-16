@@ -61,6 +61,15 @@ class PlayerSummary(BaseModel):
     def detail(self, number: str) -> tuple[MatchMoments, ProblemReport]:
         return self._details[number]
 
+    @property
+    def primary_name(self) -> str:
+        """按出现场数选名字，平票沿用编号最小场次的名字。"""
+        counts = Counter(self._details[match.number][0].player_name for match in self.matches
+                         if match.number in self._details)
+        if counts:
+            return max(counts, key=counts.get)
+        return self.names[0] if self.names else str(self.steamid)
+
 
 def aggregate_matches(steamid: int, games: list[tuple[DemoRef, MatchMoments, ProblemReport,
                                                     tuple[int, int]]], baseline: dict | None,
