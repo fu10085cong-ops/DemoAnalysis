@@ -159,6 +159,7 @@ def _summary_ai(summary, cfg: dict, baseline: dict | None, folder: Path) -> int:
         d = diagnose_summary(summary, cfg, baseline, provider)
     except (DiagnosisError, ProviderError) as exc:
         print(f"错误: {exc}", file=sys.stderr)
+        _write_failed_audit(folder / "submission.json", exc)
         _local_time(name, started, provider)
         return 1
     except Exception as exc:
@@ -174,6 +175,7 @@ def _summary_ai(summary, cfg: dict, baseline: dict | None, folder: Path) -> int:
     report_file.write_text(d.report, encoding="utf-8")
     audit_file.write_text(json.dumps({
         "submission": d.submission.model_dump(),
+        "rendered_submission": d.rendered_submission,
         "violations_history": [[v.model_dump() for v in group] for group in d.violations_history],
         "dropped": [item.model_dump() for item in d.dropped],
         "raw_calls": d.raw_calls,
@@ -187,6 +189,17 @@ def _summary_ai(summary, cfg: dict, baseline: dict | None, folder: Path) -> int:
           f"输入 {u.input_tokens} tokens（其中缓存命中 {u.cache_read_tokens}），输出 {u.output_tokens} tokens")
     _local_time(name, started, provider)
     return 0
+
+
+def _write_failed_audit(audit_path: Path, exc: Exception) -> None:
+    """生成失败时另存审计（每轮违规、最后一次提交、原始参数），不覆盖上一次成功的 submission.json。"""
+    audit = getattr(exc, "audit", None)
+    if not audit:
+        return
+    failed = audit_path.with_name("submission_failed.json")
+    failed.parent.mkdir(parents=True, exist_ok=True)
+    failed.write_text(json.dumps(audit, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    print(f"失败过程已写入 {failed}", file=sys.stderr)
 
 
 def _local_time(name: str, started: float, provider) -> None:
@@ -271,6 +284,7 @@ def _diagnose(match, moments, cfg, out: Path) -> int:
         d = diagnose(match, moments, cfg, load_baseline(), provider)
     except (DiagnosisError, ProviderError) as e:
         print(f"错误: {e}", file=sys.stderr)
+        _write_failed_audit(out.with_name("submission.json"), e)
         _local_time(name, started, provider)
         return 1
     except Exception as e:  # 各家 SDK 的网络、认证、限流错误
@@ -285,6 +299,7 @@ def _diagnose(match, moments, cfg, out: Path) -> int:
     audit = out.with_name("submission.json")
     audit.write_text(json.dumps({
         "submission": d.submission.model_dump(),
+        "rendered_submission": d.rendered_submission,
         "violations_history": [[v.model_dump() for v in group] for group in d.violations_history],
         "dropped": [item.model_dump() for item in d.dropped],
         "raw_calls": d.raw_calls,

@@ -8,6 +8,7 @@ SUMMARY_PROMPT = (SYSTEM_PROMPT
     .replace("先读摘要：比赛结果、整场枪法", "先读摘要：每场概况、汇总问题频率、各场枪法中位数")
     .replace("或用 get_round 查看回合经过", "或用 list_problem_hits 查看跨场全部同类命中")
     .replace('"targets": ["R5-death"]', '"targets": ["M1:R5-death"]')
+    .replace('{R5-death.', '{M1:R5-death.')
     + """
 
 ## 多场复盘要求

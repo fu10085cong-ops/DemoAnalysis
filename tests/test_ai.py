@@ -127,7 +127,7 @@ def test_first_submission_passes_without_repairs(match, mm):
     d = diagnose(match, mm, CFG, BASELINE, provider)
     assert d.repairs == 0 and d.violations_history == [[]] and d.dropped == []
     assert d.submission.model_dump() == payload() and "AI 判断，无程序依据" in d.report
-    assert check_submission(d.submission, mm, d.problems, d.digest, CFG) == []
+    assert check_submission(d.submission, mm, d.problems, d.digest, CFG, None, d.score, d.frequency, BASELINE) == []
     assert d.usage.input_tokens == 100 and d.usage.cache_read_tokens == 80
     assert {t["name"] for t in fake.calls[0]["tools"]} == {"get_moment", "get_round", "submit_report"}
     assert not hasattr(d, "citations") and not hasattr(d, "raw_text")
@@ -144,6 +144,37 @@ def test_first_violation_then_valid_submission(match, mm):
     assert result["is_error"] and "findings[0].analysis" in result["content"] and "987654321" in result["content"]
 
 
+def test_unresolvable_slot_is_dropped_not_crashing(match, mm):
+    # 019：模型反复写出无法解析的占位符时，按规则删掉这一条继续出报告，报告里不出现 {…}
+    bad = payload()
+    wrong = copy.deepcopy(bad["findings"][0])
+    wrong["analysis"] = "这次交火用了 {R1-death.nonsense}，值得复盘。"
+    bad["findings"].append(wrong)
+    provider, _ = claude([submit_response(bad)] * 3)
+    d = diagnose(match, mm, CFG, BASELINE, provider)
+    assert len(d.submission.findings) == 1 and d.dropped[0].path == "findings[1]"
+    assert "unknown_slot" in {v.code for v in d.dropped[0].violations}
+    assert "{" not in d.report and "nonsense" not in d.report
+    assert "slot_errors" not in d.rendered_submission
+
+
+def test_failure_keeps_audit_for_debugging(match, mm, tmp_path, monkeypatch):
+    # 所有 finding 都违规时报错，但每轮违规与最后一次提交要保留下来，CLI 另存 submission_failed.json
+    bad = payload()
+    bad["findings"][0]["analysis"] = "首次命中用了987654321毫秒。"
+    with pytest.raises(DiagnosisError) as info:
+        diagnose(match, mm, CFG, BASELINE, claude([submit_response(bad)] * 3)[0])
+    audit = info.value.audit
+    assert len(audit["violations_history"]) == 3 and audit["latest_submission"]["findings"]
+    assert "raw_number" in {v["code"] for v in audit["violations_history"][0]}
+    from cs2coach.cli import _diagnose
+    monkeypatch.setattr("cs2coach.ai.diagnose.diagnose", lambda *a, **kw: (_ for _ in ()).throw(info.value))
+    monkeypatch.setattr("cs2coach.env.load_env_file", lambda *a: [])
+    assert _diagnose(match, mm, CFG, tmp_path / "report.md") == 1
+    saved = json.loads((tmp_path / "submission_failed.json").read_text(encoding="utf-8"))
+    assert saved["error"] == str(info.value) and not (tmp_path / "submission.json").exists()
+
+
 def test_repeated_violation_drops_whole_finding_and_keeps_valid_one(match, mm):
     bad = payload()
     wrong = copy.deepcopy(bad["findings"][0])
@@ -156,7 +187,7 @@ def test_repeated_violation_drops_whole_finding_and_keeps_valid_one(match, mm):
     assert "unknown_target" in {v.code for v in d.dropped[0].violations}
     assert "有 1 条结论未通过数据检查，已删除" in d.report
     assert "R99-death" not in d.report
-    assert check_submission(d.submission, mm, d.problems, d.digest, CFG) == []
+    assert check_submission(d.submission, mm, d.problems, d.digest, CFG, None, d.score, d.frequency, BASELINE) == []
 
 
 def test_all_findings_removed_is_error(match, mm):
@@ -169,10 +200,12 @@ def test_all_findings_removed_is_error(match, mm):
 def test_overview_is_replaced_with_program_score_kills_deaths(match, mm):
     bad = payload(overview="本场987654321回合。")
     d = diagnose(match, mm, CFG, BASELINE, claude([submit_response(bad)] * 3)[0])
-    assert d.repairs == 2 and "比分 1:0，击杀 1 次、死亡 1 次" in d.submission.overview
+    assert d.repairs == 2 and "{match.score}" in d.submission.overview  # 提交保留占位符
+    assert "比分 1:0，击杀 1 次、死亡 1 次" in d.rendered_submission["overview"]
+    assert "比分 1:0，击杀 1 次、死亡 1 次" in d.report
     assert "AI 总览未通过检查，已替换" in d.report
     assert d.dropped[0].action == "replaced" and d.dropped[0].content == bad["overview"]
-    assert check_submission(d.submission, mm, d.problems, d.digest, CFG) == []
+    assert check_submission(d.submission, mm, d.problems, d.digest, CFG, None, d.score, d.frequency, BASELINE) == []
 
 
 def test_ends_without_submission_gets_requested_to_submit(match, mm):

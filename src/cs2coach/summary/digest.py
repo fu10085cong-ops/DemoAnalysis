@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+import json
 from collections import Counter
 
 from cs2coach.baseline import compare, pro_training_note
@@ -10,9 +11,38 @@ from cs2coach.features.problems import PROBLEMS, ProblemHit
 from cs2coach.report.evidence import evidence_sentence
 from cs2coach.summary.aggregate import PlayerSummary
 from cs2coach.summary.render import summary_frequency_table, summary_match_table
-from cs2coach.tools.checker import _numeric_leaves, _percent_leaves
 from cs2coach.tools.digest import METRIC_LABELS, TypedNumbers
 from cs2coach.tools.drills import drill_guidance
+
+
+def _numeric_leaves(value) -> list[float]:
+    if isinstance(value, bool) or value is None:
+        return []
+    if isinstance(value, (int, float)):
+        return [float(value)] if math.isfinite(value) else []
+    if isinstance(value, str) and value.lstrip().startswith(("[", "{")):
+        try:
+            return _numeric_leaves(json.loads(value))
+        except ValueError:
+            return []
+    if isinstance(value, dict):
+        return [n for child in value.values() for n in _numeric_leaves(child)]
+    if isinstance(value, (list, tuple)):
+        return [n for child in value for n in _numeric_leaves(child)]
+    return []
+
+
+def _percent_leaves(value, path="") -> list[float]:
+    if isinstance(value, dict):
+        return [n for key, child in value.items() for n in _percent_leaves(child, str(key))]
+    if isinstance(value, (list, tuple)):
+        return [n for child in value for n in _percent_leaves(child, path)]
+    if isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value):
+        if path.endswith("_pct"):
+            return [float(value)]
+        if 0 <= value <= 1 and any(s in path for s in ("chance", "ratio", "probability", "rate")):
+            return [float(value) * 100]
+    return []
 
 
 def _deviation(hit: ProblemHit) -> float:
@@ -117,6 +147,8 @@ def build_summary_digest(summary: PlayerSummary, baseline: dict | None, cfg: dic
         lines.append(f"### {spec.label}（{pid}，共 {len(hits)} 次；{counts}）")
         lines.extend(f"- {ref}：{evidence_sentence(hit)}" for ref, hit in
                      representative_hits(summary, pid, limit))
+    from cs2coach.tools.slots import slot_guidance
+    lines.extend(["", slot_guidance(summary=summary)])
     lines.extend(drill_guidance(cfg))
     return "\n".join(lines) + "\n"
 

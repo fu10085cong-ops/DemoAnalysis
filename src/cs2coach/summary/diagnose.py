@@ -30,6 +30,7 @@ class SummaryDiagnosis:
     usage: Usage = field(default_factory=Usage)
     repairs: int = 0
     prompt_tokens_history: list[int] = field(default_factory=list)
+    rendered_submission: dict[str, Any] = field(default_factory=dict)
 
 
 def diagnose_summary(summary: PlayerSummary, cfg: dict, baseline: dict | None,
@@ -44,11 +45,11 @@ def diagnose_summary(summary: PlayerSummary, cfg: dict, baseline: dict | None,
                        summary=True)
     kills = sum(match.kills for match in summary.matches)
     deaths = sum(match.deaths for match in summary.matches)
-    fallback = (f"共 {len(summary.matches)} 场，在场 {summary.rounds_played_total} 回合，"
-                f"击杀 {kills} 次、死亡 {deaths} 次（AI 总览未通过检查，已替换）。")
+    fallback = ("共 {match.rounds} 回合，在场 {match.rounds_played} 回合，"
+                "击杀 {count.kills} 次、死亡 {count.deaths} 次（AI 总览未通过检查，已替换）。")
     result = run_diagnosis_loop(provider, cfg, SUMMARY_PROMPT, digest, SUMMARY_INSTRUCTION,
         SUMMARY_TOOLS, tool,
-        lambda sub: check_summary_submission(sub, summary, digest, cfg, numbers),
+        lambda sub: check_summary_submission(sub, summary, digest, cfg, numbers, baseline),
         lambda name, args: run_summary_tool(name, args, summary), fallback)
     diagnosis = SummaryDiagnosis(submission=result.submission, digest=digest,
         provider=provider.name, model=result.model, usage=result.usage,

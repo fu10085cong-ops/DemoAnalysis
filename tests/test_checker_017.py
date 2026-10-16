@@ -41,16 +41,17 @@ def test_single_map_aliases_and_overview():
     assert all("de_dust2" in v.message for v in mismatches)
 
 
-def test_percent_type_and_plain_number():
+def test_percent_numbers_now_come_from_slots():
+    # 017 的百分比口径核对已被 019 的占位符取代：文字里写数字一律拦下，百分比由程序填写
     cfg = load_config()
     mm = make_mm([make_moment()], map_name="de_dust2")
     report = _report("slow_reaction", evidence={"hits": 68, "spray_accuracy_pct": 25.7, "chance": .002})
     def codes(analysis):
         sub = _sub(findings=[_sub().findings[0].model_copy(update={"analysis": analysis})])
-        return [v for v in check_submission(sub, mm, report, "地图 de_dust2。", cfg) if v.code == "number_not_found"]
-    assert not codes("命中 68 次，扫射命中率 25.7%，偶然概率 0.2%。")
-    bad = codes("命中率 68%。")
-    assert bad and "68% 不是数据中的百分比" in bad[0].message and "hits" in bad[0].message
+        return {v.code for v in check_submission(sub, mm, report, "地图 de_dust2。", cfg)}
+    assert "raw_number" in codes("命中率 68%。")
+    assert "raw_number" in codes("命中 68 次，扫射命中率 25.7%，偶然概率 0.2%。")
+    assert not codes("这次交火命中率只有 {R1-death.hit_rate}。")
 
 
 def test_drill_applicability_text_and_schema():
@@ -117,9 +118,10 @@ def test_016_local_submission_regression():
     digest = build_summary_digest(summary, None, cfg)
     violations = check_summary_submission(sub, summary, digest, cfg, summary_numbers(summary, None))
     codes = {v.code for v in violations}
-    assert {"map_mismatch", "number_not_found", "unknown_drill"} <= codes
+    assert {"map_mismatch", "raw_number", "unknown_drill"} <= codes
     assert any("M12 实际地图是 de_dust2" in v.message for v in violations)
-    assert any("68% 不是数据中的百分比" in v.message for v in violations)
+    # 原来由百分比口径拦下的 68%（实为命中次数），019 起作为直接写出的数字被拦下
+    assert any(v.code == "raw_number" and "68" in v.message for v in violations)
     assert any("Deagle Duel" in v.message for v in violations)
 
 

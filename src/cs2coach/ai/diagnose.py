@@ -21,7 +21,11 @@ from cs2coach.tools.submission import ReportSubmission, SubmissionError, parse_s
 
 
 class DiagnosisError(Exception):
-    pass
+    """诊断失败。audit 记录失败前的违规历史与原始提交，CLI 写入 submission_failed.json 供排查。"""
+
+    def __init__(self, message: str, audit: dict[str, Any] | None = None):
+        super().__init__(message)
+        self.audit = audit
 
 
 class DroppedItem(BaseModel):
@@ -48,6 +52,7 @@ class Diagnosis:
     usage: Usage = field(default_factory=Usage)
     repairs: int = 0
     prompt_tokens_history: list[int] = field(default_factory=list)
+    rendered_submission: dict[str, Any] = field(default_factory=dict)
 
 
 def _error_text(violations: list[Violation]) -> str:
@@ -165,7 +170,26 @@ class LoopResult:
 def run_diagnosis_loop(provider: ChatProvider, cfg: dict, system_prompt: str, digest: str,
                        instruction: str, tools: list[dict], submission_tool: dict,
                        check, query, fallback_overview: str) -> LoopResult:
-    """单场和多场共用提交、检查、退回、删除、审计流程。"""
+    """单场和多场共用提交、检查、退回、删除、审计流程；失败时把审计挂在 DiagnosisError 上。"""
+    state: dict[str, Any] = {}
+    try:
+        return _run_loop(provider, cfg, system_prompt, digest, instruction, tools, submission_tool,
+                         check, query, fallback_overview, state)
+    except DiagnosisError as exc:
+        if exc.audit is None:
+            latest = state.get("latest")
+            exc.audit = {
+                "error": str(exc),
+                "latest_submission": latest.model_dump() if latest is not None else None,
+                "violations_history": [[v.model_dump() for v in group] for group in state.get("history", [])],
+                "raw_calls": state.get("raw_calls", []),
+                "prompt_tokens_history": state.get("prompt_tokens_history", []),
+            }
+        raise
+
+
+def _run_loop(provider, cfg, system_prompt, digest, instruction, tools, submission_tool,
+              check, query, fallback_overview, state) -> LoopResult:
     ac = cfg["ai"]
     provider.start(system_prompt, [digest, instruction], [*tools, submission_tool])
     usage, calls, history = Usage(), [], []
@@ -179,6 +203,7 @@ def run_diagnosis_loop(provider: ChatProvider, cfg: dict, system_prompt: str, di
     model = provider.model
     latest: ReportSubmission | None = None
     latest_violations: list[Violation] = []
+    state.update(history=history, raw_calls=raw_calls, prompt_tokens_history=prompt_tokens_history)
 
     def finish(submission, dropped=None):
         return LoopResult(submission, dropped or [], history, raw_calls, calls, usage, repairs,
@@ -227,6 +252,7 @@ def run_diagnosis_loop(provider: ChatProvider, cfg: dict, system_prompt: str, di
                             violations = (_schema_violations(candidate, submission_tool["input_schema"])
                                           + check(candidate))
                             latest, latest_violations = candidate, violations
+                            state["latest"] = latest
                         except SubmissionError as exc:
                             violations = [Violation(path="submission", code="invalid_submission", message=str(exc))]
                     err = bool(violations)
@@ -289,11 +315,12 @@ def diagnose(match: MatchData, mm: MatchMoments, cfg: dict[str, Any], baseline: 
     submission_tool = submit_tool(problems, cfg)
     kills = sum(m.kind == "kill" for m in mm.moments)
     deaths = sum(m.kind == "death" for m in mm.moments)
-    fallback = (f"本场比分 {score[0]}:{score[1]}，击杀 {kills} 次、死亡 {deaths} 次"
+    fallback = ("本场比分 {match.score}，击杀 {count.kills} 次、死亡 {count.deaths} 次"
                 "（AI 总览未通过检查，已替换）。")
     result = run_diagnosis_loop(provider, cfg, SYSTEM_PROMPT, digest, USER_INSTRUCTION,
         TOOLS, submission_tool,
-        lambda candidate: check_submission(candidate, mm, problems, digest, cfg, whole_numbers),
+        lambda candidate: check_submission(candidate, mm, problems, digest, cfg, whole_numbers,
+                                           score, frequency, baseline),
         lambda name, args: run_tool(name, args, match, mm), fallback)
     d = Diagnosis(submission=result.submission, problems=problems, frequency=frequency,
         digest=digest, provider=provider.name, model=result.model, score=score, usage=result.usage,
@@ -301,5 +328,5 @@ def diagnose(match: MatchData, mm: MatchMoments, cfg: dict[str, Any], baseline: 
         violations_history=result.violations_history, dropped=result.dropped,
         prompt_tokens_history=result.prompt_tokens_history)
     from cs2coach.report.render import render_diagnosis
-    d.report = render_diagnosis(d, mm, {sid: p.name for sid, p in match.players.items()}, cfg)
+    d.report = render_diagnosis(d, mm, {sid: p.name for sid, p in match.players.items()}, cfg, baseline)
     return d

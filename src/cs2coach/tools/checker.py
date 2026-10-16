@@ -6,7 +6,6 @@ import json
 import math
 import re
 from dataclasses import dataclass
-from decimal import Decimal
 from typing import TYPE_CHECKING, Callable
 
 from pydantic import BaseModel
@@ -15,6 +14,7 @@ from cs2coach.features.labels import WEAPON_LABELS
 from cs2coach.features.models import MatchMoments, Moment
 from cs2coach.features.problems import CONTEXT_ONLY, PROBLEMS, ProblemReport
 from cs2coach.tools.drills import AIM_PROBLEMS
+from cs2coach.tools.slots import SLOT, make_slot_resolver, render_slots, suggest_slots
 
 if TYPE_CHECKING:
     from cs2coach.tools.submission import ReportSubmission
@@ -61,32 +61,46 @@ _SUMMARY_ID = re.compile(r"(?<![A-Za-z0-9_])M\d+:R\d+(?:-(?:kill\d+|death|assist
 _SUMMARY_TARGET = re.compile(r"^(M\d+):(R\d+(?:-(?:kill\d+|death|assist\d+))?)$")
 _TEXT_MATCH = re.compile(r"第\s*(\d+)\s*场")
 _WEAPONS = re.compile("|".join(re.escape(s) for s in sorted(WEAPON_LABELS.values(), key=len, reverse=True)), re.I)
-_APPROX_BEFORE = re.compile(r"(?:约|大约|接近|左右)\s*$")
-_APPROX_AFTER = re.compile(r"^\s*(?:%|毫秒|秒|度|米|发|次|人)?\s*左右")
-_QUANTILE_BEFORE = re.compile(r"(?<![A-Za-z0-9_])[pP]$")
-_QUANTILE_AFTER = re.compile(r"^\s*分位")
 _LATIN = re.compile(r"[A-Za-z][A-Za-z0-9]*(?:[ -]+[A-Za-z0-9]+)*")
 _BOOK = re.compile(r"《([^》]+)》")
 _EXPLICIT_MATCH = re.compile(r"(?<![A-Za-z0-9_])M\d+(?![A-Za-z0-9_:])")
+# 具体的中文数字加量词；单独的“几次”“这几次”是模糊说法，不算数字，“十几次”“二十几发”算
+_CHINESE_NUMBER = re.compile(r"(?:[两二三四五六七八九十百]+几?|几[十百]+几?)(?:次|发|枪|秒|米|回合|人|场|处|名)")
 
 
-def _percent_leaves(value, path="") -> list[float]:
-    """只把有明确比例语义的字段转换成百分比，避免时间/次数恰巧在 0–1 内。"""
-    if isinstance(value, str) and value.lstrip().startswith(("[", "{")):
-        try:
-            return _percent_leaves(json.loads(value), path)
-        except (ValueError, TypeError):
-            return []
-    if isinstance(value, dict):
-        return [n for key, child in value.items() for n in _percent_leaves(child, str(key))]
-    if isinstance(value, (list, tuple)):
-        return [n for child in value for n in _percent_leaves(child, path)]
-    if isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value):
-        if path.endswith("_pct"):
-            return [float(value)]
-        if 0 <= value <= 1 and any(word in path for word in ("chance", "ratio", "probability", "rate")):
-            return [float(value) * 100]
-    return []
+def _slot_violations(text: str, path: str, resolver, cfg: dict) -> list[Violation]:
+    _, errors = render_slots(text, resolver)
+    out = [Violation(path=path, code=e.code, message=e.message) for e in errors]
+    clean = SLOT.sub(" ", text)
+    clean = _WEAPONS.sub(" ", clean)
+    for names in cfg["checker"]["map_aliases"].values():
+        for name in names:
+            clean = re.sub(re.escape(name), " ", clean, flags=re.I)
+    for drill in cfg["training"]["drills"]:
+        clean = re.sub(re.escape(drill["label"]), " ", clean, flags=re.I)
+    for name in cfg["training"]["allowed_latin"]:
+        clean = re.sub(r"(?<![A-Za-z0-9_])" + re.escape(name) + r"(?![A-Za-z0-9_])", " ", clean, flags=re.I)
+    # “75 分位”“p90”是分位名称，不是比赛数字
+    labels = "|".join(str(n) for n in cfg["checker"]["quantile_labels"])
+    if labels:
+        clean = re.sub(rf"(?<![\d.])(?:{labels})\s*分位|(?<![A-Za-z0-9_])[pP](?:{labels})(?!\d)", " ", clean)
+    # “1v3”是一个人数，整体推荐 people 占位符，不拆成两个数字
+    people = list(dict.fromkeys(found.group().replace(" ", "").lower() for found in _PEOPLE.finditer(clean)))
+    clean = _PEOPLE.sub(" ", clean)
+    numbers = people + list(dict.fromkeys(found.group() for found in _NUMBER.finditer(clean)))
+    if numbers:  # 一段文字只报一条，并按显示值推荐占位符，方便模型一次改完
+        hints = suggest_slots(resolver, numbers)
+        parts = [f"{n} → {'或'.join(hints[n])}" if hints.get(n) else
+                 f"{n}（{'请按含义选择占位符' if n in hints else '没有对应的占位符，请删去或改写'}）"
+                 for n in numbers]
+        out.append(Violation(path=path, code="raw_number",
+            message="文字里不能直接写数字，请改用占位符（占位符已带单位，后面不要再写单位）："
+                    + "；".join(parts) + "。"))
+    for found in _CHINESE_NUMBER.finditer(clean):  # “一次……另一次……”不在匹配范围内
+        out.append(Violation(path=path, code="chinese_number",
+            message=f"“{found.group()}”是带量词的中文数字；请改用占位符（如 count.*、first_hit_shot），"
+                    "或改写成不含具体数量的说法。"))
+    return out
 
 
 def _map_mentions(text: str, cfg: dict) -> list[tuple[str, re.Match]]:
@@ -132,14 +146,16 @@ def _map_violations(text: str, path: str, allowed: set[str], cfg: dict,
     return out
 
 
-def _training_violations(text: str, path: str, cfg: dict) -> list[Violation]:
+def _training_violations(text: str, path: str, cfg: dict, resolver=None) -> list[Violation]:
     from cs2coach.tools.digest import METRIC_LABELS
+    slot_errors = render_slots(text, resolver)[1] if resolver is not None else []
+    text = SLOT.sub(" ", text)  # 训练文字可以引用比赛数据的占位符，不算英文名称
     allowed_labels = {d["label"].casefold() for d in cfg["training"]["drills"]}
     allowed = allowed_labels | {s.casefold() for s in cfg["training"]["allowed_latin"]}
     allowed.update(s.casefold() for s in WEAPON_LABELS.values())
     allowed.update(v[0].casefold() for v in METRIC_LABELS.values())
     allowed.update(alias.casefold() for names in cfg["checker"]["map_aliases"].values() for alias in names)
-    out = []
+    out = [Violation(path=path, code=e.code, message=e.message) for e in slot_errors]
     for match in _BOOK.finditer(text):
         if match[1].casefold() not in allowed_labels:
             out.append(Violation(path=path, code="unknown_drill",
@@ -160,75 +176,6 @@ def _training_violations(text: str, path: str, cfg: dict) -> list[Violation]:
                                                       for b in _BOOK.finditer(text)):
             out.append(Violation(path=path, code="unknown_drill",
                 message=f"训练文字中的英文名称 {token} 不在允许清单中。"))
-    return out
-
-
-def _numeric_leaves(value, path="") -> list[float]:
-    """收集数值及单位换算；证据里的 JSON 列表也展开，布尔值不当作 0/1。"""
-    if isinstance(value, bool) or value is None:
-        return []
-    if isinstance(value, (int, float)):
-        if not math.isfinite(value):
-            return []
-        values = [value, value * 1000, value / 1000, value * 100]
-        if "recoil_index" in path or "recoil_indices" in path:
-            values.append(value + 1)
-        return [v for v in values if math.isfinite(v)]
-    if isinstance(value, str):
-        if value.lstrip().startswith(("[", "{")):
-            try:
-                return _numeric_leaves(json.loads(value), path)
-            except (ValueError, TypeError):
-                pass
-        return []
-    if isinstance(value, dict):
-        return [n for key, child in value.items() for n in _numeric_leaves(child, f"{path}.{key}")]
-    if isinstance(value, (list, tuple)):
-        return [n for child in value for n in _numeric_leaves(child, path)]
-    return []
-
-
-def _rounded_matches(value: float, token: str) -> bool:
-    """数字只要与数据相差不到文字最后一位的一个单位就匹配。"""
-    digits = len(token.partition(".")[2])
-    return abs(Decimal(str(value)) - Decimal(token)) < Decimal(1).scaleb(-digits)
-
-
-def _number_violations(text: str, path: str, allowed: list[float], people: set[tuple[int, int]],
-                       explanation: str, cfg: dict, percentages: list[float] | None = None,
-                       nonpercent_sources: dict[float, str] | None = None) -> list[Violation]:
-    clean = _WEAPONS.sub(" ", text)
-    out = []
-    for match in _PEOPLE.finditer(clean):
-        pair = tuple(int(x) for x in match.groups())
-        if pair not in people:
-            actual = "、".join(f"{a}v{b}" for a, b in sorted(people)) or "无可核对人数"
-            out.append(Violation(path=path, code="number_not_found",
-                message=f'人数“{match.group()}”与 targets 数据不符；可核对人数：{actual}。{explanation}'))
-    clean = _PEOPLE.sub(" ", clean)
-    for match in _NUMBER.finditer(clean):
-        token = match.group()
-        if (int(float(token)) in cfg["quantile_labels"] and float(token).is_integer()
-                and (_QUANTILE_BEFORE.search(clean[:match.start()])
-                     or _QUANTILE_AFTER.match(clean[match.end():]))):
-            continue
-        x = float(token)
-        percent = bool(re.match(r"\s*[%％]", clean[match.end():]) or
-                       re.search(r"百分之\s*$", clean[:match.start()]))
-        candidates = (percentages or []) if percent else allowed
-        near = bool(_APPROX_BEFORE.search(clean[:match.start()]) or _APPROX_AFTER.search(clean[match.end():]))
-        ok = any(_rounded_matches(v, token) or (near and abs(x - v) <=
-                 abs(v) * cfg["number_relative_tolerance"] + cfg["number_absolute_tolerance"]) for v in candidates)
-        if not ok:
-            if percent:
-                source = next((label for v, label in (nonpercent_sources or {}).items()
-                               if _rounded_matches(v, token)), None)
-                note = f"；数据中的 {token} 是{source}" if source else ""
-                message = f"{token}% 不是数据中的百分比{note}。{explanation}"
-            else:
-                message = f'文字中的数字 {token} 在允许数据中找不到。{explanation}'
-            out.append(Violation(path=path, code="number_not_found",
-                message=message))
     return out
 
 
@@ -265,9 +212,6 @@ class _TargetData:
     moments: list[Moment]
     records: list
     rounds: set[int]
-    numbers: list[float]
-    percentages: list[float]
-    number_sources: dict[float, str]
     hit_problems: set[str]
     predicate_moments: list[Moment]
 
@@ -293,20 +237,7 @@ def _single_resolver(mm: MatchMoments, report: ProblemReport):
             moments, records = [], [r for r in mm.missed_trades if r.round == number]
             rounds, predicate = {number}, []
         hits = [h for h in report.hits if h.target == target]
-        numbers = _numeric_leaves([m.model_dump() for m in moments])
-        percentages = _percent_leaves([m.model_dump() for m in moments])
-        sources = {}
-        numbers.extend(_numeric_leaves([r.model_dump() for r in records]))
-        percentages.extend(_percent_leaves([r.model_dump() for r in records]))
-        for hit in hits:
-            numbers.extend(_numeric_leaves(hit.evidence))
-            numbers.extend(_numeric_leaves(hit.thresholds))
-            percentages.extend(_percent_leaves(hit.evidence))
-            percentages.extend(_percent_leaves(hit.thresholds))
-            for key, value in hit.evidence.items():
-                if isinstance(value, (int, float)) and not isinstance(value, bool):
-                    sources[float(value)] = f"{key} 的数值"
-        return _TargetData(moments, records, rounds, numbers, percentages, sources,
+        return _TargetData(moments, records, rounds,
                            {h.problem for h in hits}, predicate), ""
     return resolve
 
@@ -327,9 +258,8 @@ def _summary_resolver(summary):
     return resolve
 
 
-def _check_entries(sub: ReportSubmission, cfg: dict, whole_numbers: list[float],
-                   resolve, disabled: set[str], summary_count: int = 0,
-                   whole_percentages: list[float] | None = None,
+def _check_entries(sub: ReportSubmission, cfg: dict,
+                   resolve, disabled: set[str], slot_factory, summary_count: int = 0,
                    match_maps: dict[str, str] | None = None,
                    single_map: str | None = None) -> list[Violation]:
     out: list[Violation] = []
@@ -369,9 +299,6 @@ def _check_entries(sub: ReportSubmission, cfg: dict, whole_numbers: list[float],
                 add(path + ".targets", "pattern_too_few", f"规律至少需要 2 个不同 target，实际只有 {len(set(entry.targets))} 个。")
 
             moments, records, rounds = [], [], set()
-            allowed = _numeric_leaves(len(entry.targets)) + whole_numbers
-            percentages = list(whole_percentages or [])
-            sources: dict[float, str] = {}
             allowed_maps = set()
             for j, target in enumerate(entry.targets):
                 target_path = f"{path}.targets[{j}]"
@@ -386,19 +313,13 @@ def _check_entries(sub: ReportSubmission, cfg: dict, whole_numbers: list[float],
                 moments.extend(data.moments)
                 records.extend(data.records)
                 rounds.update(data.rounds)
-                allowed.extend(data.numbers)
-                percentages.extend(data.percentages)
-                sources.update(data.number_sources)
                 if known and pid != "other" and pid not in disabled and pid not in data.hit_problems:
                     found = "、".join(sorted(data.hit_problems)) or "没有任何命中"
                     add(target_path, "precondition_failed", f'{target} 不满足“{spec.label}”（{pid}）：该 target 实际检测到的问题为 {found}。')
-            for number in rounds:
-                allowed.extend(_numeric_leaves(number))
-
             text_path = path + ".analysis"
             if not match_maps:
                 allowed_maps = {single_map} if single_map else set()
-            clean = _WEAPONS.sub(" ", entry.analysis)
+            clean = SLOT.sub(" ", _WEAPONS.sub(" ", entry.analysis))
             out.extend(_map_violations(entry.analysis, text_path, allowed_maps, cfg, match_maps))
             id_pattern = _SUMMARY_ID if summary_count else _MOMENT_ID
             identifiers = CITATION.findall(clean) + id_pattern.findall(CITATION.sub(" ", clean))
@@ -413,12 +334,8 @@ def _check_entries(sub: ReportSubmission, cfg: dict, whole_numbers: list[float],
                     number = int(match[1])
                     if not 1 <= number <= summary_count:
                         add(text_path, "match_mismatch", f"文字提到第 {number} 场，但汇总只有 {summary_count} 场。")
-            description = _describe(moments, records)
-            people = {(m.context.alive_own, m.context.alive_enemy) for m in moments}
-            people.update((r.alive_own, r.alive_enemy) for r in records
-                          if r.alive_own is not None and r.alive_enemy is not None)
-            out.extend(_number_violations(entry.analysis, text_path, allowed, people, description,
-                                          cfg["checker"], percentages, sources))
+            out.extend(_slot_violations(entry.analysis, text_path,
+                                        slot_factory(pid, entry.targets), cfg))
             if group == "findings":
                 for j, drill_id in enumerate(entry.drills):
                     drill = drills.get(drill_id)
@@ -426,7 +343,8 @@ def _check_entries(sub: ReportSubmission, cfg: dict, whole_numbers: list[float],
                             aim_count < drill.get("min_aim_problems", 0)):
                         add(f"{path}.drills[{j}]", "drill_not_allowed",
                             f"练习图 {drill_id} 不适用于 {pid} 或本报告枪法问题类别不足。")
-                out.extend(_training_violations(entry.training, path + ".training", cfg))
+                out.extend(_training_violations(entry.training, path + ".training", cfg,
+                                                slot_factory(pid, entry.targets)))
             # 用户确认：match 可用整场逐枪数据核对说法，但不扩大其允许数值集合。
             predicate_moments = moments
             if "match" in entry.targets and pid == "spray_control":
@@ -467,25 +385,15 @@ def _check_entries(sub: ReportSubmission, cfg: dict, whole_numbers: list[float],
         add("findings/patterns/highlights", "too_many_other",
             f'other 合计 {len(other_paths)} 条，上限为 {cfg["checker"]["max_other"]}；位置：{"、".join(other_paths)}。')
     for i, item in enumerate(sub.training_plan):
-        out.extend(_training_violations(item, f"training_plan[{i}]", cfg))
+        # 训练计划不针对具体交火，可以引用本场任意瞬间
+        out.extend(_training_violations(item, f"training_plan[{i}]", cfg, slot_factory(None, None)))
     return out
 
 
-def _check_overview(sub: ReportSubmission, digest: str, cfg: dict,
+def _check_overview(sub: ReportSubmission, digest: str, cfg: dict, slot_factory,
                     id_pattern: re.Pattern, summary_count: int = 0,
                     maps: set[str] | None = None) -> list[Violation]:
-    allowed = [float(m.group()) for m in _NUMBER.finditer(digest) if math.isfinite(float(m.group()))]
-    percentages = [float(m.group(1)) for m in re.finditer(r"(\d+(?:\.\d+)?)\s*[%％]", digest)]
-    percentages.extend(float(m.group(1)) for m in re.finditer(r"百分之\s*(\d+(?:\.\d+)?)", digest))
-    sources = {}
-    for line in digest.splitlines():
-        for match in _NUMBER.finditer(line):
-            value = float(match.group())
-            if value not in percentages:
-                sources.setdefault(value, f"摘要里的“{line.strip()[:90]}”")
-    people = {tuple(int(v) for v in m.groups()) for m in _PEOPLE.finditer(digest)}
-    out = _number_violations(sub.overview, "overview", allowed, people, "总览数字及人数应来自 digest 原文。",
-                             cfg["checker"], percentages, sources)
+    out = _slot_violations(sub.overview, "overview", slot_factory(None, (), True), cfg)
     out.extend(_map_violations(sub.overview, "overview", maps or set(), cfg))
     identifiers = CITATION.findall(sub.overview) + id_pattern.findall(CITATION.sub(" ", sub.overview))
     if identifiers:
@@ -500,26 +408,30 @@ def _check_overview(sub: ReportSubmission, digest: str, cfg: dict,
 
 
 def check_submission(sub: ReportSubmission, mm: MatchMoments, report: ProblemReport,
-                     digest: str, cfg: dict, whole_numbers: list[float] | None = None) -> list[Violation]:
-    """单场检查；分析可引用整场数值，训练文字不作数字或敏感说法检查。"""
-    percentages = list(getattr(whole_numbers, "percentages", []))
-    percentages.extend(_percent_leaves(mm.aim_stats.model_dump()) if mm.aim_stats else [])
-    percentages.extend(float(m.group(1)) for m in re.finditer(r"(\d+(?:\.\d+)?)\s*[%％]", digest))
-    return (_check_overview(sub, digest, cfg, _MOMENT_ID, maps={mm.map_name})
-            + _check_entries(sub, cfg, whole_numbers or [], _single_resolver(mm, report),
+                     digest: str, cfg: dict, whole_numbers: list[float] | None = None,
+                     score=None, frequency=None, baseline=None) -> list[Violation]:
+    """单场检查；训练文字不作数字或敏感说法检查。
+
+    whole_numbers 自 019 起不再使用（数字一律由占位符填写），保留参数只为兼容现有调用；
+    score、frequency、baseline 供占位符取值，缺少时相应占位符报 slot_unavailable。
+    """
+    slots = lambda problem, targets, overview=False: make_slot_resolver(
+        mm, report, score, frequency, baseline, problem=problem, targets=targets, overview=overview)
+    return (_check_overview(sub, digest, cfg, slots, _MOMENT_ID, maps={mm.map_name})
+            + _check_entries(sub, cfg, _single_resolver(mm, report),
                              set(report.disabled) | set(cfg["problems"]["disabled"]),
-                             whole_percentages=percentages, single_map=mm.map_name))
+                             slots, single_map=mm.map_name))
 
 
 def check_summary_submission(sub: ReportSubmission, summary, digest: str, cfg: dict,
-                             whole_numbers: list[float]) -> list[Violation]:
-    """跨场检查与单场共用前提、数字、敏感说法规则。"""
+                             whole_numbers: list[float], baseline=None) -> list[Violation]:
+    """跨场检查与单场共用前提、占位符、敏感说法规则；whole_numbers 同单场，已不再使用。"""
     disabled = set(cfg["problems"]["disabled"])
     for match in summary.matches:
         disabled.update(summary.detail(match.number)[1].disabled)
-    from cs2coach.summary.digest import summary_percentages
     match_maps = {match.number: match.map_name for match in summary.matches}
-    percentages = list(getattr(whole_numbers, "percentages", summary_percentages(summary)))
-    return (_check_overview(sub, digest, cfg, _SUMMARY_ID, len(summary.matches), set(match_maps.values()))
-            + _check_entries(sub, cfg, whole_numbers, _summary_resolver(summary), disabled,
-                             len(summary.matches), percentages, match_maps))
+    slots = lambda problem, targets, overview=False: make_slot_resolver(
+        summary=summary, baseline=baseline, problem=problem, targets=targets, overview=overview)
+    return (_check_overview(sub, digest, cfg, slots, _SUMMARY_ID, len(summary.matches), set(match_maps.values()))
+            + _check_entries(sub, cfg, _summary_resolver(summary), disabled,
+                             slots, len(summary.matches), match_maps))

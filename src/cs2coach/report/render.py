@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+
 from typing import TYPE_CHECKING, Mapping
 
 from cs2coach.features.labels import absent_rounds_note
@@ -12,6 +14,9 @@ from cs2coach.report.evidence import evidence_sentence, match_fact
 from cs2coach.report.facts import missed_trade_facts, render_moment_card
 from cs2coach.report.problems import frequency_table
 from cs2coach.tools.drills import drill_labels
+from cs2coach.tools.slots import make_slot_resolver, render_submission
+
+_PLAN_NUMBER = re.compile(r"^\s*\d+\s*[.、．)）](?!\d)\s*")  # AI 自带的序号
 
 if TYPE_CHECKING:
     from cs2coach.ai.diagnose import Diagnosis
@@ -19,14 +24,19 @@ if TYPE_CHECKING:
 SEVERITY = {"high": "高", "medium": "中", "low": "低"}
 
 
-def render_diagnosis(d: Diagnosis, mm: MatchMoments, names: Mapping[int, str], cfg: dict | None = None) -> str:
+def render_diagnosis(d: Diagnosis, mm: MatchMoments, names: Mapping[int, str],
+                     cfg: dict | None = None, baseline: dict | None = None) -> str:
     sub = d.submission
+    d.rendered_submission = render_submission(sub, lambda problem, targets, overview=False:
+        make_slot_resolver(mm, d.problems, d.score, d.frequency, baseline,
+                           problem=problem, targets=targets, overview=overview))
+    rendered = d.rendered_submission
     labels = drill_labels(cfg or load_config())
     by_id = {m.id: m for m in mm.moments}
     lines = [f"# 复盘报告：{mm.player_name} · {mm.map_name}", "",
              f"比分 {d.score[0]}:{d.score[1]} · 模型 {d.provider} / {d.model}", "",
              *([absent_rounds_note(mm.absent_rounds), ""] if mm.absent_rounds else []),
-             "## 总览", "", sub.overview, "", "## 突出问题", ""]
+             "## 总览", "", rendered["overview"], "", "## 突出问题", ""]
     prominent = [row for row in d.frequency if row.prominent]
     if prominent:
         lines.extend(frequency_table(prominent))
@@ -60,27 +70,27 @@ def render_diagnosis(d: Diagnosis, mm: MatchMoments, names: Mapping[int, str], c
                          if h.problem == entry.problem and h.target in entry.targets)
 
     lines.extend(["", "## 关键问题", ""])
-    for entry in sub.findings:
+    for i, entry in enumerate(sub.findings):
         lines.append(f"### {label(entry.problem)} · {SEVERITY[entry.severity]}")
         facts(entry)
-        lines.extend(["", "**分析**", "", entry.analysis, "", "**怎么练**", ""])
+        lines.extend(["", "**分析**", "", rendered["findings"][i]["analysis"], "", "**怎么练**", ""])
         lines.extend(f"- {labels[drill]}" for drill in entry.drills if drill in labels)
-        lines.extend(["", entry.training, ""])
+        lines.extend(["", rendered["findings"][i]["training"], ""])
     lines.extend(["## 反复出现的问题", ""])
-    for entry in sub.patterns:
+    for i, entry in enumerate(sub.patterns):
         lines.extend([f"### {label(entry.problem)}", "", "涉及：" + "、".join(f"〔{t}〕" for t in entry.targets),
-                      "", entry.analysis, ""])
+                      "", rendered["patterns"][i]["analysis"], ""])
     if not sub.patterns:
         lines.extend(["没有提交反复出现的问题。", ""])
     lines.extend(["## 亮点", ""])
-    for entry in sub.highlights:
+    for i, entry in enumerate(sub.highlights):
         lines.append(f"### {label(entry.problem)}")
         facts(entry)
-        lines.extend(["", "**分析**", "", entry.analysis, ""])
+        lines.extend(["", "**分析**", "", rendered["highlights"][i]["analysis"], ""])
     if not sub.highlights:
         lines.extend(["没有提交亮点。", ""])
     lines.extend(["## 训练计划", ""])
-    lines.extend(f"{i}. {text}" for i, text in enumerate(sub.training_plan, 1))
+    lines.extend(f"{i}. {_PLAN_NUMBER.sub('', text)}" for i, text in enumerate(rendered["training_plan"], 1))
     lines.extend(["", "## 跳转命令", ""])
     targets = dict.fromkeys(t for entry in [*sub.findings, *sub.patterns, *sub.highlights] for t in entry.targets)
     jumps = [by_id[t] for t in targets if t in by_id]

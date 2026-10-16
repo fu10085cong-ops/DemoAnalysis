@@ -17,6 +17,7 @@ from cs2coach.report.problems import frequency_table
 from cs2coach.parsing.match import MatchData
 from cs2coach.parsing.models import Team
 from cs2coach.tools.drills import drill_guidance
+from cs2coach.tools.slots import slot_guidance
 
 METRIC_LABELS = {
     "time_to_damage_ms": ("Time to Damage", "ms", "time_to_damage_samples", "次遭遇"),
@@ -114,6 +115,7 @@ def build_digest(match: MatchData, mm: MatchMoments, baseline: dict[str, Any] | 
     if mm.excluded:
         lines += ["", "## 不参与分析的记录"]
         lines += [f"- [[R{x.round}]] tick {x.tick} {KIND_LABELS.get(x.kind, x.kind)}：{x.reason}" for x in mm.excluded]
+    lines.extend(["", slot_guidance(mm)])
     lines.extend(drill_guidance(cfg or load_config()))
     return "\n".join(lines)
 

@@ -39,7 +39,7 @@ def sample():
     return aggregate_matches(A, games, baseline, cfg), baseline, cfg
 
 
-def submission(target="M1:R1-death", analysis="这次交火的准备值得复盘。", overview="三场合计值得复盘。"):
+def submission(target="M1:R1-death", analysis="这次交火的准备值得复盘。", overview="这些比赛合计值得复盘。"):
     return dict(overview=overview, findings=[dict(problem="slow_reaction", targets=[target],
         severity="medium", analysis=analysis, training="每周练习三次接敌准备。")],
         patterns=[], highlights=[], training_plan=["每周复盘两次首枪准备。"])
@@ -130,12 +130,13 @@ def test_primary_name_and_summary_totals_in_digest_and_checker():
     digest = build_summary_digest(summary, baseline, cfg)
     assert "玩家：popular。用过的名字：first、popular、third。" in digest
     assert "合计：455 杀、273 死、0 次关键助攻；3 胜、0 负、0 平。" in digest
-    payload = submission(overview="共 455 杀、273 死。")
+    payload = submission(overview="共 {match.kills} 杀、{match.deaths} 死。")
     payload["findings"][0]["drills"] = ["aim_botz"]
     sub = parse_submission(payload)
     assert check_summary_submission(sub, summary, digest, cfg, summary_numbers(summary, baseline)) == []
     result = diagnose_summary(summary, cfg, baseline, FakeProvider([payload]))
     assert result.report.startswith("# 多场复盘：popular · 3 场")
+    assert "共 455 杀、273 死。" in result.report  # 占位符按整批合计填写
     assert "**怎么练**\n\n- Aim Botz" in result.report
 
 
@@ -164,8 +165,9 @@ def test_checker_resolves_hits_per_match_and_restricts_numbers_and_ids():
         return {v.code for v in check_summary_submission(sub, summary, digest, cfg, numbers)}
     assert codes() == set()
     assert "precondition_failed" in codes(target="M3:R1-death")
-    assert "number_not_found" in codes(analysis="本次 TTD 为 1234 毫秒。")
-    assert "number_not_found" not in codes(analysis="汇总在场 30 回合。")
+    assert "raw_number" in codes(analysis="本次 TTD 为 1234 毫秒。")
+    assert codes(analysis="本次 TTD 为 {M1:R1-death.ttd}，汇总在场 {match.rounds_played}。") == set()
+    assert "slot_target_not_cited" in codes(analysis="{M2:R1-death.ttd} 值得复盘。")
     assert "id_in_text" in codes(analysis="M1:R1-death 值得复盘。")
     assert "match_mismatch" in codes(analysis="第 5 场值得复盘。")
     assert "match_mismatch" in codes(overview="第 5 场值得复盘。")

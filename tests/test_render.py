@@ -141,8 +141,8 @@ def test_cli_writes_report_and_submission_audit_with_fake_diagnosis(tmp_path, mo
     assert _diagnose(match, mm, cfg, out) == 0
     assert out.read_text(encoding="utf-8") == d.report
     audit = json.loads((tmp_path / "submission.json").read_text(encoding="utf-8"))
-    assert audit == {"submission": d.submission.model_dump(), "violations_history": [[]], "dropped": [],
-                     "raw_calls": d.raw_calls}
+    assert audit == {"submission": d.submission.model_dump(), "rendered_submission": d.rendered_submission,
+                     "violations_history": [[]], "dropped": [], "raw_calls": d.raw_calls}
 
 
 def test_prompts_keep_metric_definitions_and_require_structured_workflow():

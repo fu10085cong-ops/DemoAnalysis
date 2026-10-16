@@ -1,6 +1,6 @@
 # 019 数字由程序填写：分析文字中的占位符
 
-状态：待做
+状态：完成
 
 ## 目标
 
@@ -140,11 +140,71 @@ AI 写的总览、分析、亮点中不再出现任何数字，需要数字的�
 
 ---
 
-## 完成报告（GPT 填写）
+## 完成报告
 
-- 改动的文件及原因：
-- 测试结果：
-- 真实 demo 验证（如有）：
-- 遗留问题 / 需要确认的地方：
+GPT 完成了 `slots.py` 的初版，以及检查器、排版、提示词的接入；因额度用完中途停止。其余由 Claude 完成（2026-10-16）。
+
+- **改动的文件及原因**：
+  - `tools/slots.py`（新建）：占位符的解析、显示、计数，以及摘要中的说明表。
+  - `tools/checker.py`：`raw_number`、`chinese_number`、各类占位符违规；删除了原来按数字允许集合核对的代码；训练文字中的占位符。
+  - `report/render.py`、`summary/render_report.py`：按渲染后的文字排版。
+  - `ai/diagnose.py`、`summary/diagnose.py`：总览兜底句改用占位符；`DiagnosisError` 带上审计记录。
+  - `cli.py`：生成失败时写 `submission_failed.json`。
+  - `ai/prompts.py`、`summary/prompts.py`、`tools/digest.py`、`summary/digest.py`、`docs/features.md`。
+  - 测试：新建 `tests/test_slots.py`，并修改 `test_checker.py`、`test_checker_017.py`、`test_ai.py`、`test_render.py`、`test_summary_ai.py`。
+- **在任务单之外，根据本地模型实测补充的内容**：
+  - `first_hit_shot`（第几发首次命中）；
+  - `place`、`opponent_place`，以及 `location` 等同义字段名；
+  - 去掉占位符后面重复写的单位，以及前面重复的"第"；
+  - 纯数字占位符后面接单位时报 `slot_unit_mismatch`；
+  - `raw_number` 同一段只报一条，并按显示值推荐占位符：本条引用的交火优先，含义不明时不推荐；
+  - "75 分位""p90"不算数字；"1v3"作为一个人数整体推荐 `people`；
+  - 训练文字可以用占位符，训练计划可以引用本场任意瞬间；
+  - 训练计划中 AI 自带的序号会被去掉；
+  - 完整句不带句号；
+  - 错误信息中写出出错的占位符原文。
+- **历史样例的处理**：`mirage_*`、`016_local_*` 的回归测试，改为断言 `raw_number`，其余规则（地图名、练习图、前提条件等）的断言保留。017 的百分比口径测试，改为"写数字一律拦下，用占位符则通过"。
+- **测试结果**：`pytest -q`：571 passed, 3 skipped。
+- **真实本地运行**：千问 14B，完美 Dust2 16:14。共跑了 4 次，每次根据失败原因修改，违规数如下：
+
+  | 次数 | 各轮违规数 | 结果 |
+  |---|---|---|
+  | 1 | 66 → 48 → 48 | 失败 |
+  | 2 | 23 → 14 → 12 | 失败 |
+  | 3 | 17 → 10 → 10 | 失败 |
+  | 4 | 12 → 2 → 1 | 成功，删除 1 条 pattern，用时 102 秒 |
+
+  第 4 次的报告：
+  - 所有数字都由程序填写，并且正确。例如 R5 的 Five-SeveN 配上了正确的阈值 11.7°，以前是 AK 的 9.7°。
+  - 剩下的是模型的理解错误，程序拦不住：
+    - 把 `count.no_shot_deaths` 说成"人数优势时的死亡"；
+    - "瞄头部而非腰部"是编造的；
+    - 一条 pattern 把单次交火的 gap 当成整体差距。
 
 ## 审查意见（Claude 填写）
+
+**结论（2026-10-16）：完成。** 第 1 轮意见已由 Claude 全部处理，见上方完成报告。
+
+
+**第 1 轮（2026-10-16）：需修改。** 工作没有完成。`slots.py` 的整体设计符合任务单，接入检查器和排版的方式也对，但以下几项必须补齐。
+
+**未完成的部分**
+1. 全部测试必须通过。现在有 10 个失败：
+   - `test_ai::test_overview_is_replaced_with_program_score_kills_deaths`
+   - `test_checker::test_raw_number_message_suggests_slot`
+   - `test_checker::test_raw_chinese_and_slot_rules`
+   - `test_checker::test_real_mirage_submissions_regression`
+   - `test_checker_017::test_percent_type_and_plain_number`
+   - `test_checker_017::test_016_local_submission_regression`
+   - `test_render::test_cli_writes_report_and_submission_audit_with_fake_diagnosis`
+   - `test_summary_ai` 中的三个测试
+2. 验收标准中列出的测试都没有写：各对象和字段的解析与显示、`shot_order`/`seen_order` 的方向、`value`/`threshold`/`gap` 取对键、`R9[n]`、各违规代码的触发与不触发、排版后没有 `{`、2026-10-16 错误句子的回归。建议新建 `tests/test_slots.py`。
+3. 没有用本地模型实际跑；完成报告是空的。
+
+**代码问题**
+4. 百分比格式错误：`_fmt(..., "pct")` 用的是 `{value:g}`，3 发中 2 发会显示成"66.6667%"，偶然概率也会出现多位小数。改为保留一位小数并去掉末尾的 .0：2/3 显示为"66.7%"，12.5 显示为"12.5%"，33.0 显示为"33%"。另外检查 `chance`、`better_than`、`hit_rate` 三处都走这个格式。
+5. `round` 显示为"5 回合"，任务单要求"第 5 回合"。AI 只需要写 `{R5-kill2.round}`，不要让它自己拼"第"字。
+6. 缺少"第几发首次命中"这个字段。禁止中文数字以后，AI 没法再写"前七发都没打中，第八发才命中"，而 2026-10-16 的报告里这句是正确且有用的。请给瞬间加 `first_hit_shot`（显示"第 8 发"），没有命中时为不可用。
+7. `_CHINESE_NUMBER` 里的"几"：单独的"几次""这几次"是模糊说法，不是具体数字，不应该报错。只在"十几""二十几"这类带具体数位的写法时报错。
+8. `render_submission` 遇到错误会抛出 `ValueError`。诊断流程必须保证最终提交里没有无法解析的占位符：无法解析的条目先删除，总览则替换，然后再排版。请补一个测试：一个不可解析的占位符一路走到排版，结果是这一条被删除，而不是程序报错退出。
+9. 计数的口径请在 `count_values` 的注释中写清楚。`deaths` 包含回合结束后、误杀等非交火阵亡，`opening_deaths`、`traded_deaths` 则排除了这些，两者口径不同。摘要中的中文说明也要与之一致，否则 AI 会把它们混在一起用。

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+
 from collections import Counter
 from typing import TYPE_CHECKING
 
@@ -13,6 +15,9 @@ from cs2coach.report.render import SEVERITY
 from cs2coach.summary.aggregate import PlayerSummary
 from cs2coach.summary.render import summary_frequency_table, summary_match_table
 from cs2coach.tools.drills import drill_labels
+from cs2coach.tools.slots import make_slot_resolver, render_submission
+
+_PLAN_NUMBER = re.compile(r"^\s*\d+\s*[.、．)）](?!\d)\s*")  # AI 自带的序号
 
 if TYPE_CHECKING:
     from cs2coach.summary.diagnose import SummaryDiagnosis
@@ -21,13 +26,17 @@ if TYPE_CHECKING:
 def render_summary_diagnosis(d: SummaryDiagnosis, summary: PlayerSummary,
                              baseline: dict | None, cfg: dict | None = None) -> str:
     sub = d.submission
+    d.rendered_submission = render_submission(sub, lambda problem, targets, overview=False:
+        make_slot_resolver(summary=summary, baseline=baseline, problem=problem,
+                           targets=targets, overview=overview))
+    rendered = d.rendered_submission
     labels = drill_labels(cfg or load_config())
     matches = {match.number: match for match in summary.matches}
     maps = Counter(match.map_name for match in summary.matches)
     map_text = "、".join(f"{name} {count} 场" for name, count in sorted(maps.items()))
     lines = [f"# 多场复盘：{summary.primary_name} · {len(summary.matches)} 场",
              "", f"曾用名：{'、'.join(summary.names) or '未知'} · 地图：{map_text or '无'} · "
-             f"模型 {d.provider} / {d.model}", "", "## 总览", "", sub.overview,
+             f"模型 {d.provider} / {d.model}", "", "## 总览", "", rendered["overview"],
              "", "## 突出问题", ""]
     prominent = [row for row in summary.frequency if row.prominent]
     lines.extend(summary_frequency_table(summary, prominent) if prominent else
@@ -65,14 +74,14 @@ def render_summary_diagnosis(d: SummaryDiagnosis, summary: PlayerSummary,
                              if hit.problem == entry.problem and hit.target == local)
 
     lines.extend(["", "## 关键问题", ""])
-    for entry in sub.findings:
+    for i, entry in enumerate(sub.findings):
         lines.extend([f"### {label(entry.problem)} · {SEVERITY[entry.severity]}"])
         facts(entry)
-        lines.extend(["", "**分析**", "", entry.analysis, "", "**怎么练**", ""])
+        lines.extend(["", "**分析**", "", rendered["findings"][i]["analysis"], "", "**怎么练**", ""])
         lines.extend(f"- {labels[drill]}" for drill in entry.drills if drill in labels)
-        lines.extend(["", entry.training, ""])
+        lines.extend(["", rendered["findings"][i]["training"], ""])
     lines.extend(["## 反复出现的问题", ""])
-    for entry in sub.patterns:
+    for i, entry in enumerate(sub.patterns):
         lines.extend([f"### {label(entry.problem)}", ""])
         groups: dict[str, list[str]] = {}
         for target in entry.targets:
@@ -82,18 +91,18 @@ def render_summary_diagnosis(d: SummaryDiagnosis, summary: PlayerSummary,
             match = matches[number]
             lines.append(f"- {number} · {match.match_id} · {match.map_name}："
                          + "、".join(f"〔{target}〕" for target in targets))
-        lines.extend(["", entry.analysis, ""])
+        lines.extend(["", rendered["patterns"][i]["analysis"], ""])
     if not sub.patterns:
         lines.extend(["没有提交反复出现的问题。", ""])
     lines.extend(["## 亮点", ""])
-    for entry in sub.highlights:
+    for i, entry in enumerate(sub.highlights):
         lines.append(f"### {label(entry.problem)}")
         facts(entry)
-        lines.extend(["", "**分析**", "", entry.analysis, ""])
+        lines.extend(["", "**分析**", "", rendered["highlights"][i]["analysis"], ""])
     if not sub.highlights:
         lines.extend(["没有提交亮点。", ""])
     lines.extend(["## 训练计划", ""])
-    lines.extend(f"{i}. {item}" for i, item in enumerate(sub.training_plan, 1))
+    lines.extend(f"{i}. {_PLAN_NUMBER.sub('', item)}" for i, item in enumerate(rendered["training_plan"], 1))
     lines.extend(["", "## 附录：每场概况", "", *summary_match_table(summary),
                   "", "## 附录：跳转命令", "",
                   "先在游戏里打开对应的 demo，再执行该行命令。", "",
