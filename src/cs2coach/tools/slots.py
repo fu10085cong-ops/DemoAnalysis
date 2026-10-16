@@ -126,8 +126,11 @@ def render_slots(text: str, resolver: Callable[[str], str | SlotError]) -> tuple
             out.append(match[0])
             pos = match.end()
             continue
-        if result.startswith("第") and out and out[-1].endswith("第"):
-            out[-1] = out[-1][:-1]
+        # AI 在占位符前重复写了"第""你""对手"（如“从第 {…first_hit_shot}”“你{…seen_order}”）时去掉重复
+        for lead in ("第", "对手", "你"):
+            if result.startswith(lead) and out and out[-1].rstrip(" ").endswith(lead):
+                out[-1] = out[-1].rstrip(" ")[:-len(lead)]
+                break
         if _PLAIN.match(result) and (unit := _UNIT_AFTER_PLAIN.match(rest)):
             errors.append(SlotError("slot_unit_mismatch", match[0],
                 f"{match[0]} 显示为纯数字 {result}，后面不能接“{unit[1]}”：它不是百分比、时间、角度或距离。"
@@ -235,8 +238,14 @@ def make_slot_resolver(mm: MatchMoments | None = None, report: ProblemReport | N
             if parts[2] in allowed and row:
                 key = {"expected": "expected_hits", "excess": "excess_hits"}.get(parts[2], parts[2])
                 value = getattr(row, key)
-                return _fmt(value * 100, "pct") if parts[2] == "chance" and value is not None else (
-                    _fmt(value, "ratio" if parts[2] == "ratio" else "count") if value is not None else _missing(slot, mm))
+                if value is None:
+                    return _missing(slot, mm)
+                if parts[2] == "chance":
+                    return _fmt(value * 100, "pct")
+                if parts[2] == "ratio":
+                    return _fmt(value, "ratio")
+                # 预期次数、多出次数是小数，与频率表一致保留一位（实测曾显示成 7.90291）
+                return f"{value:.1f}" if parts[2] in ("expected", "excess") else _fmt(value, "count")
             return SlotError("unknown_slot", slot, "freq.<问题编号> 可用字段：" + "、".join(allowed))
         if obj == "pro" and len(parts) == 3:
             metric = METRICS.get(parts[1])

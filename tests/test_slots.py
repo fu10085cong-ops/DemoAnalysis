@@ -203,6 +203,11 @@ def test_duplicate_units_and_ordinal_are_removed():
     assert render("{freq.slow_reaction.chance}%", overview=True) == "0.1%"
     assert render("{R5-kill2.distance} meters") == "12 米 meters"  # 后面是英文单词时不当作单位
     assert render("共{R5-kill2.gap}ms差距", problem="slow_reaction") == "共344 毫秒差距"  # 实测："344 毫秒ms差距"
+    # 评测实测（2026-10-16）："你你先看见对手"、"从第 第 5 发"、"多 7.90291 次"
+    assert render("你{R5-kill2.shot_order}") == "你先开枪，领先 0.27 秒"
+    assert render("而对手{R19-kill1.shot_order}") == "而对手先开枪，领先 0.03 秒"
+    assert render("从第 {R19-kill1.first_hit_shot}") == "从第 8 发"
+    assert render("多 {freq.slow_reaction.excess} 次", overview=True) == "多 7.9 次"
 
 
 def test_plain_number_followed_by_unit_is_a_meaning_error():
