@@ -82,7 +82,7 @@
     - 不加 `--ai` 时只写程序生成的三个文件。
   - 提示词和摘要包含新的规则说明。
 - [x] 全部测试通过：`.venv/Scripts/python.exe -m pytest -q`
-- [x] 真实 demo（**不加 `--ai`**）：完美 `data/demos/perfectworld_demo/.extracted/9215177492731139980_0/9215177492731139980_0.dem`，玩家 `76561199703310441`，输出到一个**临时目录**（用 `--out` 指定，不要写进 `data/output/`）。完成报告中贴出 `problems.md` 的频率表。按新规则，应该只有"准星没提前放好"和"出枪慢"是突出问题。
+- [x] 真实 demo（**不加 `--ai`**）：完美 `data/demos/perfectworld_demo/.extracted/9215177492731139980_0/9215177492731139980_0.dem`，玩家 `76561190000001003`，输出到一个**临时目录**（用 `--out` 指定，不要写进 `data/output/`）。完成报告中贴出 `problems.md` 的频率表。按新规则，应该只有"准星没提前放好"和"出枪慢"是突出问题。
 
 ## 范围外（不要做）
 
@@ -102,7 +102,7 @@
   - `cli.py` 将结果写入 `<--out>/<比赛名>/<玩家名>_<steamid>/`，玩家名替换 Windows 非法字符并去首尾空格。重跑时把旧 report/submission 按修改时间移到 `历史版本/`，同一分钟重名时加序号，保留每一版。`README.md`、`docs/features.md` 更新输出与频率口径。
   - `tests/test_problem_frequency.py`、`test_checker.py`、`test_cli_output.py` 等覆盖计算边界、展示、检查器和输出归档；调整旧路径与旧倍数阈值测试。
 - 测试结果：`.venv/Scripts/python.exe -m pytest -q` **512 passed, 3 skipped**。`git diff --check` 通过。未新增依赖。
-- 真实 demo 验证：指定完美 Dust2 demo，玩家 `76561199703310441`，30 回合、56 个决定性瞬间；只运行无 AI 的 `analyze`。临时输出根目录为 `C:\Users\David\AppData\Local\Temp\cs2coach-011-review-367d130e8827467f9e6b44df89a5af52`，程序输出在其 `9215177492731139980_0/妮妮孩孩major冠军_76561199703310441/` 下。`problems.md` 的完整频率表：
+- 真实 demo 验证：指定完美 Dust2 demo，玩家 `76561190000001003`，30 回合、56 个决定性瞬间；只运行无 AI 的 `analyze`。临时输出根目录为 `C:\Users\David\AppData\Local\Temp\cs2coach-011-review-367d130e8827467f9e6b44df89a5af52`，程序输出在其 `9215177492731139980_0/玩家01_76561190000001003/` 下。`problems.md` 的完整频率表：
 
   | 问题 | 本场次数 | 按职业频率预期 | 多出的次数 | 偶然概率 | 倍数 |
   |---|---:|---:|---:|---:|---:|

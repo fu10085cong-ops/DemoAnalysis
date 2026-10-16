@@ -19,7 +19,7 @@
 - `CLAUDE.md`、`AGENTS.md`
 - `docs/problem_catalog.md`：末尾"训练方式"
 - `docs/tasks/016-local-model-provider.md`：完成报告和审查意见
-- 本地报告的提交记录：`C:\Users\David\AppData\Local\Temp\cs2coach-016-validation\妮妮孩孩major冠军_76561199703310441\汇总\submission.json`
+- 本地报告的提交记录：`C:\Users\David\AppData\Local\Temp\cs2coach-016-validation\玩家01_76561190000001003\汇总\submission.json`
 - `src/cs2coach/tools/checker.py`：允许数值的收集、`_number_violations`、敏感说法
 - `src/cs2coach/tools/submission.py`：`Finding`、`submit_tool`
 - `src/cs2coach/ai/prompts.py`、`summary/prompts.py`

@@ -51,6 +51,8 @@ PREDICATES: dict[str, Callable[[Moment], bool]] = {
     "man_advantage": lambda m: _more(m.context.alive_own, m.context.alive_enemy),
     "man_disadvantage": lambda m: _more(m.context.alive_enemy, m.context.alive_own),
     "t_post_plant": lambda m: m.context.side == "T" and m.context.bomb_planted is True,
+    "clutch": lambda m: m.context.alive_own == 1 and m.context.alive_enemy >= 1,
+    "ct_retake": lambda m: m.context.side == "CT" and m.context.bomb_planted is True,
     # "都……"类概括，配合 scope = "all" 逐个核对（评测：把一次交火的"先开枪"安到另一次上）
     "shot_first": lambda m: m.engagement is not None and (m.engagement.first_shot_lead_s or 0) > 0,
     "seen_first": lambda m: m.engagement is not None and (m.engagement.seen_first_lead_s or 0) > 0,
@@ -63,6 +65,25 @@ def _more(a, b) -> bool:
     return a is not None and b is not None and a > b
 
 
+def _segment_ratio(moment: Moment, field: str) -> float:
+    engagement = moment.engagement
+    if engagement is None or engagement.time_to_damage_s is None or engagement.time_to_damage_s <= 0:
+        return -1
+    value = getattr(engagement, field)
+    return value / engagement.time_to_damage_s if value is not None else -1
+
+
+def _segment_detail(moment: Moment) -> str:
+    engagement = moment.engagement
+    def part(field: str) -> str:
+        value = getattr(engagement, field) if engagement else None
+        ratio = _segment_ratio(moment, field)
+        time = f"{value:g}s" if value is not None else "缺失"
+        return f"{time}（{ratio:.1%}）" if ratio >= 0 else f"{time}（占比缺失）"
+    return (f"{moment.id}: 看见→开枪={part('seen_to_first_shot_s')}，"
+            f"开枪→命中={part('first_shot_to_damage_s')}")
+
+
 # 漏补枪记录（回合 target）也能支持的谓词；记录描述的是队友阵亡时的局面
 RECORD_PREDICATES: dict[str, Callable] = {
     "trade": lambda r: True,
@@ -71,9 +92,13 @@ RECORD_PREDICATES: dict[str, Callable] = {
     "man_advantage": lambda r: _more(r.alive_own, r.alive_enemy),
     "man_disadvantage": lambda r: _more(r.alive_enemy, r.alive_own),
     "t_post_plant": lambda r: r.side == "T" and r.bomb_planted is True,
+    "clutch": lambda r: r.alive_own == 1 and r.alive_enemy is not None and r.alive_enemy >= 1,
+    "ct_retake": lambda r: r.side == "CT" and r.bomb_planted is True,
 }
 # 与队友距离的说法：阈值来自配置，漏补枪记录的距离也算
 DISTANCE_PREDICATES = {"teammate_far", "teammate_near", "close_range", "long_range"}
+# 分段主次依赖 checker.segment_major_ratio，只允许 all 分支从当前配置取阈值。
+SEGMENT_PREDICATES = {"seen_to_shot_major", "shot_to_hit_major"}
 PHRASE_SCOPES = {"any", "all"}
 
 # 从旧引用模块原样迁移，仅用于拒绝分析文字里的引用；检查规则不变。
@@ -85,6 +110,7 @@ _TEXT_ROUND = re.compile(r"第\s*(\d+)\s*回合|(?<![A-Za-z0-9_])R(\d+)(?!\d)")
 _MOMENT_ID = re.compile(r"(?<![A-Za-z0-9_])R\d+-(?:kill\d+|death|assist\d+)(?![A-Za-z0-9_])")
 _SUMMARY_ID = re.compile(r"(?<![A-Za-z0-9_])M\d+:R\d+(?:-(?:kill\d+|death|assist\d+))?(?![A-Za-z0-9_])")
 _SUMMARY_TARGET = re.compile(r"^(M\d+):(R\d+(?:-(?:kill\d+|death|assist\d+))?)$")
+_SENTENCE = re.compile(r"[^。！？；\n]+")
 _TEXT_MATCH = re.compile(r"第\s*(\d+)\s*场")
 _WEAPONS = re.compile("|".join(re.escape(s) for s in sorted(WEAPON_LABELS.values(), key=len, reverse=True)), re.I)
 _LATIN = re.compile(r"[A-Za-z][A-Za-z0-9]*(?:[ -]+[A-Za-z0-9]+)*")
@@ -244,6 +270,45 @@ def _teammate_distances(moments: list[Moment], records: list) -> list[float]:
     return out + [round(r.distance, 1) for r in records]
 
 
+def _sentence_targets(analysis: str, position: int, targets: dict[str, _TargetData]):
+    """按句子里的瞬间或漏补记录占位符缩小核对范围。"""
+    sentence = next((m for m in _SENTENCE.finditer(analysis) if m.start() <= position < m.end()), None)
+    if sentence is None:
+        return (0, len(analysis)), targets, {}
+    chosen: dict[str, _TargetData] = {}
+    record_indices: dict[str, set[int]] = {}
+    whole_targets: set[str] = set()
+    for slot in SLOT.finditer(sentence.group()):
+        obj = slot[1].split(".", 1)[0]
+        if obj in targets:
+            chosen[obj] = targets[obj]
+            whole_targets.add(obj)
+            record_indices.pop(obj, None)
+            continue
+        indexed = re.fullmatch(r"((?:M\d+:)?R\d+)\[(\d+)\]", obj)
+        if indexed and indexed[1] in targets:
+            chosen[indexed[1]] = targets[indexed[1]]
+            if indexed[1] not in whole_targets:
+                record_indices.setdefault(indexed[1], set()).add(int(indexed[2]))
+    return sentence.span(), chosen or targets, record_indices if chosen else {}
+
+
+def _selected_data(targets: dict[str, _TargetData], indices: dict[str, set[int]]):
+    moments, records, labels = [], [], []
+    for target, data in targets.items():
+        moments.extend(data.moments)
+        selected = indices.get(target)
+        if selected:
+            for index in sorted(selected):
+                if 1 <= index <= len(data.records):
+                    records.append(data.records[index - 1])
+                    labels.append(f"{target}[{index}]")
+        else:
+            records.extend(data.records)
+            labels.append(target)
+    return moments, records, "、".join(labels)
+
+
 @dataclass
 class _TargetData:
     moments: list[Moment]
@@ -346,6 +411,7 @@ def _check_entries(sub: ReportSubmission, cfg: dict,
                 add(path + ".targets", "pattern_too_few", f"规律至少需要 2 个不同 target，实际只有 {len(set(entry.targets))} 个。")
 
             moments, records, rounds = [], [], set()
+            target_data: dict[str, _TargetData] = {}
             allowed_maps = set()
             for j, target in enumerate(entry.targets):
                 target_path = f"{path}.targets[{j}]"
@@ -357,6 +423,7 @@ def _check_entries(sub: ReportSubmission, cfg: dict,
                 if data is None:
                     add(target_path, "unknown_target", error)
                     continue
+                target_data[target] = data
                 moments.extend(data.moments)
                 records.extend(data.records)
                 rounds.update(data.rounds)
@@ -404,50 +471,70 @@ def _check_entries(sub: ReportSubmission, cfg: dict,
             if "match" in entry.targets and pid == "spray_control":
                 predicate_moments = resolve("match", pid)[0].predicate_moments
             for phrase in cfg["checker"]["phrases"]:
-                match = re.search(phrase["pattern"], entry.analysis)
-                if match is None:
-                    continue
                 require = phrase["require"]
-                if require in ("close_range", "long_range"):
+                reported_sentences: set[tuple[int, int]] = set()
+                for match in re.finditer(phrase["pattern"], entry.analysis):
+                    span, selected, indices = _sentence_targets(entry.analysis, match.start(), target_data)
+                    if span in reported_sentences:
+                        continue
+                    scoped_moments, scoped_records, labels = _selected_data(selected, indices)
+                    if require in ("close_range", "long_range"):
                     # 交火距离的形容词（评测：13、18 米被说成"近距离"，28 米被说成"短距离"）；
                     # 只引用漏补回合时没有交火距离，不核对
-                    meters = [round(m.context.distance) for m in moments if m.context.distance is not None]
-                    close, far_m = cfg["checker"]["close_range_m"], cfg["checker"]["long_range_m"]
-                    if meters and not any(d <= close if require == "close_range" else d >= far_m for d in meters):
-                        limit = f"不超过 {close:g} 米" if require == "close_range" else f"不少于 {far_m:g} 米"
-                        add(text_path, "phrase_unsupported",
-                            f"“{match.group()}”需要至少一个 target 的交火距离{limit}，实际为："
-                            f"{'、'.join(f'{d} 米' for d in meters) or '没有距离数据'}。请改用 {{瞬间.distance}} 直接写距离。")
-                    continue
-                if require in DISTANCE_PREDICATES:
-                    distances = _teammate_distances(moments, records)
-                    far, near = cfg["checker"]["teammate_far_distance"], cfg["checker"]["teammate_near_distance"]
-                    if not any(d >= far if require == "teammate_far" else d <= near for d in distances):
-                        limit = f"不少于 {far:g}" if require == "teammate_far" else f"不超过 {near:g}"
-                        shown = "、".join(f"{d:g}" for d in distances) or "没有距离数据"
-                        add(text_path, "phrase_unsupported",
-                            f"“{match.group()}”需要至少一个 target 与队友的距离{limit} 单位，实际为：{shown}。")
-                    continue
-                if phrase.get("scope", "any") == "all":
+                        meters = [round(m.context.distance) for m in scoped_moments if m.context.distance is not None]
+                        close, far_m = cfg["checker"]["close_range_m"], cfg["checker"]["long_range_m"]
+                        if meters and not any(d <= close if require == "close_range" else d >= far_m for d in meters):
+                            limit = f"不超过 {close:g} 米" if require == "close_range" else f"不少于 {far_m:g} 米"
+                            add(text_path, "phrase_unsupported",
+                                f"“{match.group()}”核对 {labels}：交火距离需要{limit}，实际为："
+                                f"{'、'.join(f'{d} 米' for d in meters)}。请改用 {{瞬间.distance}} 直接写距离。")
+                            reported_sentences.add(span)
+                        continue
+                    if require in DISTANCE_PREDICATES:
+                        distances = _teammate_distances(scoped_moments, scoped_records)
+                        far, near = cfg["checker"]["teammate_far_distance"], cfg["checker"]["teammate_near_distance"]
+                        if not any(d >= far if require == "teammate_far" else d <= near for d in distances):
+                            limit = f"不少于 {far:g}" if require == "teammate_far" else f"不超过 {near:g}"
+                            shown = "、".join(f"{d:g}" for d in distances) or "没有距离数据"
+                            add(text_path, "phrase_unsupported",
+                                f"“{match.group()}”核对 {labels}：需要与队友的距离{limit} 单位，实际为：{shown}。")
+                            reported_sentences.add(span)
+                        continue
+                    if phrase.get("scope", "any") == "all":
                     # 只核对本条 targets 中的瞬间；只有漏补枪记录时（说的是队友阵亡）不适用
-                    failing = [m.id for m in moments if not PREDICATES[require](m)]
-                    if failing:
-                        detail = ("实际类型：" + "、".join(f"{m.id}={m.kind}" for m in moments)
-                                  if require in ("death", "kill") else
-                                  _describe([m for m in moments if m.id in failing], []))
-                        add(text_path, "phrase_unsupported",
-                            f"“{match.group()}”要求所有 target 都满足 {require}，"
-                            f"但 {'、'.join(failing)} 不满足；请分开描述每个交火。{detail}")
-                    continue
-                supported = (any(PREDICATES[require](m) for m in predicate_moments)
-                             or (require in RECORD_PREDICATES
-                                 and any(RECORD_PREDICATES[require](r) for r in records)))
-                if not supported:
-                    actual = _describe(predicate_moments, records)
-                    message = ("round_time_s 是已经过去的秒数，请写成\"回合第 N 秒\"。"
-                               if require == "never" else
-                               f'“{match.group()}”需要至少一个 target 满足 {require}，实际均不满足。{actual}')
-                    add(text_path, "phrase_unsupported", message)
+                        if require in ("seen_to_shot_major", "shot_to_hit_major"):
+                            field = ("seen_to_first_shot_s" if require == "seen_to_shot_major"
+                                     else "first_shot_to_damage_s")
+                            failing = [m.id for m in moments if _segment_ratio(m, field) < cfg["checker"]["segment_major_ratio"]]
+                            if failing:
+                                detail = "；".join(_segment_detail(m) for m in moments)
+                                add(text_path, "phrase_unsupported",
+                                    f"“{match.group()}”要求所有 target 都满足 {require}，但 {'、'.join(failing)} 不满足；"
+                                    f"{detail}。请改用 {{瞬间.seen_to_shot}}、{{瞬间.shot_to_hit}} 分别写出各次交火。")
+                                reported_sentences.add(span)
+                        else:
+                            failing = [m.id for m in moments if not PREDICATES[require](m)]
+                            if failing:
+                                detail = ("实际类型：" + "、".join(f"{m.id}={m.kind}" for m in moments)
+                                          if require in ("death", "kill") else
+                                          _describe([m for m in moments if m.id in failing], []))
+                                add(text_path, "phrase_unsupported",
+                                    f"“{match.group()}”要求所有 target 都满足 {require}，"
+                                    f"但 {'、'.join(failing)} 不满足；请分开描述每个交火。{detail}")
+                                reported_sentences.add(span)
+                        continue
+                    selected_predicate_moments = (predicate_moments if "match" in selected
+                                                  else scoped_moments)
+                    supported = (any(PREDICATES[require](m) for m in selected_predicate_moments)
+                                 or (require in RECORD_PREDICATES
+                                     and any(RECORD_PREDICATES[require](r) for r in scoped_records)))
+                    if not supported:
+                        actual = _describe(selected_predicate_moments, scoped_records)
+                        message = ("round_time_s 是已经过去的秒数，请写成\"回合第 N 秒\"。"
+                                   if require == "never" else
+                                   f'“{match.group()}”核对 {labels}：需要至少一个 target 满足 {require}，实际均不满足。{actual}')
+                        add(text_path, "phrase_unsupported", message)
+                        reported_sentences.add(span)
 
     if len(other_paths) > cfg["checker"]["max_other"]:
         add("findings/patterns/highlights", "too_many_other",

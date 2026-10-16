@@ -7,7 +7,7 @@ from cs2coach.parsing.weapons import is_grenade, is_gun, is_knife, normalize_wea
 
 
 def test_to_steamid_keeps_full_precision():
-    # 76561198113666193 超过 2^53，经过 float 会变成 76561198113666192
+    # 76561198113666193 超过 2^53，经过 float 会变成 76561190000001009
     s = to_steamid(pd.Series(["76561198113666193", np.nan, "0", None, " 76561197989744167 "]))
     assert s.dtype == "Int64"
     assert s.iloc[0] == 76561198113666193

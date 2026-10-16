@@ -145,14 +145,14 @@
   - `tests/test_ai.py` 改用结构化提交的假客户端测试，保留服务适配、缓存、thinking/reasoning、工具错误和停止原因验证，补充所有任务要求的修改/删除路径、全局 other 超限、重复提交、格式边界与最大轮数。`tests/test_render.py` 覆盖完整排版、事实卡、依据、整场数据、跳转去重、删除数量、提示词口径及 CLI 双输出。
 - 测试结果：`.venv/Scripts/python.exe -m pytest -q`：**482 passed, 3 skipped**。诊断和排版专项共 43 项通过；`git diff --check` 通过。未新增依赖。
 - 真实 demo 验证：
-  - 使用指定 5E Mirage `g173-n-20261014223216271995270_de_mirage.dem`，玩家 `76561199711881069`。只解析 MatchData，复用已有的 28 回合、37 个瞬间的 MatchMoments 和当前职业基准，提交文本直接取自 `tests/fixtures/mirage_submission_valid.json`。
+  - 使用指定 5E Mirage `g173-n-20261014223216271995270_de_mirage.dem`，玩家 `76561190000001002`。只解析 MatchData，复用已有的 28 回合、37 个瞬间的 MatchMoments 和当前职业基准，提交文本直接取自 `tests/fixtures/mirage_submission_valid.json`。
   - 注入 FakeAnthropic 假客户端，模拟三次提交，同一固定样例经过两轮修改机会后，删除其中已在 008 降为背景/停用的 weapon_not_ready。最终保留 **2 条 finding、1 条 pattern、1 条 highlight**，repairs=2，dropped=1；最后一份对象再次通过格式和内容校验。
   - 删除记录原路径为 `findings[2]`，问题为 weapon_not_ready，原目标 R9-death。原因包含当前 schema 不允许该编号、context_only 和 disabled_problem；这是 008 后预期的审核结果，未修改历史 fixture 或检查规则。
   - 报告包含程序比分 **12:16**、模型标记 `fake-claude-no-api`、出枪慢 1.81 倍和准星没提前放好 1.54 倍的突出表、真实事实卡/阈值和游戏跳转命令。
   - 输出文件：
-    - `data/output/g173-n-20261014223216271995270_de_mirage_76561199711881069_structured_fake_report.md`
-    - `data/output/g173-n-20261014223216271995270_de_mirage_76561199711881069_structured_fake_submission.json`
-    - `data/output/g173-n-20261014223216271995270_de_mirage_76561199711881069_structured_fake_digest.md`
+    - `data/output/g173-n-20261014223216271995270_de_mirage_76561190000001002_structured_fake_report.md`
+    - `data/output/g173-n-20261014223216271995270_de_mirage_76561190000001002_structured_fake_submission.json`
+    - `data/output/g173-n-20261014223216271995270_de_mirage_76561190000001002_structured_fake_digest.md`
   - **没有运行 --ai，没有调用真实大模型 API，没有读取真实 .env**；CLI 输出测试将凭据加载替换为空操作，demo 原文件只读。
 - 遗留问题 / 需要确认的地方：
   - 用户已确认：每次回复只调用一次 submit_report，收到失败结果后允许重新提交；max_repairs=2 表示两次修改机会，第三次仍有违规才删条。始终无法形成可检查对象时抛错；有历史可检查对象时使用最后一份进行删除/替换。

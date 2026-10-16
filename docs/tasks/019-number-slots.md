@@ -117,11 +117,11 @@ AI 写的总览、分析、亮点中不再出现任何数字，需要数字的�
     - "其中两次随后阵亡"报 `chinese_number`，"一次……另一次……"不报；
   - 总览中使用瞬间对象时报错；
   - 排版后报告中没有 `{`；无法解析的占位符按规则删除；
-  - 2026-10-16 真实错误的回归：用占位符写法改写 flash 汇总、本地 M7、卢文笙报告中被标出的句子，渲染出来是正确的数值。具体句子见各报告 `report.md` 中的"⚠️ 核对"。
+  - 2026-10-16 真实错误的回归：用占位符写法改写 flash 汇总、本地 M7、玩家02报告中被标出的句子，渲染出来是正确的数值。具体句子见各报告 `report.md` 中的"⚠️ 核对"。
 - [ ] 全部测试通过：`.venv/Scripts/python.exe -m pytest -q`
 - [ ] **真实本地运行**（Ollama 免费，可以调用；**不要调用 DeepSeek 或 Claude**）：
   ```
-  python -m cs2coach analyze data/demos/perfectworld_demo/9215177492731139980_0.zip --player 76561199703310441 --ai --provider local --out <临时目录>
+  python -m cs2coach analyze data/demos/perfectworld_demo/9215177492731139980_0.zip --player 76561190000001003 --ai --provider local --out <临时目录>
   ```
   完成报告中写明：
   - 各轮的违规代码分布、修正次数、删除的条目；

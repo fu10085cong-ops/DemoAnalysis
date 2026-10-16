@@ -19,7 +19,7 @@ Claude 已在本机实测（2026-10-16，RTX 4070 Ti Super 16 GB，Ollama 0.34.0
 - **Ollama 的 OpenAI 兼容接口**：`http://localhost:11434/v1`，`api_key` 随便填。用 `openai` SDK 调用 `chat.completions.create`，工具调用正常：`finish_reason == "tool_calls"`，参数是合法的 JSON。
 - **思考内容**放在 message 的 `reasoning` 字段（`model_extra["reasoning"]`），**不是** DeepSeek 的 `reasoning_content`。
 - **Ollama 默认只有 4096 token 的上下文，超出部分会被静默截断，不报错。** 已经新建了模型 `qwen3-14b-40k`（`FROM qwen3:14b`，`num_ctx 40960`）。原生接口 `POST http://localhost:11434/api/show`（body：`{"model": "..."}`）返回的 `parameters` 文本里有 `num_ctx 40960`。
-- **实测 token 数**（Qwen3 分词）：汇总摘要约 6,300（妮妮孩孩major冠军 21 场）；单场摘要约 15,000（完美 Dust2，30 回合、56 个瞬间）；提示词约 2,000；`submit_report` 的工具定义约 1,500。中文按字符估算，约 0.76 token / 字。
+- **实测 token 数**（Qwen3 分词）：汇总摘要约 6,300（玩家01 21 场）；单场摘要约 15,000（完美 Dust2，30 回合、56 个瞬间）；提示词约 2,000；`submit_report` 的工具定义约 1,500。中文按字符估算，约 0.76 token / 字。
 - **速度**：输入约 2,000 token / 秒，生成约 60 token / 秒。
 
 ## 要做的事
@@ -78,7 +78,7 @@ Claude 已在本机实测（2026-10-16，RTX 4070 Ti Super 16 GB，Ollama 0.34.0
 - [ ] 全部测试通过：`.venv/Scripts/python.exe -m pytest -q`
 - [ ] **真实本地运行**（本地模型免费，**允许真实调用 Ollama**；**不要调用 DeepSeek 或 Claude**）：
   ```
-  python -m cs2coach summary --player 76561199703310441 --ai --provider local --out <临时目录>
+  python -m cs2coach summary --player 76561190000001003 --ai --provider local --out <临时目录>
   ```
   完成报告中写明：
   - 总耗时、每轮的 `prompt_tokens`；
@@ -98,11 +98,11 @@ Claude 已在本机实测（2026-10-16，RTX 4070 Ti Super 16 GB，Ollama 0.34.0
 
 - 改动的文件及原因：`config/default.toml` 新增 `[ai.local]` 和 DeepSeek 的 `reasoning_field`；`ai/providers.py`、`ai/openai_compat.py` 接入本地服务、按配置发送 DeepSeek 专属参数、读取对应思考字段，并在 `/api/show` 预检及每轮核对上下文；`ai/diagnose.py`、`summary/diagnose.py` 共用查询次数限制和逐轮 token 记录；`cli.py` 为单场、多场增加 `--provider`，本地调用不读取 `.env`，额外打印耗时和每轮 token；`README.md`、`docs/features.md` 写明用法及上下文规则；`tests/test_local_provider.py` 用假 HTTP/假模型覆盖上述保护。
 - 测试结果：`.venv/Scripts/python.exe -m pytest -q`：546 passed，3 skipped。原有 DeepSeek 测试未修改并通过；`git diff --check` 无空白错误。本机 Ollama 的实际回复在 `model_extra["reasoning"]` 中带有思考内容；保留回传该字段，真实三轮对话正常完成。
-- 真实 demo 验证：运行 `summary --player 76561199703310441 --ai --provider local --out C:\Users\David\AppData\Local\Temp\cs2coach-016-validation`，21 场、在场 438 回合，成功生成 `妮妮孩孩major冠军_76561199703310441\汇总\report.md` 与 `submission.json`。AI 阶段总耗时 **108.9 秒**，三轮 `prompt_tokens` 为 **9902、16578、19578**；调用工具 3 次，修正 2 次，最后删除 1 条 `patterns[0]`。`violations_history` 各轮分别为 13、5、3 项：首轮有 target 数量/格式、无命中及数字错误；次轮仍有无命中和数字错误；末轮仅剩该 pattern 的 3 项数字错误，删除后报告生成。完整日志在 `C:\Users\David\AppData\Local\Temp\cs2coach-016-run.log`。
+- 真实 demo 验证：运行 `summary --player 76561190000001003 --ai --provider local --out C:\Users\David\AppData\Local\Temp\cs2coach-016-validation`，21 场、在场 438 回合，成功生成 `玩家01_76561190000001003\汇总\report.md` 与 `submission.json`。AI 阶段总耗时 **108.9 秒**，三轮 `prompt_tokens` 为 **9902、16578、19578**；调用工具 3 次，修正 2 次，最后删除 1 条 `patterns[0]`。`violations_history` 各轮分别为 13、5、3 项：首轮有 target 数量/格式、无命中及数字错误；次轮仍有无命中和数字错误；末轮仅剩该 pattern 的 3 项数字错误，删除后报告生成。完整日志在 `C:\Users\David\AppData\Local\Temp\cs2coach-016-run.log`。
 
   总览原文：
 
-  > 妮妮孩孩major冠军在21场比赛中表现总体稳健，取得18胜2负1平的战绩，击杀455次、死亡273次、关键助攻69次。但存在两个突出短板：出枪慢（TTD中位数469ms，高于职业375ms）和准星预判偏差（Crosshair Placement中位数4.26°，高于职业3.83°）。问题集中在de_dust2（68%）和de_inferno（38%），且在21场中19场出现出枪慢问题。
+  > 玩家01在21场比赛中表现总体稳健，取得18胜2负1平的战绩，击杀455次、死亡273次、关键助攻69次。但存在两个突出短板：出枪慢（TTD中位数469ms，高于职业375ms）和准星预判偏差（Crosshair Placement中位数4.26°，高于职业3.83°）。问题集中在de_dust2（68%）和de_inferno（38%），且在21场中19场出现出枪慢问题。
 
   第一条 finding 原文：
 

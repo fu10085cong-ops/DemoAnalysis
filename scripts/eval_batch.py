@@ -1,7 +1,7 @@
 """评测集：用固定的一批比赛重新生成报告，汇总违规、用量和耗时，供人工核对错误率（任务 021）。
 
 用法：python scripts/eval_batch.py [--set data/eval/eval_set.toml] [--provider ...] [--model ...]
-                                   [--label 说明] [--only 卢文笙,ZywOo] [--jobs 5] [--yes]
+                                   [--label 说明] [--only 玩家02,ZywOo] [--jobs 5] [--yes]
 
 每个 case 在独立进程里运行，输出写到该 case 目录的 run.log；API 模型默认 5 个同时跑，本地模型固定 1 个。
 
@@ -160,7 +160,7 @@ def run_batch(cases: list[dict[str, Any]], out_root: Path, provider: str | None,
 
 
 def select_cases(cases: list[dict[str, Any]], only: str | None) -> list[dict[str, Any]]:
-    """--only 用逗号分隔的关键词筛选 case 名，例如 --only 卢文笙,ZywOo。"""
+    """--only 用逗号分隔的关键词筛选 case 名，例如 --only 玩家02,ZywOo。"""
     if not only:
         return cases
     keys = [k.strip() for k in only.split(",") if k.strip()]

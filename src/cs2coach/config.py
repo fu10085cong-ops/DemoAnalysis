@@ -66,12 +66,16 @@ def _validate_training(cfg: dict[str, Any]) -> None:
 
 def _validate_checker(cfg: dict[str, Any]) -> None:
     """敏感说法允许配置扩展，但谓词名称和正则必须能被检查器执行。"""
-    from cs2coach.tools.checker import DISTANCE_PREDICATES, PHRASE_SCOPES, PREDICATES
+    from cs2coach.tools.checker import (DISTANCE_PREDICATES, PHRASE_SCOPES,
+                                        PREDICATES, SEGMENT_PREDICATES)
     if type(cfg.get("finding_candidates")) is not int or cfg["finding_candidates"] < 1:
         raise ConfigError("配置项 checker.finding_candidates 应为正整数")
     for key in ("teammate_far_distance", "teammate_near_distance", "close_range_m", "long_range_m"):
         if type(cfg.get(key)) not in (int, float) or cfg[key] <= 0:
             raise ConfigError(f"配置项 checker.{key} 应为正数")
+    if (type(cfg.get("segment_major_ratio")) not in (int, float)
+            or not 0 < cfg["segment_major_ratio"] <= 1):
+        raise ConfigError("配置项 checker.segment_major_ratio 应在 (0, 1] 内")
     aliases = cfg["map_aliases"]
     if (not isinstance(aliases, dict) or any(not isinstance(names, list) or not names
             or any(not isinstance(name, str) or not name for name in names)
@@ -90,12 +94,14 @@ def _validate_checker(cfg: dict[str, Any]) -> None:
                 or not set(phrase) <= {"pattern", "require", "scope"}):
             raise ConfigError(f"{name} 必须包含 pattern、require，可选 scope")
         if (not isinstance(phrase["require"], str)
-                or phrase["require"] not in PREDICATES.keys() | DISTANCE_PREDICATES):
+                or phrase["require"] not in PREDICATES.keys() | DISTANCE_PREDICATES | SEGMENT_PREDICATES):
             raise ConfigError(f"{name}.require 是未知谓词：{phrase['require']!r}")
         if phrase.get("scope", "any") not in PHRASE_SCOPES:
             raise ConfigError(f"{name}.scope 应为 any 或 all")
         if phrase.get("scope") == "all" and phrase["require"] in DISTANCE_PREDICATES:
             raise ConfigError(f"{name}.scope 不能用于距离谓词")
+        if phrase["require"] in SEGMENT_PREDICATES and phrase.get("scope", "any") != "all":
+            raise ConfigError(f"{name}.scope 分段主次只能用于 all")
         if not isinstance(phrase["pattern"], str) or not phrase["pattern"]:
             raise ConfigError(f"{name}.pattern 应为非空正则字符串")
         try:

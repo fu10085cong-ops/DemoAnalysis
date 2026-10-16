@@ -179,7 +179,7 @@ def test_regression_2026_10_16_sentences_render_true_values():
     assert (counts["opening_kills"], counts["saw_first_kills"]) == (2, 1)  # 两个计数口径不同，不会混用
     # 本地 M7：Five-SeveN 的交火配上 AK 的 9.7° → threshold 按命中取对应武器阈值
     assert render("{R5-kill2.threshold}", problem="poor_crosshair_placement") == "11.7°"
-    # flash 卢文笙："其中两次随后阵亡"→ 只能写计数占位符或不写数量
+    # flash 玩家02："其中两次随后阵亡"→ 只能写计数占位符或不写数量
     assert "chinese_number" in _check("其中两次随后阵亡。")
     # flash 汇总："整段九发只中两发"（9 发其实是后段）→ shots/hits 取整段
     assert render("整段 {R5-kill2.shots}，命中 {R5-kill2.hits}") == "整段 3，命中 2"

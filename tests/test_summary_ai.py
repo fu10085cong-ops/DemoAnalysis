@@ -1,6 +1,7 @@
 """多场 AI 摘要、跨场检查、共用诊断循环与排版；不访问真实模型。"""
 
 import json
+import hashlib
 
 import pytest
 
@@ -10,6 +11,8 @@ from cs2coach.features.models import MissedTrade
 from cs2coach.features.problems import ProblemHit, ProblemReport
 from cs2coach.summary.aggregate import aggregate_matches
 from cs2coach.summary.diagnose import diagnose_summary
+from cs2coach.summary.diagnose import SummaryDiagnosis
+from cs2coach.summary.render_report import render_summary_diagnosis
 from cs2coach.summary.digest import build_summary_digest, representative_hits, summary_numbers
 from cs2coach.summary.discover import DemoRef
 from cs2coach.summary.queries import SUMMARY_TOOLS, run_summary_tool
@@ -37,6 +40,16 @@ def sample():
                       map_name="de_test", player_name="alice")
         games.append((ref, mm, report, (6, 4)))
     return aggregate_matches(A, games, baseline, cfg), baseline, cfg
+
+
+def test_summary_ai_fact_card_snapshot():
+    """抽取共用事实卡前的完整 AI 报告散列，防止排版变动。"""
+    summary, baseline, cfg = sample()
+    d = SummaryDiagnosis(submission=parse_submission(submission()), digest="",
+                         provider="fake", model="test")
+    report = render_summary_diagnosis(d, summary, baseline, cfg)
+    assert hashlib.sha256(report.encode("utf-8")).hexdigest() == (
+        "69d6120546e13ef308d60b9b392a4d64c71ee05cf762683b091d80dd6e3990bf")
 
 
 def submission(target="M1:R1-death", analysis="这次交火的准备值得复盘。", overview="这些比赛合计值得复盘。"):

@@ -96,6 +96,7 @@ def _summary(args: argparse.Namespace) -> int:
     from cs2coach.summary.aggregate import build_summary
     from cs2coach.summary.discover import find_player_demos, inspect_player_demos
     from cs2coach.summary.render import render_summary_problems
+    from cs2coach.summary.basic import build_summary_l0, render_summary_basic_report
 
     if not args.player.isdigit():
         print(f"错误: --player 应为 SteamID64（17 位数字），收到 {args.player!r}", file=sys.stderr)
@@ -126,11 +127,14 @@ def _summary(args: argparse.Namespace) -> int:
     result = build_summary(steamid, refs, cfg, baseline)
     folder = _output_folder(args.out, Path("汇总.dem"), result.primary_name, steamid)
     folder.mkdir(parents=True, exist_ok=True)
-    _archive_reports(folder, ("problems.md", "summary.json"))
+    _archive_reports(folder, ("problems.md", "summary.json", "basic_report.md"))
     problems = folder / "problems.md"
     summary_file = folder / "summary.json"
     problems.write_text(render_summary_problems(result), encoding="utf-8")
     summary_file.write_text(result.model_dump_json(indent=2) + "\n", encoding="utf-8")
+    basic = folder / "basic_report.md"
+    basic.write_text(render_summary_basic_report(result, build_summary_l0(result, cfg), baseline), encoding="utf-8")
+    print(f"已写入 {basic}")
     print(f"汇总完成：{len(result.matches)} 场，在场 {result.rounds_played_total} 回合，"
           f"跳过 {len(result.skipped)} 场")
     if args.ai:

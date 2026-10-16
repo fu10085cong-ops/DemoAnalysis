@@ -1,6 +1,6 @@
 # 024 仓库内真实玩家信息匿名化
 
-状态：待做
+状态：完成
 
 ## 目标
 
@@ -62,9 +62,35 @@
 
 ## 完成报告（GPT 填写）
 
-- 改动的文件及原因：
-- 测试结果：
-- 真实 demo 验证（如有）：
-- 遗留问题 / 需要确认的地方：
+- 改动的文件及原因：在 `tests/fixtures/`、测试代码、`scripts/eval_batch.py` 和 `docs/` 中统一替换 9 个真实 SteamID、13 个真实玩家名，涉及 30 个原有文件；职业选手保持原值。`docs/eval_log.md` 的“怎么做”增加匿名化说明。新增 `tests/test_privacy.py` 和 `scripts/privacy_scan.py` 扫描任务指定范围；依赖具体身份值的测试断言同步更新。未改 `data/`、git 历史或代码逻辑。
+- 测试结果：`.venv/bin/python -m pytest -q`：644 passed，3 skipped；017 回归 `tests/test_checker_017.py`：7 passed，仍覆盖 `map_mismatch`、`raw_number`、`unknown_drill` 三类违规。曾临时把历史真实 SteamID 写回一个 fixture，单跑 `tests/test_privacy.py` 退出码 1，随后恢复 fixture；正常测试通过。按本地 `data/eval/eval_set.toml` 读取非职业 case 的 `player` 和 case 名最后一段，在 `tests/ docs/ config/ scripts/ src/ README.md AGENTS.md CLAUDE.md` 的文本文件里全文搜索：0 条。搜索命令为临时 Python 脚本：`tomllib.loads(Path('data/eval/eval_set.toml').read_text(encoding='utf-8'))` 取值，逐个 `Path.read_text(encoding='utf-8')` 检查；映射未写入仓库。
+- 真实 demo 验证：无需重新解析；匿名化后的 fixture 与 017 回归通过。
+- 遗留问题 / 需要确认的地方：git 历史仍有原始信息，公开前由产品负责人决定重写历史或建立仅含当前快照的新仓库。
+
+- 审查意见逐条回应：用本地两类业余比赛的 23 场 demo 完整名单补查自由文本；共收集 157 个非职业玩家名、148 个 SteamID。额外发现 8 个名字，在 8 个原有文件里替换 28 处（原扫描命中 21 行），此前的 5 个虚构名编号保持不变，合计匿名化 13 个名字。新增 `scripts/privacy_scan.py`，从 demo 读取名单，仅在终端列出命中文件与行号，不写映射或名单文件。最后运行 `.venv/bin/python scripts/privacy_scan.py`：`已扫描 23 场 demo，收集 157 个非职业玩家名、148 个 SteamID。身份信息命中：0 处。`
 
 ## 审查意见（Claude 填写）
+
+**需修改（2026-10-16）。** steamid 已经全部替换，`test_privacy.py` 能拦住真实 steamid，017 回归仍然通过。但名字没有替换干净。
+
+1. **自由文本里的人名没有替换。** 完成报告说只替换了 5 个名字，但 fixture 和文档里出现的远不止这 5 位玩家：
+   - `tests/fixtures/mirage_checker_data.json` 的摘要文本（"击杀 …""对手 …"）里还有 2 个真实名字；
+   - `docs/tasks/` 的 013、015、018 号任务单的举例里还有 3 个，例如事实卡原文"对手 … 在 …"、误判清单。
+
+   **原因**：名字清单只取了 fixture 中的名字字段和评测清单的 case 名，没有包括比赛里的全部玩家，也就是队友和对手。
+2. **请这样收集名字清单**：
+   - 用解析层读出 `data/demos/5e_demo`、`data/demos/perfectworld_demo` 下全部 demo 的完整玩家名单，包括名字和 steamid，排除 `pro_sample.json` 里的职业选手；
+   - 第 1 步的扫描范围里，这些名字出现的地方全部替换。还是同一套"玩家NN"编号，已经替换过的保持不变。
+   - 解析全部 demo 大约要十几分钟。完成报告里写明扫描了多少场、收集到多少个名字、替换了多少处。
+3. **新增 `scripts/privacy_scan.py`**：
+   - 用第 2 步的方法从 `data/demos` 收集非职业玩家的名字和 steamid，扫描第 1 步的范围，在终端列出命中的文件和行号。
+   - 公开仓库前，以及以后新增 fixture 时都可以再跑一遍。它读的是本地 demo，所以不放进 pytest。
+   - 输出只在本地终端显示，名字清单不写入任何文件。
+   - 完成报告里贴出最后一次运行的结果：0 处命中。
+
+**复审通过（2026-10-17）。**
+- 名字清单改为取自 23 场 demo 的完整玩家名单，补换了自由文本里的 8 个名字；
+- Claude 自己运行 `scripts/privacy_scan.py`，结果是 0 处命中；用上次发现的那几个名字单独搜索，也是 0 条；
+- `test_privacy.py` 用来防止真实 steamid 被重新写回仓库。
+
+**仍待产品负责人决定**：git 历史里还有真实信息。公开前要么重写历史，要么新建一个只含当前快照的仓库。

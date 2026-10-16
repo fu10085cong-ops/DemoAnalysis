@@ -97,7 +97,7 @@ def problem_frequency(report: ProblemReport, mm: MatchMoments, baseline: dict | 
   - `CONTEXT_ONLY` 包含新增的两项。
 - [x] 全部测试通过：`.venv/Scripts/python.exe -m pytest -q`
 - [x] 重新生成 `pro_sample.json`，在完成报告中贴出 `problem_rates`。
-- [x] 真实 demo（**不加 `--ai`**）：5E Mirage，玩家 `76561199711881069`。完成报告中贴出 `_problems.md` 的频率对比表。
+- [x] 真实 demo（**不加 `--ai`**）：5E Mirage，玩家 `76561190000001002`。完成报告中贴出 `_problems.md` 的频率对比表。
 
 ## 范围外（不要做）
 
@@ -245,7 +245,7 @@ def problem_frequency(report: ProblemReport, mm: MatchMoments, baseline: dict | 
   ```
 
   - 与目录实测表对照：压枪差 0.20、出枪慢 1.38、人数优势时冒进 0.08、身上有道具却直接拉出 0.15、准星没提前放好 1.62、开枪时没停稳 0.88、漏补枪 0.81、主动拉出撞上架点 0.56、拉栓期间交火 0.34、被对手闪中后被击杀 0.41；**十项每十回合频率均与目录的两位小数值相同**，人次占比按目录整数显示也吻合。未改目录数字。
-  - 运行 `python -m cs2coach analyze .../g173-n-20261014223216271995270_de_mirage.dem --player 76561199711881069`，不加 `--ai`，正常输出 28 回合、37 个瞬间及事实卡和问题报告。报告路径：`data/output/g173-n-20261014223216271995270_de_mirage_76561199711881069_problems.md`，频率表原文如下：
+  - 运行 `python -m cs2coach analyze .../g173-n-20261014223216271995270_de_mirage.dem --player 76561190000001002`，不加 `--ai`，正常输出 28 回合、37 个瞬间及事实卡和问题报告。报告路径：`data/output/g173-n-20261014223216271995270_de_mirage_76561190000001002_problems.md`，频率表原文如下：
 
   | 问题 | 本场次数 | 每 10 回合（本场 / 职业） | 倍数 |
   |---|---:|---:|---:|

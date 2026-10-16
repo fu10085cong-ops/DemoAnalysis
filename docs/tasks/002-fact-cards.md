@@ -95,7 +95,7 @@
 - [x] 全部测试通过：`.venv/Scripts/python.exe -m pytest -q`
 - [x] 真实 demo 验证：
   ```
-  .venv/Scripts/python.exe -m cs2coach analyze data/demos/5e_demo/.extracted/g173-n-20261014223216271995270_de_mirage/g173-n-20261014223216271995270_de_mirage.dem --player 76561199711881069
+  .venv/Scripts/python.exe -m cs2coach analyze data/demos/5e_demo/.extracted/g173-n-20261014223216271995270_de_mirage/g173-n-20261014223216271995270_de_mirage.dem --player 76561190000001002
   ```
   生成 `_facts.md`。完成报告中贴出其中 3 张卡（至少一次击杀、一次死亡），检查没有 `None`、`nan`、空括号、重复的句子。**不要加 `--ai`。**
 
@@ -116,8 +116,8 @@
   - 新建 `tests/test_facts.py`，新增 19 项测试：死亡/击杀完整句子和顺序、两种助攻、无地图、缺失名字及字段、四类闪光角色和未知投掷者、已恢复致盲、视野和出枪先后、血量/装备/单位、死时闪光去重、道具数量、补枪与漏补，以及 CLI 同时写出 JSON/Markdown。每个瞬间场景检查中立措辞、缺失值和重复句子。
 - 测试结果：`.venv/Scripts/python.exe -m pytest -q`：217 passed，3 skipped（未设置真实 demo 测试环境变量）。
 - 真实 demo 验证：
-  - 按验收命令分析 `g173-n-20261014223216271995270_de_mirage.dem`、玩家 `76561199711881069`，正常退出，未加 `--ai`。
-  - 生成 `data/output/g173-n-20261014223216271995270_de_mirage_76561199711881069_facts.md`：37 张瞬间卡、2 张漏补卡，共 39 张。
+  - 按验收命令分析 `g173-n-20261014223216271995270_de_mirage.dem`、玩家 `76561190000001002`，正常退出，未加 `--ai`。
+  - 生成 `data/output/g173-n-20261014223216271995270_de_mirage_76561190000001002_facts.md`：37 张瞬间卡、2 张漏补卡，共 39 张。
   - 检查整份文件没有 `None`、`nan`、中英文空括号，每张卡内没有重复句子；以下贴出实际生成的三张卡。
 - 遗留问题 / 需要确认的地方：
   - **准星句式与指标定义不一致**：任务单要求“看见对手时，准星与对手的角度差”，而 `crosshair_placement_deg` 的现有计算/文档定义是“从看见到首次命中，准星转过的角度”。已向用户说明，用户明确选择“保留任务单原句，交由 Claude 审查”，因此按原句输出，未更改指标或其定义。请 Claude 审查此处措辞。
@@ -129,7 +129,7 @@
 ```markdown
 ### 〔R1-kill1〕击杀（CT，第 41 秒，2v3）
 
-- 你在 BombsiteA，对手 梁孙超 在 BombsiteA，距离 29 米。
+- 你在 BombsiteA，对手 玩家03 在 BombsiteA，距离 29 米。
 - 你手持 USP-S，对手手持 USP-S；本回合装备价值 850 对 850。
 - 交火前血量：你 100，对手 84。
 - 你用 usp_silencer（爆头）击杀了对手。
@@ -145,7 +145,7 @@
 ```markdown
 ### 〔R9-kill1〕击杀（CT，第 12 秒，5v5）
 
-- 你在 SnipersNest，对手 妮妮孩孩major冠军 在 TopofMid，距离 36 米。
+- 你在 SnipersNest，对手 玩家01 在 TopofMid，距离 36 米。
 - 你手持 AWP，对手手持 AK-47；本回合装备价值 7150 对 5100。
 - 你用 awp 击杀了对手。
 - 你先看见对手，领先 0.06 秒。
@@ -159,7 +159,7 @@
 ```markdown
 ### 〔R11-death〕死亡（CT，第 39 秒，2v2）
 
-- 你在 BombsiteA，对手 洞洞大人别颗秒我 在 PalaceInterior，距离 18 米。
+- 你在 BombsiteA，对手 玩家05 在 PalaceInterior，距离 18 米。
 - 你手持 M4A1-S，对手手持 AWP；本回合装备价值 4600 对 7550。
 - 交火前血量：你 100，对手 29。
 - 对手用 awp 击杀了你。
@@ -185,14 +185,14 @@
 
 - 本轮改动文件：`features/labels.py`、`report/facts.py`、`tools/digest.py`、`tests/test_facts.py`、`tests/test_moments.py`，以及本任务单。指标计算、解析层和 AI 调用流程没有改动；没有新增依赖。
 - 全量测试：`.venv/Scripts/python.exe -m pytest -q` → **266 passed，3 skipped**；相较初次完成新增 49 项参数化测试用例。
-- 真实 demo 验证：重新执行验收中的 Mirage `analyze` 命令，玩家 `76561199711881069`，未加 `--ai`，退出码 0。重新生成同名 `_moments.json` 和 `_facts.md`，原 demo 只读。
+- 真实 demo 验证：重新执行验收中的 Mirage `analyze` 命令，玩家 `76561190000001002`，未加 `--ai`，退出码 0。重新生成同名 `_moments.json` 和 `_facts.md`，原 demo 只读。
 - 输出检查：事实文件仍有 37 张瞬间卡、2 张漏补卡；没有 `None`、`nan`、中英文空括号、卡内重复句子或“你开了 0 枪”句子。两名其他玩家约 93%、94% 的坐标覆盖率警告仍保留，属于已有数据问题；本轮没有新增遗留问题。
 - 以下为本轮重新生成文件中的 R1-kill1 和 R11-death：
 
 ```markdown
 ### 〔R1-kill1〕击杀（CT，第 41 秒，2v3）
 
-- 你在 BombsiteA，对手 梁孙超 在 BombsiteA，距离 29 米。
+- 你在 BombsiteA，对手 玩家03 在 BombsiteA，距离 29 米。
 - 你手持 USP-S，对手手持 USP-S；本回合装备价值 850 对 850。
 - 交火前血量：你 100，对手 84。
 - 你用 USP-S（爆头）击杀了对手。
@@ -208,7 +208,7 @@
 ```markdown
 ### 〔R11-death〕死亡（CT，第 39 秒，2v2）
 
-- 你在 BombsiteA，对手 洞洞大人别颗秒我 在 PalaceInterior，距离 18 米。
+- 你在 BombsiteA，对手 玩家05 在 PalaceInterior，距离 18 米。
 - 你手持 M4A1-S，对手手持 AWP；本回合装备价值 4600 对 7550。
 - 交火前血量：你 100，对手 29。
 - 对手用 AWP 击杀了你。

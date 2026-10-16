@@ -105,7 +105,7 @@
   - 可以在 `tests/helpers/` 中新建一个构造 `Moment` 的辅助函数，用关键字参数覆盖默认值。
 - [x] 全部测试通过：`.venv/Scripts/python.exe -m pytest -q`
 - [x] 真实 demo 验证（**不加 `--ai`**）：
-  1. 5E Mirage（`g173-n-20261014223216271995270_de_mirage.dem`，玩家 `76561199711881069`）：生成 `_problems.md`。完成报告中列出每个问题的命中次数，并贴出 3 条命中（包含 `evidence`）。
+  1. 5E Mirage（`g173-n-20261014223216271995270_de_mirage.dem`，玩家 `76561190000001002`）：生成 `_problems.md`。完成报告中列出每个问题的命中次数，并贴出 3 条命中（包含 `evidence`）。
   2. **基准自检**：任选一场职业 demo（例如 `vitality-vs-mouz-m3-dust2.dem`）中的一名选手，统计 `slow_reaction` 和 `poor_crosshair_placement` 的命中数占可判断交火的比例。职业 demo 本身就是基准的一部分，这个比例理论上应该接近 25%。报告实际数值。
 
 ## 范围外（不要做）
@@ -129,7 +129,7 @@
 - 测试结果：`.venv/Scripts/python.exe -m pytest -q`：**362 passed, 3 skipped**（未设置真实 demo 测试环境变量）。`git diff --check` 通过。
 - 真实 demo 验证：
   - 两场均运行 `python -m cs2coach analyze ... --player ...`，不加 `--ai`；JSON、事实卡、问题报告均成功生成，demo 原文件只读。最终补充缺少数据计数后，使用这些真实解析结果重新生成问题报告，命中数不变。核对统计保存于 `data/output/problem_validation.json`。
-  - 5E Mirage：`g173-n-20261014223216271995270_de_mirage.dem`，玩家 `76561199711881069`，37 个瞬间，共 **24 条命中**。输出 `data/output/g173-n-20261014223216271995270_de_mirage_76561199711881069_problems.md`。
+  - 5E Mirage：`g173-n-20261014223216271995270_de_mirage.dem`，玩家 `76561190000001002`，37 个瞬间，共 **24 条命中**。输出 `data/output/g173-n-20261014223216271995270_de_mirage_76561190000001002_problems.md`。
 
   | 问题编号 | 命中次数 |
   |---|---:|

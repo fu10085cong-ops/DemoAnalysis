@@ -80,11 +80,11 @@ GPT 额度用完，本任务由 Claude 完成（2026-10-16）。
   - `cli.py`：审计文件新增 `run` 字段（模型、修正次数、工具调用、token），汇总表从这里读取；`tests/test_render.py` 同步；
   - 测试：`tests/test_eval_batch.py`。
 - **真实评测集**：`data/eval/eval_set.toml`，共 5 个 case：
-  - 完美 Dust2 妮妮孩孩major冠军；
-  - 5E 卢文笙；
-  - 5E 梁孙超；
+  - 完美 Dust2 玩家01；
+  - 5E 玩家02；
+  - 5E 玩家03；
   - ESL ZywOo；
-  - 妮妮孩孩major冠军的多场汇总。
+  - 玩家01的多场汇总。
 
   另有 1 个 case 的验收清单 `local_one.toml`。都不入库。
 - **测试结果**：`pytest -q`：583 passed, 3 skipped。

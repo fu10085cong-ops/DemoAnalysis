@@ -23,6 +23,28 @@ if TYPE_CHECKING:
     from cs2coach.summary.diagnose import SummaryDiagnosis
 
 
+def summary_target_parts(summary: PlayerSummary, target: str):
+    number, _, local = target.partition(":")
+    match = next(match for match in summary.matches if match.number == number)
+    return match, summary.detail(number), local
+
+
+def summary_target_card(summary: PlayerSummary, target: str) -> list[str]:
+    """按跨场编号渲染事实卡；AI 版和基础版共用。"""
+    match, (mm, _), local = summary_target_parts(summary, target)
+    lines = [f"#### 〔{target}〕{match.number} · {match.match_id} · {match.map_name}", ""]
+    moment = next((m for m in mm.moments if m.id == local), None)
+    if moment is not None:
+        names = {m.opponent: m.opponent_name for m in mm.moments
+                 if m.opponent is not None and m.opponent_name}
+        lines.extend([render_moment_card(moment, names).split("\n\n", 1)[1], ""])
+    else:
+        rows = [row for row in mm.missed_trades if local == f"R{row.round}"]
+        lines.extend(f"- {text}" for row in rows for text in missed_trade_facts(row, {}))
+        lines.append("")
+    return lines
+
+
 def render_summary_diagnosis(d: SummaryDiagnosis, summary: PlayerSummary,
                              baseline: dict | None, cfg: dict | None = None) -> str:
     sub = d.submission
@@ -46,24 +68,12 @@ def render_summary_diagnosis(d: SummaryDiagnosis, summary: PlayerSummary,
         return "其他（AI 判断，无程序依据）" if pid == "other" else PROBLEMS[pid].label
 
     def target_parts(target):
-        number, _, local = target.partition(":")
-        return matches[number], summary.detail(number), local
+        return summary_target_parts(summary, target)
 
     def facts(entry):
         lines.extend(["", "**发生了什么**", ""])
         for target in entry.targets:
-            match, (mm, report), local = target_parts(target)
-            lines.extend([f"#### 〔{target}〕{match.number} · {match.match_id} · {match.map_name}", ""])
-            moment = next((m for m in mm.moments if m.id == local), None)
-            if moment is not None:
-                names = {m.opponent: m.opponent_name for m in mm.moments
-                         if m.opponent is not None and m.opponent_name}
-                card = render_moment_card(moment, names).split("\n\n", 1)[1]
-                lines.extend([card, ""])
-            else:
-                rows = [row for row in mm.missed_trades if local == f"R{row.round}"]
-                lines.extend(f"- {text}" for row in rows for text in missed_trade_facts(row, {}))
-                lines.append("")
+            lines.extend(summary_target_card(summary, target))
         lines.extend(["**程序检测依据**", ""])
         if entry.problem == "other":
             lines.append("AI 判断，无程序依据。")

@@ -111,8 +111,8 @@
   - `tests/test_moments.py` 新增 15 项测试：四种角色、窗口前开始的致盲、事件时已恢复、阈值和边界、重叠致盲选取、未知投掷者、原死亡致盲口径、已投道具的顺序/重复/回合/死亡/bot 过滤，以及摘要输出。现有测试未改写。
 - 测试结果：`.venv/Scripts/python.exe -m pytest -q`：198 passed，3 skipped（未设置真实 demo 测试环境变量）。
 - 真实 demo 验证：
-  - 运行 `.venv/Scripts/python.exe -m cs2coach analyze data/demos/5e_demo/.extracted/g173-n-20261014223216271995270_de_mirage/g173-n-20261014223216271995270_de_mirage.dem --player 76561199711881069`，正常生成 `_moments.json`，未加 `--ai`。
-  - 目标玩家云雾散漫山野：20 次击杀、17 次死亡，共 37 个瞬间。
+  - 运行 `.venv/Scripts/python.exe -m cs2coach analyze data/demos/5e_demo/.extracted/g173-n-20261014223216271995270_de_mirage/g173-n-20261014223216271995270_de_mirage.dem --player 76561190000001002`，正常生成 `_moments.json`，未加 `--ai`。
+  - 目标玩家玩家04：20 次击杀、17 次死亡，共 37 个瞬间。
   - `opponent_blind` 非空 **3** 次：`opponent=1`、`enemy=1`、`self=1`；`player_blind` 非空 **2** 次：`opponent=1`、`self=1`。本场这五条记录无未知投掷者，未知分支由单元测试覆盖。
   - 17 次死亡中有 13 次 `thrown_grenades` 非空，原 demo 未修改。
 - 遗留问题 / 需要确认的地方：该 demo 的两名其他玩家坐标覆盖率分别约 93%、94%，解析层按原逻辑提示警告；未改解析层。原 `death.blinded` 摘要对未知投掷者的措辞、视野与武器就绪等既有问题均保留，按范围外问题处理。没有新增依赖、配置键或 AI 提示词改动。

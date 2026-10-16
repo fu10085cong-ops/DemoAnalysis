@@ -174,7 +174,9 @@ def test_summary_cli_writes_and_archives_files(tmp_path, monkeypatch):
         assert cli.main(["summary", "--player", str(A), "--out", str(tmp_path)]) == 0
     assert (folder / "problems.md").is_file()
     assert (folder / "summary.json").is_file()
-    assert len(list((folder / "历史版本").glob("*.md"))) == 1
+    assert (folder / "basic_report.md").is_file()
+    assert len(list((folder / "历史版本").glob("*.md"))) == 2
+    assert len(list((folder / "历史版本").glob("basic_report_*.md"))) == 1
     assert len(list((folder / "历史版本").glob("*.json"))) == 1
     data = json.loads((folder / "summary.json").read_text(encoding="utf-8"))
     assert data["steamid"] == A and data["matches"][0]["number"] == "M1"

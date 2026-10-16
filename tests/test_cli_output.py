@@ -17,10 +17,10 @@ def test_output_folder_uses_resolved_member_and_sanitizes_player_name(tmp_path):
 
 
 def test_output_folder_reuses_player_folder_by_steamid(tmp_path):
-    # 同一个人在不同平台名字不同（如 5E 的"梁孙超"、完美的"Jayleo"），按 steamid 归到同一个文件夹
-    (tmp_path / f"梁孙超_{A}").mkdir()
-    folder = _output_folder(tmp_path, Path("9215177492731139980_0.dem"), "Jayleo", A)
-    assert folder == tmp_path / f"梁孙超_{A}" / "9215177492731139980_0"
+    # 同一个人在不同平台名字不同（如 5E 的"玩家03"、完美的"玩家07"），按 steamid 归到同一个文件夹
+    (tmp_path / f"玩家03_{A}").mkdir()
+    folder = _output_folder(tmp_path, Path("9215177492731139980_0.dem"), "玩家07", A)
+    assert folder == tmp_path / f"玩家03_{A}" / "9215177492731139980_0"
 
 
 def test_rerun_moves_both_ai_files_and_keeps_program_outputs(tmp_path, monkeypatch, capsys):

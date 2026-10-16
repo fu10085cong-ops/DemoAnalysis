@@ -31,7 +31,7 @@
 
 - `DemoParser(path).parse_player_info()` 很快，实测一场 0.2–0.8 秒，可以用来扫描哪些 demo 里有这个玩家。被截断的 demo 可能返回空表（`docs/fields.md` 陷阱 22），这时用 `roster_names` 的做法，从少量 tick 中取名单。
 - `data/demos` 下有三种存放方式：压缩包（`.zip`、`.rar`，一个包里可能有多场）；解压缓存 `.extracted/`；直接放的 `.dem`。同一场比赛可能同时存在压缩包和解压后的文件。
-- 测试用的真实数据：梁孙超（steamid `76561199736861630`）出现在 8 场 demo 中：5E 5 场，完美 3 场，在完美上叫 Jayleo。
+- 测试用的真实数据：玩家03（steamid `76561190000001004`）出现在 8 场 demo 中：5E 5 场，完美 3 场，在完美上叫 玩家07。
 
 ## 要做的事
 
@@ -108,7 +108,7 @@ python -m cs2coach summary --player <steamid> [<demo> ...] [--demo-member 名字
 - [x] 全部测试通过：`.venv/Scripts/python.exe -m pytest -q`
 - [x] 真实数据：
   ```
-  python -m cs2coach summary --player 76561199736861630 --out <临时目录>
+  python -m cs2coach summary --player 76561190000001004 --out <临时目录>
   ```
   - 应找到 8 场：5E 5 场，完美 3 场；
   - 完成报告中贴出 `problems.md` 的汇总频率表和每场概况表；
@@ -132,7 +132,7 @@ python -m cs2coach summary --player <steamid> [<demo> ...] [--demo-member 名字
   - `summary/render.py` 输出汇总频率、每场概况、六项枪法各场中位数及跳过原因。`cli.py` 增加 `summary` 命令，沿用玩家文件夹和按修改时间归档机制；无 AI 参数，不读取单场输出。`README.md`、`docs/features.md`、`data/output/README.md` 补充用法、统计口径与目录结构；`.gitignore` 只放行此前被忽略的 `data/output/README.md`，让该文档进入审查范围，其他 `data/` 内容继续忽略。
   - `tests/test_summary.py` 覆盖压缩包与缓存去重、读取失败与 tick 名单后备、缺席回合分母、两场聚合与职业预期、失败场次继续、输出目录沿用及重跑归档。
 - 测试结果：`.venv/Scripts/python.exe -m pytest -q`：**526 passed, 3 skipped**；`git diff --check` 通过。未新增依赖，未运行 AI 或真实 API。
-- 真实 demo 验证：运行 `python -m cs2coach summary --player 76561199736861630 --out <临时目录>`，找到并成功处理 8 场（5E 5 场、完美 3 场），跳过 0 场，在场回合合计 169。耗时 **84.08 秒**。输出位于 `C:\Users\David\AppData\Local\Temp\cs2coach-012-e7f1c2043b5746248423a3f12f2f617b\Jayleo_76561199736861630\汇总\`；生成后补排版了枪法中位数段，未重新解析 demo。`problems.md` 的汇总频率表：
+- 真实 demo 验证：运行 `python -m cs2coach summary --player 76561190000001004 --out <临时目录>`，找到并成功处理 8 场（5E 5 场、完美 3 场），跳过 0 场，在场回合合计 169。耗时 **84.08 秒**。输出位于 `C:\Users\David\AppData\Local\Temp\cs2coach-012-e7f1c2043b5746248423a3f12f2f617b\玩家07_76561190000001004\汇总\`；生成后补排版了枪法中位数段，未重新解析 demo。`problems.md` 的汇总频率表：
 
   | 问题 | 总次数 | 职业预期 | 多出的次数 | 偶然概率 | 倍数 | 出现场数 / 高于职业的场数 | 主要地图 |
   |---|---:|---:|---:|---:|---:|---:|---|

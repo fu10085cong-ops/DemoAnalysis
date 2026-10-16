@@ -21,7 +21,7 @@ def test_situation_sentence():
 
 
 def moments():
-    """卢文笙实测：R15 先开枪 0/13；R11 同一 tick 开枪、11 发中 3；R9 闪光助攻 5v5。汇总实测：M10 R2 CT 下包后 1v3。"""
+    """玩家02实测：R15 先开枪 0/13；R11 同一 tick 开枪、11 发中 3；R9 闪光助攻 5v5。汇总实测：M10 R2 CT 下包后 1v3。"""
     r15 = make_moment(id="R15-death", round=15, context={"side": "CT", "alive_own": 5, "alive_enemy": 4},
                       engagement={"first_shot_lead_s": 0.73, "shots_fired": 13, "shots_hit": 0,
                                   "shots": [make_shot(hit=False)]})
@@ -61,7 +61,7 @@ def codes(group, problem, targets, analysis):
 
 
 def test_all_claims_are_checked_per_engagement():
-    # 卢文笙实测原句：R11 是同时开枪且打中 3 发
+    # 玩家02实测原句：R11 是同时开枪且打中 3 发
     bad = codes("findings", "spray_control", ["R11-death", "R15-death"], "你都先开枪却始终拿不到伤害。")
     assert {v.message.split("满足 ")[1].split("，")[0] for v in bad} == {"shot_first", "no_hits"}
     assert all("R11-death" in v.message for v in bad)
@@ -69,7 +69,7 @@ def test_all_claims_are_checked_per_engagement():
 
 
 def test_man_advantage_claims():
-    # 卢文笙实测原句：闪光助攻时是 5v5
+    # 玩家02实测原句：闪光助攻时是 5v5
     assert codes("highlights", "flash_assist", ["R9-assist1"], "帮助队伍在人数劣势下换掉对手。")
     assert codes("highlights", "flash_assist", ["R9-assist1"], "帮助队伍换掉对手。") == []
     assert codes("highlights", "good_trade", ["R2-kill1"], "在人数劣势时完成补枪。") == []  # 1v3

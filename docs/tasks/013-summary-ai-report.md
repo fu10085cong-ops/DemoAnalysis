@@ -118,7 +118,7 @@
   - 诊断循环：合格、修正、删除、替换总览、拆开多套的一层。**单场的现有测试全部不改且通过。**
   - 排版：各节、场次标注、事实卡、跳转命令表。
 - [ ] 全部测试通过：`.venv/Scripts/python.exe -m pytest -q`
-- [ ] 用梁孙超（`76561199736861630`）的真实汇总数据和**手工编写的合格提交**，通过假客户端生成一份汇总报告：
+- [ ] 用玩家03（`76561190000001004`）的真实汇总数据和**手工编写的合格提交**，通过假客户端生成一份汇总报告：
   - 提交保存到 `tests/fixtures/`；
   - 报告输出到临时目录；
   - 完成报告中写明路径，并贴出报告的前 60 行。
@@ -136,12 +136,12 @@
 
 - 改动的文件及原因：`config/default.toml` 增加每类问题的代表命中上限；`summary/digest.py`、`queries.py`、`prompts.py`、`diagnose.py`、`render_report.py` 分别实现汇总摘要、跨场查询、专用提示词、结构化诊断和排版；`summary/render.py` 抽出可复用表格；`tools/submission.py` 增加跨场 target 格式；`tools/checker.py` 用可替换 target 解析器共用检查规则；`ai/diagnose.py` 抽出单场和多场共用诊断循环；`cli.py` 接入 `summary --ai`、归档和用量输出；`tests/test_summary_ai.py` 及 `tests/fixtures/summary_submission.json` 增加假客户端测试和真实数据手写提交。
 - 测试结果：`.venv/Scripts/python.exe -m pytest -q`：534 passed，3 skipped。`git diff --check` 无空白错误。未运行真实模型 API。
-- 真实 demo 验证：梁孙超（`76561199736861630`）的 8 场 demo 重新构建了真实汇总，随后用 `tests/fixtures/summary_submission.json` 的手写提交和假客户端生成报告。检查器 0 违规，0 次修正，0 条删除。报告：`C:\Users\David\AppData\Local\Temp\cs2coach-013-0419318e3c4949e5b2b9e8014d00cb57\report.md`。报告前 60 行：
+- 真实 demo 验证：玩家03（`76561190000001004`）的 8 场 demo 重新构建了真实汇总，随后用 `tests/fixtures/summary_submission.json` 的手写提交和假客户端生成报告。检查器 0 违规，0 次修正，0 条删除。报告：`C:\Users\David\AppData\Local\Temp\cs2coach-013-0419318e3c4949e5b2b9e8014d00cb57\report.md`。报告前 60 行：
 
 ```markdown
-# 多场复盘：Jayleo · 8 场
+# 多场复盘：玩家07 · 8 场
 
-曾用名：Jayleo、梁孙超 · 地图：de_dust2 5 场、de_inferno 2 场、de_mirage 1 场 · 模型 fake / fake-model
+曾用名：玩家07、玩家03 · 地图：de_dust2 5 场、de_inferno 2 场、de_mirage 1 场 · 模型 fake / fake-model
 
 ## 总览
 
@@ -162,7 +162,7 @@
 
 #### 〔M1:R2-kill1〕M1 · 9209547595508347918_0 · de_inferno
 
-- 你在 Balcony，对手 暗海 在 BombsiteA，距离 9 米。
+- 你在 Balcony，对手 玩家08 在 BombsiteA，距离 9 米。
 - 你手持 MAC-10，对手手持 Five-SeveN；本回合装备价值 2950 对 500。
 - 交火前血量：你 100，对手 81。
 - 你用 MAC-10 击杀了对手。
@@ -173,7 +173,7 @@
 
 #### 〔M2:R10-kill1〕M2 · 9210673495171964302_0 · de_dust2
 
-- 你在 ShortStairs，对手 用户8957315 在 ExtendedA，距离 18 米。
+- 你在 ShortStairs，对手 玩家09 在 ExtendedA，距离 18 米。
 - 你手持 AWP，对手手持 Five-SeveN；本回合装备价值 7050 对 1950。
 - 你用 AWP（爆头）击杀了对手。
 - 双方同时看见对方。
@@ -209,5 +209,5 @@
 
 留待以后：
 - 没有测到 `summary --ai` 写文件和归档，以及"第 N 回合必须是被引用目标的回合"。前者在第一次真实运行时验证。
-- 报告标题用的是编号最前那一场的名字（Jayleo），玩家文件夹叫"梁孙超"。以后改成用出现次数最多的名字。
+- 报告标题用的是编号最前那一场的名字（玩家07），玩家文件夹叫"玩家03"。以后改成用出现次数最多的名字。
 

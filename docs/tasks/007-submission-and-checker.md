@@ -164,7 +164,7 @@ require = "not_seen"
   - 每个谓词至少一个满足、一个不满足的测试。
 - [x] 全部测试通过：`.venv/Scripts/python.exe -m pytest -q`
 - [x] 真实数据演练（**不调用 AI**）：
-  1. 用 5E Mirage（玩家 `76561199711881069`）的 `MatchMoments` 和 `ProblemReport`，**手工写两份提交**：
+  1. 用 5E Mirage（玩家 `76561190000001002`）的 `MatchMoments` 和 `ProblemReport`，**手工写两份提交**：
      - 一份全部基于 `_problems.md` 中真实的命中，应该零违规；
      - 一份故意犯错：编错 target、给没有命中的瞬间安问题、写错数字、在没有被闪的瞬间写"吃闪"。
   2. 两份都放在 `tests/fixtures/` 中作为回归测试，在完成报告中贴出第二份的违规列表。
@@ -190,7 +190,7 @@ require = "not_seen"
   - `tests/fixtures/mirage_submission_valid.json`、`mirage_submission_invalid.json` 是手工编写的两份提交；`mirage_checker_data.json` 保存真实数据快照，含从原始 37 个瞬间中选取的 7 个相关瞬间、原回合数与漏补记录、这些数据的 ProblemReport，以及完整摘要。纯函数回归测试无需本地 demo。
 - 测试结果：`.venv/Scripts/python.exe -m pytest -q`：**443 passed, 3 skipped**。专项测试 81 项通过；`git diff --check` 通过。环境中未安装 jsonschema，按任务要求手工检查 schema 结构、合法提交的 enum/数量/长度/编号约束和非法值对应的限制，未新增依赖。
 - 真实 demo 验证：
-  - 仅解析 `g173-n-20261014223216271995270_de_mirage.dem`，玩家 `76561199711881069`；复用 005 生成的真实 MatchMoments，使用新解析的 MatchData 调用 `build_digest` 生成摘要（不传职业基准也可生成完整摘要）。未调用 AI，原 demo 只读。
+  - 仅解析 `g173-n-20261014223216271995270_de_mirage.dem`，玩家 `76561190000001002`；复用 005 生成的真实 MatchMoments，使用新解析的 MatchData 调用 `build_digest` 生成摘要（不传职业基准也可生成完整摘要）。未调用 AI，原 demo 只读。
   - 摘要保存于 `data/output/submission_mirage_digest.md`，与真实数据快照一同用于演练。合法提交使用 slow_reaction、shot_while_moving、weapon_not_ready 的真实命中、两个不同回合的同类规律和真实先发现/先开枪亮点，返回 **0 条违规**。
   - 错误提交返回 **4 条违规**，完整列表如下（与回归测试实际输出一致）：
 
