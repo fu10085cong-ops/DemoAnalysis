@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import re
 import tomllib
 from pathlib import Path
@@ -20,7 +21,25 @@ def load_config(path: Path | None = None) -> dict[str, Any]:
         _merge(cfg, _read(Path(path)))
     _validate_checker(cfg["checker"])
     _validate_training(cfg["training"])
+    _validate_visibility(cfg["visibility"])
     return cfg
+
+
+def _validate_visibility(cfg: dict[str, Any]) -> None:
+    """身体采样点和烟雾胸口高度必须是有限的合法数值。"""
+    def number(value: object) -> bool:
+        return type(value) in (int, float) and math.isfinite(value)
+
+    points = cfg["body_points"]
+    if (not isinstance(points, list) or not points or any(
+            not isinstance(point, list) or len(point) != 3 or
+            not all(number(value) for value in point) or point[0] < 0 or point[1] < 0
+            for point in points)):
+        raise ConfigError("配置项 visibility.body_points 应为非空的 [站立高度, 下蹲高度, 横向偏移] 数组，高度不得为负")
+    chest = cfg["chest_height"]
+    if (not isinstance(chest, list) or len(chest) != 2 or
+            not all(number(value) and value >= 0 for value in chest)):
+        raise ConfigError("配置项 visibility.chest_height 应为两个非负高度")
 
 
 def _validate_training(cfg: dict[str, Any]) -> None:

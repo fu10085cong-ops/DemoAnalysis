@@ -92,9 +92,12 @@ class Engagement(BaseModel):
     contact_type: Literal["peek", "held", "both_moving", "both_still", "unclear"] | None = None
     # Leetify 同名指标：从看见对手到第一次造成伤害，准星转过的角度（度）
     crosshair_placement_deg: float | None = None
-    # 视野指标为空的原因：no_map_data / not_seen（事件发生时看不到对手）/ seen_before_window（回溯 3 秒内一直可见）/
-    # seen_since_previous_kill（本回合上一次击杀时就已经能看见这名对手）/ seen_since_round_start / smoke / blind
+    # 视野指标为空的原因：no_map_data / first_hit_unseen（首次打中时没看见，之后看见）/
+    # lost_sight（之前看见、锚点时视线中断）/ not_seen（时间窗口内没看见）/
+    # seen_before_window（回溯 3 秒内一直可见）/ seen_since_previous_kill / seen_since_round_start / smoke / blind
     visibility_note: str | None = None
+    last_seen_before_s: float | None = None  # lost_sight：最后看见到事件发生的秒数
+    opponent_off_screen: bool | None = None  # not_seen：锚点附近有几何视线，但对手在屏幕外
     player_blind: BlindInfo | None = None
     opponent_blind: BlindInfo | None = None
 

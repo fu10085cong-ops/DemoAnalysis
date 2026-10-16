@@ -1,8 +1,7 @@
 """视野计算：某个 tick 一名玩家能不能看到另一名玩家，以及"第一次看见"是什么时候。
 
 - 视线：awpy 的 VisibilityChecker 用地图碰撞网格做射线检测（awpy-data 发布的 .mesh，首次使用时自动下载）。
-  从观察者的眼睛到对手身上几个点（头、胸口及两侧、膝、脚），任一条没被挡住就算"看得到"
-- 视野范围：对手必须在观察者屏幕内（相对准星的水平 / 垂直角度不超过配置的半角）
+  从观察者眼睛到对手身体采样点，任一点既在屏幕内又没有被挡住，就算"看得到"
 - 烟雾：无法精确建模，只用来标记"视线经过烟雾附近"，由调用方决定排除（见 config 的 [visibility] 说明）
 
 不用雷达的 spotted 状态：它约 0.5 秒更新一次，有随机延迟（docs/fields.md §8；Leetify 2020 年也因此弃用）。
@@ -53,9 +52,8 @@ class Sight:
         self.rate = match.meta.tick_rate
         self.min_blind = float(cfg["moments"]["min_blind_seconds"])
         self.blind_min_remaining = float(v["blind_min_remaining_seconds"])
-        self.points_s = list(v["body_points_standing"])
-        self.points_c = list(v["body_points_crouched"])
-        self.side = float(v["body_side_offset"])
+        self.points = [tuple(map(float, point)) for point in v["body_points"]]
+        self.chest_s, self.chest_c = map(float, v["chest_height"])
         self.fov_h, self.fov_v = float(v["fov_horizontal_half"]), float(v["fov_vertical_half"])
         self.lookback = round(v["first_seen_lookback_seconds"] * self.rate)
         self.gap = int(v["first_seen_gap_ticks"])
@@ -88,15 +86,11 @@ class Sight:
 
     def body_points(self, st: PlayerState, eye: np.ndarray) -> list[np.ndarray]:
         base = np.array([st.x, st.y, st.z])
-        pts = [base + [0.0, 0.0, s - (s - c) * st.duck] for s, c in zip(self.points_s, self.points_c)]
-        # 胸口左右两侧：垂直于视线的水平方向
         dx, dy = base[0] - eye[0], base[1] - eye[1]
         n = math.hypot(dx, dy)
-        if n > 0:
-            side = np.array([-dy, dx, 0.0]) / n * self.side
-            chest = pts[1]
-            pts += [chest + side, chest - side]
-        return pts
+        lateral = np.array([-dy / n, dx / n, 0.0]) if n > 0 else np.zeros(3)
+        return [base + [0.0, 0.0, s - (s - c) * st.duck] + lateral * offset
+                for s, c, offset in self.points]
 
     def in_view(self, st: PlayerState, eye: np.ndarray, target: np.ndarray) -> bool:
         """target 是否在 st 这名玩家的屏幕内。"""
@@ -115,10 +109,9 @@ class Sight:
             return False
         eye = self.eye(v)
         pts = self.body_points(t, eye)
-        if need_view and not self.in_view(v, eye, pts[1]):
-            return False
         e = tuple(eye)
-        return any(self.checker.is_visible(e, tuple(p)) for p in pts)
+        return any((not need_view or self.in_view(v, eye, p)) and
+                   self.checker.is_visible(e, tuple(p)) for p in pts)
 
     def smoke_between(self, viewer: PlayerState | pd.Series | None, target: PlayerState | pd.Series | None,
                       tick: int) -> bool:
@@ -132,7 +125,7 @@ class Sight:
         if active.empty:
             return False
         a = self.eye(v)
-        b = np.array([t.x, t.y, t.z + self.points_s[1] - (self.points_s[1] - self.points_c[1]) * t.duck])
+        b = np.array([t.x, t.y, t.z + self.chest_s - (self.chest_s - self.chest_c) * t.duck])
         centers = active[["x", "y", "z"]].to_numpy(dtype=float) + [0.0, 0.0, self.smoke_h]
         return bool((_segment_distances(a, b, centers) <= self.smoke_r).any())
 
@@ -151,6 +144,18 @@ class Sight:
         ok = idx < len(t)
         idx = idx[ok][t[idx[ok]] == want[ok]]
         return _states_from_frame(sub.iloc[idx])
+
+    def last_seen(self, viewer: int, target: int, start: int, end: int,
+                  need_view: bool = True) -> int | None:
+        """闭区间内最后一次看见对手的 tick；倒序扫描找到后立即结束。"""
+        if end < start:
+            return None
+        vs = self.states(viewer, start, end)
+        ts = self.states(target, start, end)
+        for tick in range(end, start - 1, -1):
+            if self.sees(vs.get(tick), ts.get(tick), need_view=need_view):
+                return tick
+        return None
 
     def first_seen(self, viewer: int, target: int, tick: int, floor: int) -> FirstSeen:
         """viewer 在 tick 时（允许 gap 个 tick 的误差）看得到 target 的话，往前找这段连续可见期的起点。

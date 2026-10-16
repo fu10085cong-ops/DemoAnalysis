@@ -243,7 +243,8 @@ def add_visibility(match: MatchData, p: _Params, sid: int, opponent: int, tick: 
     my_dmg = int(dealt["tick"].min()) if len(dealt) else None
     opp_dmg = int(taken["tick"].min()) if len(taken) else None
     # 没造成伤害时，锚定在瞬间前一 tick（死亡那一 tick 已经是死亡状态）
-    me = sight.first_seen(sid, opponent, my_dmg if my_dmg is not None else tick - 1, floor)
+    anchor = my_dmg if my_dmg is not None else tick - 1
+    me = sight.first_seen(sid, opponent, anchor, floor)
     opp = sight.first_seen(opponent, sid, opp_dmg if opp_dmg is not None else tick - 1, floor)
     me_blind = blinded_at(match, p, sid, me.tick) if me.tick is not None else None
     opp_blind = blinded_at(match, p, opponent, opp.tick) if opp.tick is not None else None
@@ -251,8 +252,20 @@ def add_visibility(match: MatchData, p: _Params, sid: int, opponent: int, tick: 
     def valid(fs):
         return fs.tick is not None and not fs.smoke
 
+    # gap 容许短暂遮挡，可能仍返回更早的可见起点；首次命中当 tick 实际不可见时要单独核对。
+    anchor_self = match.state_at(sid, anchor) if my_dmg is not None and anchor < tick - 1 else None
+    anchor_opponent = match.state_at(opponent, anchor) if anchor_self is not None else None
+    first_hit_unseen = (my_dmg is not None and anchor < tick - 1 and
+                        not me.smoke and not me.seen_at_limit and
+                        anchor_self is not None and anchor_opponent is not None and
+                        not sight.sees(anchor_self, anchor_opponent) and
+                        sight.last_seen(sid, opponent, anchor + 1, tick - 1) is not None)
     note = None
-    if not valid(me):
+    last_seen_before_s = None
+    opponent_off_screen = None
+    if first_hit_unseen:
+        note = "first_hit_unseen"
+    elif not valid(me):
         if me.smoke:
             note = "smoke"
         elif me.seen_at_limit:
@@ -264,19 +277,30 @@ def add_visibility(match: MatchData, p: _Params, sid: int, opponent: int, tick: 
             else:
                 note = "seen_before_window"
         else:
-            note = "not_seen"
+            last = sight.last_seen(sid, opponent, max(floor, anchor - sight.lookback), anchor)
+            if last is not None:
+                note = "lost_sight"
+                last_seen_before_s = p.secs(tick - last)
+            else:
+                note = "not_seen"
+                opponent_off_screen = sight.last_seen(
+                    sid, opponent, max(floor, anchor - sight.gap), min(tick - 1, anchor + sight.gap),
+                    need_view=False) is not None
     if me_blind and note != "smoke":
         note = "blind"
+    usable_me = valid(me) and note != "first_hit_unseen"
     upd: dict[str, Any] = {
         "player_first_seen_tick": me.tick,
         "opponent_first_seen_tick": opp.tick,
         "player_seen_while_blind": me_blind,
         "opponent_seen_while_blind": opp_blind,
         "visibility_note": note,
+        "last_seen_before_s": last_seen_before_s,
+        "opponent_off_screen": opponent_off_screen,
     }
-    if valid(me) and valid(opp) and not me_blind and not opp_blind:
+    if usable_me and valid(opp) and not me_blind and not opp_blind:
         upd["seen_first_lead_s"] = p.secs(opp.tick - me.tick)
-    seen_ticks = [fs.tick for fs in (me, opp) if valid(fs)]
+    seen_ticks = ([me.tick] if usable_me else []) + ([opp.tick] if valid(opp) else [])
     if seen_ticks:
         contact = min(seen_ticks)
         mine, theirs = _avg_speed(match, sid, contact, p.contact_window), _avg_speed(match, opponent, contact, p.contact_window)
@@ -284,12 +308,12 @@ def add_visibility(match: MatchData, p: _Params, sid: int, opponent: int, tick: 
         upd["player_speed_at_contact"] = mine
         upd["opponent_speed_at_contact"] = theirs
         upd["contact_type"] = contact_type(mine, theirs, p.still_speed, p.moving_speed)
-    if valid(me) and not me_blind and my_dmg is not None:
+    if usable_me and not me_blind and my_dmg is not None:
         upd["time_to_damage_s"] = p.secs(my_dmg - me.tick)
         upd["crosshair_placement_deg"] = angle_between(sight.view_vector(sid, me.tick), sight.view_vector(sid, my_dmg))
     if valid(opp) and not opp_blind and opp_dmg is not None:
         upd["opponent_time_to_damage_s"] = p.secs(opp_dmg - opp.tick)
-    if valid(me):
+    if usable_me:
         shot_ticks = [s.tick for s in eng.shots]
         after = [t for t in shot_ticks if t >= me.tick]
         upd["shots_before_seen"] = len(shot_ticks) - len(after)

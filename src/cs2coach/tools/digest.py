@@ -203,7 +203,9 @@ def _aim_section(stats: AimStats | None, baseline: dict[str, Any] | None) -> str
 
 
 VISIBILITY_NOTES = {
-    "not_seen": "事件发生时看不到对手",
+    "not_seen": "这次交火中没有看见对手",
+    "first_hit_unseen": "第一次打中对手时看不到他，之后看见了",
+    "lost_sight": "之前看见过对手，事件发生时视线已中断",
     "seen_before_window": "看见对手已超过 3 秒",
     "seen_since_previous_kill": "本回合上一次击杀时就已经能看见这名对手（交火紧接着上一次击杀）",
     "seen_since_round_start": "回合开始时就能看见这名对手",

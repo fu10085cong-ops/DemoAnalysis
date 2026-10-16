@@ -72,9 +72,16 @@ def _engagement_facts(m: Moment, names: Mapping[int, str]) -> list[str]:
     if _known(e.seen_first_lead_s):
         out.append(_lead(e.seen_first_lead_s, "看见对手", "看见你", "双方同时看见对方。"))
     if e.visibility_note:
-        if e.visibility_note == "not_seen":
+        if e.visibility_note == "first_hit_unseen":
+            out.append("你第一次打中对手时看不到他（可能是穿透或掩体边缘），之后看见了。")
+        elif e.visibility_note == "lost_sight" and e.last_seen_before_s is not None:
+            out.append(f"你在 {e.last_seen_before_s:.1f} 秒前看见过对手，之后视线中断。")
+        elif e.visibility_note == "not_seen":
             verb = "被击杀" if m.kind == "death" else "击杀"
-            out.append(f"按视野计算，你{verb}前没有看见对手。")
+            if e.opponent_off_screen:
+                out.append(f"对手在你的视野之外（侧面或背后），你{verb}前没有看见他。")
+            else:
+                out.append(f"按视野计算，你{verb}前没有看见对手。")
         elif e.visibility_note == "no_map_data":
             out.append("缺少地图数据，没有计算视野。")
         elif e.visibility_note in VISIBILITY_NOTES:

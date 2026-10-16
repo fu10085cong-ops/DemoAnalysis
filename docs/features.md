@@ -40,24 +40,24 @@
 | `shots[].aim_error_deg` | 子弹方向与对手身体中心的夹角 | 近似（眼睛、身体高度是估计值） |
 
 ### 视野（击杀、死亡的 `engagement` 中，2026-10-14 起）
-"看见"用地图几何判断（`features/visibility.py`）：awpy 的地图碰撞网格做射线检测，从眼睛到对手身上的 6 个点（头、胸口及左右两侧、膝、脚），任一条没被挡住、且对手在屏幕范围内（水平 ±53°、垂直 ±37°），就算看见。不用雷达 spotted（约 0.5 秒更新一次，`docs/fields.md` §8）。
+"看见"用地图几何判断（`features/visibility.py`）：awpy 的地图碰撞网格做射线检测，从眼睛到对手身上可配置的 11 个点（头、头顶、头两侧、两肩、胸口及两侧、腰、脚），任一点同时在屏幕范围内（水平 ±53°、垂直 ±37°）且没有被遮挡，就算看见。烟雾检测独立使用胸口高度。不用雷达 spotted（约 0.5 秒更新一次，`docs/fields.md` §8）。
 
 | 指标 | 定义 | 准确度 |
 |---|---|---|
-| `player_first_seen_tick` / `opponent_first_seen_tick` | 双方各自这段连续可见期的起点（往前最多回溯 3 秒；中断 ≤ 2 tick 不算中断） | 几何视线准确（普通击杀 94%–99% 判为可见）；不含烟雾、门等动态遮挡 |
+| `player_first_seen_tick` / `opponent_first_seen_tick` | 双方各自这段连续可见期的起点（往前最多回溯 3 秒；中断 ≤ 2 tick 不算中断） | 4 场实测普通击杀前一 tick（允许 2 tick 误差）可见 620/621；不含烟雾、门等动态遮挡 |
 | `seen_first_lead_s` | 对手看见自己的时刻减去自己看见对手的时刻；正数表示自己先看见 | 同上 |
 | `time_to_damage_s`（Leetify 同名） | 看见对手 → 第一次对他造成伤害 | 同上 |
 | `seen_to_first_shot_s` / `first_shot_to_damage_s` / `damage_to_kill_s` | Time to Damage 拆成三段（Leetify 没有）：看见 → 第一枪（负数表示看见前就开枪）、第一枪 → 第一次命中、第一次命中 → 击杀 | 同上 |
 | `crosshair_placement_deg`（Leetify 同名） | 从看见对手到第一次造成伤害，准星转过的角度 | 视角数据准确 |
 | `shots_before_seen` | 看见对手之前就朝他开的枪数（预瞄穿点、隔着掩体扫射、上一次露头时的射击）；`seen_to_first_shot_s` 只从看见后的第一枪算，前两段相加等于 Time to Damage | 同上 |
 | `contact_tick` / `player_speed_at_contact` / `opponent_speed_at_contact` / `contact_type` | 接触时刻（双方中较早看见对方的 tick）前 0.25 秒内双方的平均速度；低于 40 u/s 算几乎静止，不低于 120 算在移动，中间（减速、急停中）不下结论。`peek` 自己移动、对手静止（主动拉出，对手架点）；`held` 反过来；`unclear` 有一方处在过渡状态。用来支撑"干拉""架点"这类判断 | 速度准确；阈值依据 3 个 demo、878 个样本的速度分布（两个峰 0–10 和 200–220） |
-| `visibility_note` | 上述指标为空的原因：`not_seen`（事件发生时看不到对手，如穿墙、背身）、`seen_before_window`（回溯 3 秒内一直可见，起点未知）、`smoke`、`no_map_data` | — |
+| `visibility_note` | 上述指标为空的原因：`first_hit_unseen`（首次造成伤害时看不到对手，之后看见了）、`lost_sight`（锚点前的回溯窗口看见过，之后视线中断）、`not_seen`（窗口内确实没看见）、`seen_before_window`（回溯 3 秒内一直可见，起点未知）、`smoke`、`blind`、`no_map_data` 等；`lost_sight` 记录 `last_seen_before_s`，`not_seen` 记录 `opponent_off_screen`（锚点附近有几何视线但对手在屏幕外） | — |
 
 **烟雾**：CS2 的烟是体素，会被雷和子弹打散，无法精确建模。只用来排除："第一次看见"那一刻视线经过烟雾附近（球体近似，半径 144、展开后 1–18 秒有效）时，起点可能偏早，不计算 Time to Damage、Crosshair Placement。校准：被排除的 3%–5% 样本 Time to Damage 中位数 0.9–1.4 秒，保留样本的中位数几乎不变。
 
 **被闪白**：几何首次可见时，观察者正在经历总时长 ≥ `moments.min_blind_seconds`、剩余时长 ≥ `visibility.blind_min_remaining_seconds` 的致盲，则这一方的“看见”不可靠。首次可见 tick 保留用于核对，`player_seen_while_blind` / `opponent_seen_while_blind` 标记是否被闪白；没有首次可见 tick 时为 None。本人被闪白时 `visibility_note=blind`，烟雾原因优先，TTD、看见到开枪、开枪到命中及准星移动均留空；对手被闪白时对手 TTD 留空。任一方被闪白都不计算谁先看见谁。整场遭遇的 TTD 和准星使用相同过滤；其他枪法统计不变。剩余阈值暂定 1 秒，考虑闪光末段逐渐消退，待数据校准。Leetify 未公开是否采用这样的致盲过滤，这是我们的额外处理。
 
-**核对**（6 个 demo、736 次击杀）：雷达 spotted 比我们的"第一次看见"晚 0.23–0.28 秒（中位数），85%–88% 在 0–0.55 秒之间，与雷达的更新周期一致。击杀者的 Time to Damage 中位数：ESL 职业 375 ms、5E 469 ms、完美 516 ms（Leetify：400–500 ms 已经"非常快"）。
+**核对**：旧 6 点算法在 6 个 demo、736 次击杀中测得雷达 spotted 比几何“第一次看见”晚 0.23–0.28 秒（中位数），85%–88% 在 0–0.55 秒之间；这些延迟尚未按新算法重测。旧算法的 5E、完美击杀者 TTD 中位数分别为 469、516 ms，也尚未重测。新版职业整场 TTD 中位数见下方 v2 基准。
 
 ### 补枪 `trade`
 - 死亡：击杀者是否在 `trade_window_seconds` 内被队友击杀（`traded`、`traded_by`、`trade_delay_s`）；死亡时最近存活队友的直线距离。
@@ -97,7 +97,7 @@
 
 步枪：AK-47、M4A4、M4A1-S、Galil、FAMAS、AUG、SG 553。
 
-**全量核对**（2026-10-15，24 场 demo 的全部 240 人次，无报错，每人六项都有数值）。每人一场的数值，按来源取中位数（括号内为四分位 p25–p75）：
+**旧算法的全量核对记录**（2026-10-15，24 场 demo 的全部 240 人次，无报错，每人六项都有数值；下表尚未按新版视野重算）。每人一场的数值，按来源取中位数（括号内为四分位 p25–p75）：
 
 | | ESL 职业（30） | 5E（130） | 完美（80） |
 |---|---|---|---|
@@ -110,13 +110,13 @@
 
 职业选手六项都更好。Time to Damage、Crosshair Placement 区分度最明显（四分位几乎不重叠）；Counter-Strafing、Spray Accuracy 在单场层面差别很小，需要多场汇总才能看出趋势。每人每场的样本数中位数：遭遇约 20 次、看见敌人时的射击约 170 发、步枪急停射击约 70 发。
 
-决定性瞬间中的交火有约 79% 能算出视野指标；其余：事件发生时看不到对手 9.5%（穿墙、背身等）、回溯范围内一直可见 4.7%、首次看见时经过烟雾 7.0%。
+旧版 6 点算法的“约 79% 能算出视野指标、9.5% 没看见”统计已不适用于新版。018 在 4 场 demo 的 631 次阵亡（排除穿墙、穿烟）中，`not_seen` 从旧算法的 73 次降到 33 次，其中 26 次锚点附近有几何视线但对手不在屏幕内；另有 32 次为 `lost_sight`、3 次为 `first_hit_unseen`。这组数只描述该四场的阵亡样本，不当作全部决定性瞬间的覆盖率。
 
 ## 职业基准 v2
 
 清单在 `baselines/pro_demos.toml`，生成入口为 `scripts/build_baseline.py`。使用与分析用户相同的解析、特征和致盲过滤流程；覆盖率低于 `parsing.min_target_coverage` 的玩家不入样本，某份 demo 失败时整份跳过并打印原因，来源与实际人次写入基准文件。Mirage p1/p2 是同图两段，按两份样本处理，不称为两张不同地图。
 
-当前 v2 来自 ESL Pro League S24 的 5 组对局、15 份 demo，共 150 人次；全部成功，覆盖率为 0 的热身非选手不计入。整场 TTD 职业中位数为 375 ms，准星移动中位数为 3.83°；具体分布和每项有效样本数见 `baselines/pro_sample.json`。上方 30 人次表格是早期核对记录。
+当前 v2 来自 ESL Pro League S24 的 5 组对局、15 份 demo，共 150 人次；全部成功，覆盖率为 0 的热身非选手不计入。按 018 的新视野算法重算后，整场 TTD 职业中位数为 391 ms，准星移动中位数为 3.88°；具体分布和每项有效样本数见 `baselines/pro_sample.json`。上方 30 人次表格是旧算法的早期核对记录。
 
 - `metrics` 保留每人每份 demo 的整场枪法分布，原 `compare()` 接口兼容。
 - `weapons` 按交火第一枪的武器归组；没开枪时从手持显示名反查规范名，查不到则跳过。只含击杀、死亡且有交火的数据，不含回合结束后、误杀、bot 和世界伤害；交火少于 `baseline.min_engagements`（默认 30）的武器不输出。
@@ -134,7 +134,7 @@
 - 交火武器直接复用基准的认定函数。枪法与距离规则分别使用同武器职业 p75 / Glock 距离 p90；缺失武器或阈值不会套用其他武器，计入 `skipped`。没有基准仍检测通用规则。
 - TTD 排除烟雾、首次可见时被闪白、缺失数据和达到最大等待时长的样本；死亡还要求对手有 TTD 且更短。其他规则按任务表分别检查首枪、接触类型、人数标签、补枪、死亡道具、致盲归属及亮点。
 - 单次压枪只取交火武器的后段子弹，逐发匹配职业连射段命中率后求平均；混合武器不合并。整场则复用基准 `spray_stats`，按每发实际武器、相同发数段分别比较，默认由 `spray_match_enabled=false` 关闭。两者都要求足够子弹，差值使用百分点；等于差值阈值不命中。移动扫射排除首枪，停稳数据不完整时不推断。
-- `[problems]` 集中保存阈值和停用列表。默认停用 `died_without_seeing`、`turned_into_flash`、`weapon_not_ready`、`spray_while_moving`、`awp_unscoped_shot`。前者仍有视野误判，后两项及整场压枪待数据校准；被闪后阵亡、拉栓期间交火按目录降为背景，事实卡照常显示。`awp_moving_shot` 由通用移动首枪规则覆盖。目录待开发项、`awp_close_range_duel`、`other` 仅登记，不检测；AWP 未开镜规则仅检测死亡。检测条件和原有阈值不变。
+- `[problems]` 集中保存阈值和停用列表。默认停用 `died_without_seeing`、`turned_into_flash`、`weapon_not_ready`、`spray_while_moving`、`awp_unscoped_shot`。视野误判已在 018 明显减少，但 `died_without_seeing` 仍待产品负责人根据新频率审查，暂不启用；移动扫射、AWP 未开镜及整场压枪待数据校准；被闪后阵亡、拉栓期间交火按目录降为背景，事实卡照常显示。`awp_moving_shot` 由通用移动首枪规则覆盖。目录待开发项、`awp_close_range_duel`、`other` 仅登记，不检测；AWP 未开镜规则仅检测死亡。检测条件和原有阈值不变。
 - 每条 `ProblemHit` 保留 target、交火武器、判断所用的 evidence 和 thresholds（数值与来源）；子弹序列和道具列表因证据字典只允许标量，编码为 JSON 字符串。`ProblemReport` 同时记录职业来源、停用编号及缺少数据的计数；不满足条件和样本不足不计作缺少数据。
 - `problem_frequency()` 对已实现、启用的非亮点问题计算本场次数，零命中也列出，排除 `match` 目标。职业频率从基准原始 `hits / rounds` 计算，预期次数 λ 为职业频率乘以本场在场回合数（`MatchMoments.rounds_played`：总回合数减去中途掉线、重连前不在场的回合，fields.md 陷阱 24）；多出次数为本场次数减 λ，偶然概率为泊松分布 P(X ≥ 本场次数 | λ)。偶然概率 < `frequency_max_chance`（默认 0.05）且多出次数 ≥ `frequency_min_excess`（默认 2）才突出；职业频率缺失或为零时不判突出。倍数仅作展示。突出项在前，各组按多出次数降序排序。
 - `analyze` 无需 `--ai` 即在 `<输出根目录>/<玩家名>_<SteamID64>/<比赛名>/` 生成（按 steamid 归档：已有以 `_<SteamID64>` 结尾的玩家文件夹时沿用，同一个人在不同平台的名字不同也归到一处） `moments.json`、`facts.md` 和 `problems.md`。频率表展示本场、预期、多出、偶然概率和倍数，突出项加粗；多出次数大于 0 但不突出的标为“次数较少，需要更多比赛确认”，多出次数小于或等于 0 的标为“不高于职业水平”，不作为问题提出。其后列出命中证据、停用项和 skipped。重新运行会把旧 `report.md` 与 `submission.json` 按文件修改时间移入 `历史版本/`。背景项登记于 `CONTEXT_ONLY`，不单独报为问题；不改变事实卡和原始指标。

@@ -1,6 +1,6 @@
 # 018 视野：露出部分身体、只在一个时刻判断导致的"没看见"误判
 
-状态：待做
+状态：完成
 
 ## 目标
 
@@ -152,9 +152,39 @@ body_points = [
 
 ## 完成报告（GPT 填写）
 
-- 改动的文件及原因：
-- 测试结果：
-- 真实 demo 验证（如有）：
-- 遗留问题 / 需要确认的地方：
+- 改动的文件及原因：`config/default.toml` 改为 11 个可配置身体点与独立胸口高度；`src/cs2coach/config.py` 校验其形状、数值和高度。`features/visibility.py` 逐个点同时检查屏幕范围与几何视线，并提供时间窗口内最后一次可见 tick 的查询；`features/moments.py` 将“首次伤害时不可见但之后可见”“此前看见但视线中断”“窗口内确实没看见”分开，记录最后可见时间与屏幕外标记。`features/models.py`、`report/facts.py`、`tools/digest.py`、`docs/features.md` 同步字段和文案。`src/cs2coach/baselines/pro_sample.json` 按新算法重算。`tests/test_visibility.py`、`tests/test_facts.py` 覆盖新采样点、屏幕边缘、时间窗口、事实卡和配置校验。
+- 测试结果：`.venv/Scripts/python.exe -m pytest -q`：**580 passed, 3 skipped**；`scripts/check_parsing.py data/demos/5e_demo/g173-n-20261014223216271995270_de_mirage.zip`：各对照项全部一致；`git diff --check` 通过。职业基准重算 15/15 场成功、0 失败、150 人次。整体中位数：TTD **375 → 391 ms**，Crosshair Placement **3.83 → 3.88°**。各武器 p75（TTD，单位 ms；准星，单位 °）：
+
+  | 武器 | TTD 旧→新 | 准星旧→新 |
+  |---|---:|---:|
+  | AK-47 | 512→531 | 9.38→9.70 |
+  | AWP | 391→406 | 3.08→3.17 |
+  | Deagle | 523.75→516 | 7.29→7.15 |
+  | Dual Berettas | 621.25→476.5 | 11.46→12.89 |
+  | FAMAS | 438→453 | 8.15→8.15 |
+  | Five-SeveN | 550.75→550.75 | 11.72→11.72 |
+  | Galil AR | 453→476.5 | 8.65→9.13 |
+  | Glock | 531→543 | 11.39→12.11 |
+  | M4A4 | 484→500 | 10.38→11.40 |
+  | M4A1-S | 484→519.75 | 6.91→7.73 |
+  | MAC-10 | 488→515.5 | 19.38→20.78 |
+  | MP9 | 516→516 | 15.98→16.21 |
+  | Tec-9 | 484.5→508 | 17.60→18.83 |
+  | USP-S | 547→562 | 8.59→9.74 |
+
+  `problem_rates`（命中数；每 10 回合）：`died_without_seeing` **206→137；0.67→0.44**，`slow_reaction` **425→422；1.38→1.37**，`poor_crosshair_placement` **501→506；1.62→1.64**。未启用 `died_without_seeing`。
+- 真实 demo 验证：任务单列出的 4 场 demo 全部解析，对所有玩家逐场运行新算法。排除穿墙、穿烟后共 **631 次阵亡**，`not_seen` **73→33**，其中 `opponent_off_screen=True` **26** 次；普通击杀前可见 **620/621（99.84%）**。Mirage R15（妮妮孩孩major冠军，tick 101902）不再是 `not_seen`，TTD 为 **0.781 秒**；Mirage R7（喑海，tick 50003）为 `first_hit_unseen`，TTD 留空。原误判清单 41 条中仍为 `not_seen` 的只有 **Dust2 R14，首席狙击手祁同伟，tick 97601**：同一玩家在 tick 97600 刚完成击杀，现有交火下限被推至 97601，排除了 97600 的可见记录。Mirage 同一玩家单场 `find_moments` 热运行耗时旧 **3.57 秒**、新 **3.78 秒**（约增加 6%）；数据保存在系统临时目录的 `cs2coach-018-validation.json`，没有写入 `data/`。
+- 遗留问题 / 需要确认的地方：上述 Dust2 R14 是既有“上一次击杀后才算本次交火”下限造成的边界案例；本任务明确不改 TTD 起算口径，因此保留给后续口径讨论。门、薄墙、烟雾模型局限和 `died_without_seeing` 是否启用仍按任务单留待审查。
 
 ## 审查意见（Claude 填写）
+
+**审查通过（2026-10-16）。** 检测点、屏幕判断、三种新说法、职业基准重算都符合任务单，580 个测试通过。
+
+Claude 用旧代码（HEAD 的工作树）和新代码跑同样 4 场 demo 的全部玩家、1390 个瞬间对比：
+
+- 视野说法：`not_seen` 108 → 43；新增 `lost_sight` 44、`first_hit_unseen` 7。
+- TTD 样本数 773 → 772，基本不变；数值变化来自更早发现露出的部分身体，路人 TTD 中位数 516 → 562 ms，职业基准同算法重算 375 → 391 ms，对比仍然公平。
+- 与任务单的一处偏差：`first_hit_unseen` 在 `first_seen` 有效（允许 2 tick 误差）、但第一次伤害那一 tick 本身看不到时也会触发，会去掉这类交火的 TTD。实测 7 例原本都是 `not_seen`、都没有 TTD，没有造成样本损失，接受。
+- Claude 直接修改：`VISIBILITY_NOTES` 中的"回溯窗口""锚点"是内部术语，会进入给 AI 的摘要，改为"这次交火中没有看见对手""之前看见过对手，事件发生时视线已中断"。
+
+以后可以校准：肩部 ±16、头侧 ±6 略宽于模型实际宽度，可能把"刚到掩体边缘"判为可见（约十几毫秒）；穿墙击杀判为可见的比例 71% → 81% 也说明这一点。`died_without_seeing` 是否启用，按新频率另议：职业 0.44 次 / 10 回合。

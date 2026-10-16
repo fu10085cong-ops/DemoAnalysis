@@ -9,10 +9,10 @@ import copy
 import pandas as pd
 import pytest
 
-from cs2coach.config import load_config
+from cs2coach.config import ConfigError, load_config
 from cs2coach.features.moments import find_moments
-from cs2coach.features.visibility import Sight, angle_between
-from cs2coach.parsing.match import build_blinds, build_damages, build_grenades, build_kills, build_shots
+from cs2coach.features.visibility import PlayerState, Sight, angle_between
+from cs2coach.parsing.match import build_blinds, build_bomb, build_damages, build_grenades, build_kills, build_shots
 from tests.helpers.synthetic import A, B, C, D, WallChecker, make_match, make_round, make_ticks, sid
 from tests.test_moments import bullet, death, fire, hurt
 
@@ -68,6 +68,119 @@ def test_not_seen_at_event():
     assert fs.tick is None and not fs.seen_at_limit
 
 
+def test_only_head_side_or_shoulder_visible():
+    class ExposedSide:
+        def is_visible(self, _eye, point):
+            return (round(point[2]), round(abs(point[1]))) in {(44, 6), (38, 16)}
+
+    viewer = PlayerState(0, 0, 0, 0, 0, 0, True, 2)
+    target = PlayerState(100, 0, 0, 0, 180, 1, True, 3)
+    m = make_match(ticks())
+    current = Sight(m, CFG, checker=ExposedSide())
+    old = copy.deepcopy(CFG)
+    old["visibility"]["body_points"] = old["visibility"]["body_points"][:6]
+    assert not Sight(m, old, checker=ExposedSide()).sees(viewer, target)
+    assert current.sees(viewer, target)
+
+
+def test_head_inside_screen_while_chest_outside():
+    class Clear:
+        def is_visible(self, _eye, _point):
+            return True
+
+    cfg = copy.deepcopy(CFG)
+    cfg["visibility"]["fov_vertical_half"] = 15.0
+    s = Sight(make_match(ticks()), cfg, checker=Clear())
+    viewer = PlayerState(0, 0, 0, 0, 0, 0, True, 2)
+    target = PlayerState(50, 0, 0, 0, 180, 0, True, 3)
+    points = s.body_points(target, s.eye(viewer))
+    assert not s.in_view(viewer, s.eye(viewer), points[1])
+    assert s.in_view(viewer, s.eye(viewer), points[6])
+    assert s.sees(viewer, target)
+
+
+@pytest.mark.parametrize("points", ["[[1, 2]]", "[[1, 2, 3, 4]]", "[[-1, 2, 0]]",
+                                    '[[true, 2, 0]]', '[[1, "x", 0]]'])
+def test_invalid_body_points_config(tmp_path, points):
+    path = tmp_path / "invalid.toml"
+    path.write_text(f"[visibility]\nbody_points = {points}\n", encoding="utf-8")
+    with pytest.raises(ConfigError, match="visibility.body_points"):
+        load_config(path)
+
+
+@pytest.mark.parametrize("heights", ["[40]", "[-1, 28]", '[40, "bad"]'])
+def test_invalid_chest_height_config(tmp_path, heights):
+    path = tmp_path / "invalid.toml"
+    path.write_text(f"[visibility]\nchest_height = {heights}\n", encoding="utf-8")
+    with pytest.raises(ConfigError, match="visibility.chest_height"):
+        load_config(path)
+
+
+def _visibility_death(a_pos=None, a_yaw=None, own_damage_tick=None):
+    """目标玩家 A 阵亡；可控制伤害锚点和逐 tick 视野。"""
+    m = make_match(ticks(a_pos=a_pos, a_yaw=a_yaw),
+                   rounds=[make_round(freeze_end=10, end=110, last=120)])
+    m.kills = build_kills(pd.DataFrame([death(100, C, A)]), m)
+    damages = [hurt(100, C, A, 100, 0)]
+    if own_damage_tick is not None:
+        damages.insert(0, hurt(own_damage_tick, A, C, 23, 77))
+    m.damages = build_damages(pd.DataFrame(damages), m)
+    fires = [fire(own_damage_tick if own_damage_tick is not None else 90, A), fire(100, C)]
+    m.shots = build_shots(pd.DataFrame(fires),
+                          pd.DataFrame([bullet(f["tick"], int(f["user_steamid"])) for f in fires]), m)
+    m.blinds = build_blinds(pd.DataFrame(), pd.DataFrame(), m)
+    m.bomb = build_bomb({}, m)
+    mm = find_moments(m, A, CFG, sight=sight(m))
+    return next(moment for moment in mm.moments if moment.id == "R1-death")
+
+
+def test_first_hit_unseen_then_visible_before_death():
+    blocked = {tick: -200.0 for tick in range(91, 96)}
+    moment = _visibility_death(a_pos=blocked, own_damage_tick=95)
+    e = moment.engagement
+    assert e.visibility_note == "first_hit_unseen"
+    assert e.time_to_damage_s is e.seen_to_first_shot_s is e.first_shot_to_damage_s is None
+    assert e.crosshair_placement_deg is None
+    assert "died_without_seeing" not in moment.tags
+    from cs2coach.report.facts import moment_facts
+    assert "你第一次打中对手时看不到他（可能是穿透或掩体边缘），之后看见了。" in moment_facts(moment, {})
+
+
+def test_first_hit_unseen_takes_priority_over_gap_tolerance():
+    blocked = {tick: -200.0 for tick in (94, 95)}
+    moment = _visibility_death(a_pos=blocked, own_damage_tick=95)
+    assert moment.engagement.player_first_seen_tick is not None  # gap 仍找到更早的可见起点
+    assert moment.engagement.visibility_note == "first_hit_unseen"
+    assert moment.engagement.time_to_damage_s is None
+
+
+def test_lost_sight_records_last_seen_time():
+    blocked = {tick: -200.0 for tick in range(95, 101)}
+    moment = _visibility_death(a_pos=blocked)
+    e = moment.engagement
+    assert e.visibility_note == "lost_sight"
+    assert e.last_seen_before_s == pytest.approx(6 / 64, abs=.001)
+    assert e.time_to_damage_s is e.seen_to_first_shot_s is e.first_shot_to_damage_s is None
+    assert e.crosshair_placement_deg is None
+    assert "died_without_seeing" not in moment.tags
+    from cs2coach.report.facts import moment_facts
+    assert "你在 0.1 秒前看见过对手，之后视线中断。" in moment_facts(moment, {})
+
+
+@pytest.mark.parametrize("off_screen", [True, False])
+def test_never_seen_distinguishes_off_screen_from_occlusion(off_screen):
+    yaw = {tick: 180.0 for tick in range(1, 121)} if off_screen else None
+    pos = None if off_screen else {tick: -200.0 for tick in range(1, 121)}
+    moment = _visibility_death(a_pos=pos, a_yaw=yaw)
+    e = moment.engagement
+    assert e.visibility_note == "not_seen" and e.opponent_off_screen is off_screen
+    assert "died_without_seeing" in moment.tags
+    from cs2coach.report.facts import moment_facts
+    expected = ("对手在你的视野之外（侧面或背后），你被击杀前没有看见他。" if off_screen else
+                "按视野计算，你被击杀前没有看见对手。")
+    assert expected in moment_facts(moment, {})
+
+
 def test_smoke_at_first_seen_marks_unreliable():
     m = make_match(ticks())
     smoke = pd.DataFrame([{"tick": 10, "user_steamid": sid(B), "entityid": 1, "x": 500.0, "y": 0.0, "z": 0.0}])
@@ -76,6 +189,18 @@ def test_smoke_at_first_seen_marks_unreliable():
     # 烟刚展开（不到 smoke_active_seconds 的下限）时不算
     young = pd.DataFrame([{"tick": 70, "user_steamid": sid(B), "entityid": 1, "x": 500.0, "y": 0.0, "z": 0.0}])
     assert not sight(make_match(ticks()), {"smokegrenade_detonate": young}).first_seen(A, C, 95, floor=10).smoke
+
+
+def test_smoke_uses_chest_height_independent_of_body_point_order():
+    smoke = pd.DataFrame([{"tick": 10, "user_steamid": sid(B), "entityid": 1,
+                           "x": 500.0, "y": 0.0, "z": 0.0}])
+    m = make_match(ticks())
+    m.grenades = build_grenades({"smokegrenade_detonate": smoke}, m)
+    cfg = copy.deepcopy(CFG)
+    cfg["visibility"]["body_points"].reverse()
+    s = Sight(m, cfg, checker=WallChecker(500.0, -50.0))
+    viewer, target = m.state_at(A, 95), m.state_at(C, 95)
+    assert s.smoke_between(viewer, target, 95)
 
 
 def test_angle_between_view_vectors():
