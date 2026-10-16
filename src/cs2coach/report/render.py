@@ -5,11 +5,13 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Mapping
 
 from cs2coach.features.labels import absent_rounds_note
+from cs2coach.config import load_config
 from cs2coach.features.models import MatchMoments
 from cs2coach.features.problems import PROBLEMS
 from cs2coach.report.evidence import evidence_sentence, match_fact
 from cs2coach.report.facts import missed_trade_facts, render_moment_card
 from cs2coach.report.problems import frequency_table
+from cs2coach.tools.drills import drill_labels
 
 if TYPE_CHECKING:
     from cs2coach.ai.diagnose import Diagnosis
@@ -17,8 +19,9 @@ if TYPE_CHECKING:
 SEVERITY = {"high": "高", "medium": "中", "low": "低"}
 
 
-def render_diagnosis(d: Diagnosis, mm: MatchMoments, names: Mapping[int, str]) -> str:
+def render_diagnosis(d: Diagnosis, mm: MatchMoments, names: Mapping[int, str], cfg: dict | None = None) -> str:
     sub = d.submission
+    labels = drill_labels(cfg or load_config())
     by_id = {m.id: m for m in mm.moments}
     lines = [f"# 复盘报告：{mm.player_name} · {mm.map_name}", "",
              f"比分 {d.score[0]}:{d.score[1]} · 模型 {d.provider} / {d.model}", "",
@@ -60,7 +63,9 @@ def render_diagnosis(d: Diagnosis, mm: MatchMoments, names: Mapping[int, str]) -
     for entry in sub.findings:
         lines.append(f"### {label(entry.problem)} · {SEVERITY[entry.severity]}")
         facts(entry)
-        lines.extend(["", "**分析**", "", entry.analysis, "", "**怎么练**", "", entry.training, ""])
+        lines.extend(["", "**分析**", "", entry.analysis, "", "**怎么练**", ""])
+        lines.extend(f"- {labels[drill]}" for drill in entry.drills if drill in labels)
+        lines.extend(["", entry.training, ""])
     lines.extend(["## 反复出现的问题", ""])
     for entry in sub.patterns:
         lines.extend([f"### {label(entry.problem)}", "", "涉及：" + "、".join(f"〔{t}〕" for t in entry.targets),

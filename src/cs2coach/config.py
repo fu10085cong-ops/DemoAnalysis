@@ -27,11 +27,32 @@ def _validate_training(cfg: dict[str, Any]) -> None:
     ids = cfg["extra_pro_steamids"]
     if not isinstance(ids, list) or any(type(sid) is not int or sid <= 0 for sid in ids):
         raise ConfigError("配置项 training.extra_pro_steamids 应为正整数数组")
+    from cs2coach.features.problems import PROBLEMS
+    latin = cfg["allowed_latin"]
+    if not isinstance(latin, list) or any(not isinstance(v, str) or not v for v in latin):
+        raise ConfigError("配置项 training.allowed_latin 应为非空字符串数组")
+    drills = cfg["drills"]
+    if not isinstance(drills, list) or len({d.get("id") for d in drills if isinstance(d, dict)}) != len(drills):
+        raise ConfigError("配置项 training.drills 应为编号唯一的表数组")
+    for i, drill in enumerate(drills):
+        if (not isinstance(drill, dict) or not {"id", "label", "problems"} <= drill.keys()
+                or set(drill) - {"id", "label", "problems", "min_aim_problems"}
+                or any(not isinstance(drill[k], str) or not drill[k] for k in ("id", "label"))
+                or not isinstance(drill["problems"], list)
+                or any(p not in PROBLEMS for p in drill["problems"])
+                or ("min_aim_problems" in drill and
+                    (type(drill["min_aim_problems"]) is not int or drill["min_aim_problems"] < 2))):
+            raise ConfigError(f"配置项 training.drills[{i}] 无效")
 
 
 def _validate_checker(cfg: dict[str, Any]) -> None:
     """敏感说法允许配置扩展，但谓词名称和正则必须能被检查器执行。"""
     from cs2coach.tools.checker import PREDICATES
+    aliases = cfg["map_aliases"]
+    if (not isinstance(aliases, dict) or any(not isinstance(names, list) or not names
+            or any(not isinstance(name, str) or not name for name in names)
+            for names in aliases.values())):
+        raise ConfigError("配置项 checker.map_aliases 应为地图别名数组表")
 
     labels = cfg["quantile_labels"]
     if not isinstance(labels, list) or any(type(value) is not int or value < 0 for value in labels):

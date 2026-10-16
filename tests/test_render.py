@@ -60,6 +60,13 @@ def test_render_has_all_sections_program_facts_evidence_and_unique_jumps():
     assert "**突出问题**" not in text  # 报告用表格承载，不复制 AI 摘要的标记
 
 
+def test_render_lists_selected_drills_before_training_text():
+    d, mm, names = sample()
+    d.submission.findings[0].drills = ["aim_botz"]
+    text = render_diagnosis(d, mm, names)
+    assert text.index("**怎么练**\n\n- Aim Botz") < text.index("每天练100次。")
+
+
 def test_digest_contains_prominence_and_human_evidence_before_moments():
     d, mm, _ = sample()
     text = build_digest(scenario(), mm, None, d.problems, d.frequency)

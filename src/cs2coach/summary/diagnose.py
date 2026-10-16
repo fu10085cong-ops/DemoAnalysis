@@ -56,5 +56,5 @@ def diagnose_summary(summary: PlayerSummary, cfg: dict, baseline: dict | None,
         tool_calls=result.tool_calls, raw_calls=result.raw_calls, repairs=result.repairs,
         prompt_tokens_history=result.prompt_tokens_history)
     from cs2coach.summary.render_report import render_summary_diagnosis
-    diagnosis.report = render_summary_diagnosis(diagnosis, summary, baseline)
+    diagnosis.report = render_summary_diagnosis(diagnosis, summary, baseline, cfg)
     return diagnosis

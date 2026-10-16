@@ -16,6 +16,7 @@ from cs2coach.report.evidence import evidence_sentence, missed_trade_context
 from cs2coach.report.problems import frequency_table
 from cs2coach.parsing.match import MatchData
 from cs2coach.parsing.models import Team
+from cs2coach.tools.drills import drill_guidance
 
 METRIC_LABELS = {
     "time_to_damage_ms": ("Time to Damage", "ms", "time_to_damage_samples", "次遭遇"),
@@ -25,6 +26,14 @@ METRIC_LABELS = {
     "spotted_accuracy_pct": ("Spotted Accuracy", "%", "spotted_shots", "发"),
     "headshot_accuracy_pct": ("Headshot Accuracy", "%", "hits", "次命中"),
 }
+
+
+class TypedNumbers(list):
+    """沿用数值列表接口，同时携带可作为百分比引用的来源值。"""
+
+    def __init__(self, values=(), percentages=()):
+        super().__init__(values)
+        self.percentages = list(percentages)
 
 
 def player_side(match: MatchData, steamid: int, round_number: int) -> str | None:
@@ -105,13 +114,14 @@ def build_digest(match: MatchData, mm: MatchMoments, baseline: dict[str, Any] | 
     if mm.excluded:
         lines += ["", "## 不参与分析的记录"]
         lines += [f"- [[R{x.round}]] tick {x.tick} {KIND_LABELS.get(x.kind, x.kind)}：{x.reason}" for x in mm.excluded]
+    lines.extend(drill_guidance(cfg or load_config()))
     return "\n".join(lines)
 
 
 def whole_match_numbers(mm: MatchMoments, baseline: dict[str, Any] | None,
                         frequency: list[FrequencyRow], score: tuple[int, int]) -> list[float]:
     """仅收集整场统计、职业对比、问题频率及比分，排除逐次瞬间。"""
-    values: list[float] = [mm.rounds, mm.rounds_played, *score]
+    values: list[float] = TypedNumbers([mm.rounds, mm.rounds_played, *score])
     stats = mm.aim_stats
     if stats is not None:
         for metric in METRICS:
@@ -120,10 +130,15 @@ def whole_match_numbers(mm: MatchMoments, baseline: dict[str, Any] | None,
             values.append(getattr(stats, count_field))
             if value is not None:
                 values.append(value)
+                if metric.endswith("_pct"):
+                    values.percentages.append(value)
                 comparison = compare(metric, value, baseline)
                 if comparison is not None:
                     values.extend(comparison[key] for key in
                                   ("pro_median", "pro_p25", "pro_p75", "better_than_pro_pct"))
+                    values.percentages.append(comparison["better_than_pro_pct"])
+                    if metric.endswith("_pct"):
+                        values.percentages.extend(comparison[key] for key in ("pro_median", "pro_p25", "pro_p75"))
     for row in frequency:
         values.append(10)
         values.extend((row.hits, row.per_10_rounds))
@@ -136,6 +151,7 @@ def whole_match_numbers(mm: MatchMoments, baseline: dict[str, Any] | None,
                 values.append(value)
         if row.chance is not None:
             values.append(row.chance * 100)
+            values.percentages.append(row.chance * 100)
     return values
 
 

@@ -131,10 +131,12 @@ def test_primary_name_and_summary_totals_in_digest_and_checker():
     assert "玩家：popular。用过的名字：first、popular、third。" in digest
     assert "合计：455 杀、273 死、0 次关键助攻；3 胜、0 负、0 平。" in digest
     payload = submission(overview="共 455 杀、273 死。")
+    payload["findings"][0]["drills"] = ["aim_botz"]
     sub = parse_submission(payload)
     assert check_summary_submission(sub, summary, digest, cfg, summary_numbers(summary, baseline)) == []
     result = diagnose_summary(summary, cfg, baseline, FakeProvider([payload]))
     assert result.report.startswith("# 多场复盘：popular · 3 场")
+    assert "**怎么练**\n\n- Aim Botz" in result.report
 
 
 def test_summary_queries_and_target_schema():

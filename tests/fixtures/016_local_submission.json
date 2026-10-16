@@ -1,0 +1,29 @@
+{
+  "overview": "妮妮孩孩major冠军在21场比赛中表现总体稳健，取得18胜2负1平的战绩，击杀455次、死亡273次、关键助攻69次。但存在两个突出短板：出枪慢（TTD中位数469ms，高于职业375ms）和准星预判偏差（Crosshair Placement中位数4.26°，高于职业3.83°）。问题集中在de_dust2（68%）和de_inferno（38%），且在21场中19场出现出枪慢问题。",
+  "findings": [
+    {
+      "problem": "slow_reaction",
+      "targets": [
+        "M20:R23-kill1",
+        "M12:R4-death"
+      ],
+      "severity": "medium",
+      "analysis": "在de_dust2 23回合（M20）和de_inferno 4回合（M12）中，首次命中耗时达969ms，超过职业同武器75分位值近一倍。例如M12回合4，双方5v4且经济相近，对手TTD为641ms，自己慢了328ms，给了对手先伤机会。更好的处理是接敌前将准星放至可能露头位置，控制移动完成首枪。",
+      "training": "在创意工坊地图《Deagle Duel》进行预瞄练习，每组30次共3组。首枪目标切换用时需控制在300ms内，下次复盘检查首次命中耗时。"
+    }
+  ],
+  "patterns": [],
+  "highlights": [
+    {
+      "problem": "won_duel_seen_first",
+      "targets": [
+        "M1:R1-kill3",
+        "M10:R10-kill2"
+      ],
+      "analysis": "在de_dust2 1回合（M1）、de_dust2 10回合（M10）等场景中，玩家通过先发现敌人（+0.016s优势）并率先开枪，成功完成单挑击杀。例如M1回合1，双方2v2对枪时玩家先开枪0.188s且TTD仅812ms，显示关键时刻反应和预判能力。"
+    }
+  ],
+  "training_plan": [
+    "1. 在《Deagle Duel》地图进行预瞄练习：3组×30次，首枪目标切换用时需≤300ms，下次复盘检查首次命中耗时；2. 在《Inferno B》地图练习架点意识：每组10次，要求接触时速＜40u/s时必须停稳再开枪；3. 使用《Spray Control》练习图，针对25发以上连发场景，将Spray Accuracy提升至40%以上。"
+  ]
+}

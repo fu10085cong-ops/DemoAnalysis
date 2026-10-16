@@ -6,21 +6,24 @@
       "targets": ["R3-kill1"],
       "severity": "medium",
       "analysis": "使用 M4A1-S，从看见对手到首次命中花了812毫秒，高于同武器职业参考阈值484毫秒，应复盘接敌前的准备。",
-      "training": "每天练100次定点切换目标，记录从发现到命中的稳定性。"
+      "training": "每天练100次定点切换目标，记录从发现到命中的稳定性。",
+      "drills": []
     },
     {
       "problem": "shot_while_moving",
       "targets": ["R1-death"],
       "severity": "medium",
       "analysis": "第一枪没停稳且没有命中，这次交火值得检查开枪前的移动控制。",
-      "training": "练习先停止移动再开枪，每组30次。"
+      "training": "练习先停止移动再开枪，每组30次。",
+      "drills": []
     },
     {
       "problem": "weapon_not_ready",
       "targets": ["R9-death"],
       "severity": "low",
       "analysis": "阵亡时武器还不能开枪，应结合上一枪后的撤退时机判断，不能把没有开枪直接归因为犹豫。",
-      "training": "练习狙击开枪后退回掩体，每组20次。"
+      "training": "练习狙击开枪后退回掩体，每组20次。",
+      "drills": []
     }
   ],
   "patterns": [

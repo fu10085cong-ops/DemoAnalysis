@@ -10,8 +10,9 @@ from cs2coach.features.problems import PROBLEMS, ProblemHit
 from cs2coach.report.evidence import evidence_sentence
 from cs2coach.summary.aggregate import PlayerSummary
 from cs2coach.summary.render import summary_frequency_table, summary_match_table
-from cs2coach.tools.checker import _numeric_leaves
-from cs2coach.tools.digest import METRIC_LABELS
+from cs2coach.tools.checker import _numeric_leaves, _percent_leaves
+from cs2coach.tools.digest import METRIC_LABELS, TypedNumbers
+from cs2coach.tools.drills import drill_guidance
 
 
 def _deviation(hit: ProblemHit) -> float:
@@ -116,6 +117,7 @@ def build_summary_digest(summary: PlayerSummary, baseline: dict | None, cfg: dic
         lines.append(f"### {spec.label}（{pid}，共 {len(hits)} 次；{counts}）")
         lines.extend(f"- {ref}：{evidence_sentence(hit)}" for ref, hit in
                      representative_hits(summary, pid, limit))
+    lines.extend(drill_guidance(cfg))
     return "\n".join(lines) + "\n"
 
 
@@ -133,4 +135,24 @@ def summary_numbers(summary: PlayerSummary, baseline: dict | None) -> list[float
         values.extend(_numeric_leaves(item.model_dump()))
         if item.median is not None:
             values.extend(_numeric_leaves(compare(key, item.median, baseline)))
+    return TypedNumbers(values, summary_percentages(summary, baseline))
+
+
+def summary_percentages(summary: PlayerSummary, baseline: dict | None = None) -> list[float]:
+    """汇总条目可引用的百分比，保留字段类型。"""
+    values = []
+    for match in summary.matches:
+        if match.aim_stats:
+            values.extend(_percent_leaves(match.aim_stats.model_dump()))
+    for row in summary.frequency:
+        values.extend(_percent_leaves(row.model_dump()))
+    for key, item in summary.aim_overall.items():
+        if key.endswith("_pct") and item.median is not None:
+            values.append(item.median)
+        if item.median is not None:
+            comparison = compare(key, item.median, baseline)
+            if comparison:
+                values.append(comparison["better_than_pro_pct"])
+                if key.endswith("_pct"):
+                    values.extend(comparison[name] for name in ("pro_median", "pro_p25", "pro_p75"))
     return values

@@ -301,5 +301,5 @@ def diagnose(match: MatchData, mm: MatchMoments, cfg: dict[str, Any], baseline: 
         violations_history=result.violations_history, dropped=result.dropped,
         prompt_tokens_history=result.prompt_tokens_history)
     from cs2coach.report.render import render_diagnosis
-    d.report = render_diagnosis(d, mm, {sid: p.name for sid, p in match.players.items()})
+    d.report = render_diagnosis(d, mm, {sid: p.name for sid, p in match.players.items()}, cfg)
     return d

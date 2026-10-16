@@ -15,6 +15,7 @@ SUMMARY_PROMPT = (SYSTEM_PROMPT
 - finding 用 1–2 个代表性瞬间，最好来自不同场次；pattern 按场次列出相关瞬间，分析共同原因，不重复 finding 的交火细节。
 - 不要逐场复述比赛；单场的细节由单场报告负责。跨场引用必须写在 targets，格式如 M3:R9-death 或 M3:R9。
 - 训练计划按优先级排列，可以写成几周的计划。只有摘要标明职业选手时才按职业水平调整训练，否则沿用普通用户标准。
+- 训练建议只能使用 drills 中的练习图和摘要列出的练习方式；武器专项、道具与决策类问题暂不指定练习图，只描述方法。
 """)
 
 SUMMARY_INSTRUCTION = USER_INSTRUCTION

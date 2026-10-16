@@ -1,0 +1,902 @@
+{
+  "steamid": 76561199703310441,
+  "names": [
+    "妮妮孩孩major冠军"
+  ],
+  "matches": [
+    {
+      "number": "M1",
+      "match_id": "9209547595508347918_0",
+      "map_name": "de_inferno",
+      "rounds": 22,
+      "rounds_played": 22,
+      "score": [
+        13,
+        9
+      ],
+      "kills": 29,
+      "deaths": 12,
+      "assists": 3,
+      "aim_stats": {
+        "time_to_damage_ms": 469.0,
+        "time_to_damage_samples": 31,
+        "crosshair_placement_deg": 5.99,
+        "crosshair_placement_samples": 31,
+        "counter_strafing_pct": 82.8,
+        "counter_strafing_shots": 87,
+        "spray_accuracy_pct": 37.3,
+        "spray_shots": 134,
+        "spotted_accuracy_pct": 36.5,
+        "spotted_shots": 211,
+        "headshot_accuracy_pct": 19.2,
+        "hits": 73
+      },
+      "prominent_problems": [
+        "poor_crosshair_placement",
+        "slow_reaction"
+      ]
+    },
+    {
+      "number": "M2",
+      "match_id": "9210321637397607564_0",
+      "map_name": "de_dust2",
+      "rounds": 17,
+      "rounds_played": 17,
+      "score": [
+        13,
+        4
+      ],
+      "kills": 20,
+      "deaths": 8,
+      "assists": 2,
+      "aim_stats": {
+        "time_to_damage_ms": 469.0,
+        "time_to_damage_samples": 16,
+        "crosshair_placement_deg": 1.81,
+        "crosshair_placement_samples": 16,
+        "counter_strafing_pct": 81.9,
+        "counter_strafing_shots": 72,
+        "spray_accuracy_pct": 41.6,
+        "spray_shots": 89,
+        "spotted_accuracy_pct": 40.0,
+        "spotted_shots": 115,
+        "headshot_accuracy_pct": 29.2,
+        "hits": 48
+      },
+      "prominent_problems": [
+        "slow_reaction"
+      ]
+    },
+    {
+      "number": "M3",
+      "match_id": "9210462639496044684_0",
+      "map_name": "de_inferno",
+      "rounds": 18,
+      "rounds_played": 18,
+      "score": [
+        13,
+        5
+      ],
+      "kills": 26,
+      "deaths": 9,
+      "assists": 5,
+      "aim_stats": {
+        "time_to_damage_ms": 375.0,
+        "time_to_damage_samples": 23,
+        "crosshair_placement_deg": 3.4,
+        "crosshair_placement_samples": 23,
+        "counter_strafing_pct": 83.3,
+        "counter_strafing_shots": 102,
+        "spray_accuracy_pct": 29.2,
+        "spray_shots": 130,
+        "spotted_accuracy_pct": 33.0,
+        "spotted_shots": 179,
+        "headshot_accuracy_pct": 31.0,
+        "hits": 58
+      },
+      "prominent_problems": []
+    },
+    {
+      "number": "M4",
+      "match_id": "9210673495171964302_0",
+      "map_name": "de_dust2",
+      "rounds": 16,
+      "rounds_played": 16,
+      "score": [
+        13,
+        3
+      ],
+      "kills": 18,
+      "deaths": 8,
+      "assists": 7,
+      "aim_stats": {
+        "time_to_damage_ms": 664.0,
+        "time_to_damage_samples": 20,
+        "crosshair_placement_deg": 6.25,
+        "crosshair_placement_samples": 20,
+        "counter_strafing_pct": 70.3,
+        "counter_strafing_shots": 101,
+        "spray_accuracy_pct": 37.8,
+        "spray_shots": 148,
+        "spotted_accuracy_pct": 35.6,
+        "spotted_shots": 177,
+        "headshot_accuracy_pct": 11.6,
+        "hits": 69
+      },
+      "prominent_problems": [
+        "slow_reaction",
+        "poor_crosshair_placement"
+      ]
+    },
+    {
+      "number": "M5",
+      "match_id": "9212010755172502668_0",
+      "map_name": "de_ancient",
+      "rounds": 24,
+      "rounds_played": 24,
+      "score": [
+        13,
+        11
+      ],
+      "kills": 18,
+      "deaths": 14,
+      "assists": 1,
+      "aim_stats": {
+        "time_to_damage_ms": 406.0,
+        "time_to_damage_samples": 22,
+        "crosshair_placement_deg": 3.62,
+        "crosshair_placement_samples": 22,
+        "counter_strafing_pct": 81.8,
+        "counter_strafing_shots": 66,
+        "spray_accuracy_pct": 20.7,
+        "spray_shots": 92,
+        "spotted_accuracy_pct": 26.6,
+        "spotted_shots": 203,
+        "headshot_accuracy_pct": 19.3,
+        "hits": 57
+      },
+      "prominent_problems": []
+    },
+    {
+      "number": "M6",
+      "match_id": "9213629233256574988_0",
+      "map_name": "de_mirage",
+      "rounds": 22,
+      "rounds_played": 22,
+      "score": [
+        13,
+        9
+      ],
+      "kills": 20,
+      "deaths": 14,
+      "assists": 8,
+      "aim_stats": {
+        "time_to_damage_ms": 500.0,
+        "time_to_damage_samples": 25,
+        "crosshair_placement_deg": 2.85,
+        "crosshair_placement_samples": 25,
+        "counter_strafing_pct": 94.3,
+        "counter_strafing_shots": 35,
+        "spray_accuracy_pct": 50.0,
+        "spray_shots": 60,
+        "spotted_accuracy_pct": 39.5,
+        "spotted_shots": 167,
+        "headshot_accuracy_pct": 17.2,
+        "hits": 64
+      },
+      "prominent_problems": []
+    },
+    {
+      "number": "M7",
+      "match_id": "9215177492731139980_0",
+      "map_name": "de_dust2",
+      "rounds": 30,
+      "rounds_played": 30,
+      "score": [
+        16,
+        14
+      ],
+      "kills": 25,
+      "deaths": 25,
+      "assists": 6,
+      "aim_stats": {
+        "time_to_damage_ms": 469.0,
+        "time_to_damage_samples": 30,
+        "crosshair_placement_deg": 5.93,
+        "crosshair_placement_samples": 30,
+        "counter_strafing_pct": 89.2,
+        "counter_strafing_shots": 167,
+        "spray_accuracy_pct": 33.8,
+        "spray_shots": 201,
+        "spotted_accuracy_pct": 33.1,
+        "spotted_shots": 251,
+        "headshot_accuracy_pct": 17.4,
+        "hits": 86
+      },
+      "prominent_problems": [
+        "poor_crosshair_placement",
+        "slow_reaction"
+      ]
+    },
+    {
+      "number": "M8",
+      "match_id": "9216021770063315084_0",
+      "map_name": "de_mirage",
+      "rounds": 17,
+      "rounds_played": 17,
+      "score": [
+        13,
+        4
+      ],
+      "kills": 17,
+      "deaths": 9,
+      "assists": 1,
+      "aim_stats": {
+        "time_to_damage_ms": 484.0,
+        "time_to_damage_samples": 19,
+        "crosshair_placement_deg": 7.16,
+        "crosshair_placement_samples": 19,
+        "counter_strafing_pct": 94.9,
+        "counter_strafing_shots": 98,
+        "spray_accuracy_pct": 30.6,
+        "spray_shots": 124,
+        "spotted_accuracy_pct": 30.8,
+        "spotted_shots": 143,
+        "headshot_accuracy_pct": 29.5,
+        "hits": 44
+      },
+      "prominent_problems": []
+    },
+    {
+      "number": "M9",
+      "match_id": "g161-20260928215208404648459_de_dust2",
+      "map_name": "de_dust2",
+      "rounds": 20,
+      "rounds_played": 20,
+      "score": [
+        7,
+        13
+      ],
+      "kills": 19,
+      "deaths": 15,
+      "assists": 3,
+      "aim_stats": {
+        "time_to_damage_ms": 375.0,
+        "time_to_damage_samples": 27,
+        "crosshair_placement_deg": 3.34,
+        "crosshair_placement_samples": 27,
+        "counter_strafing_pct": 88.9,
+        "counter_strafing_shots": 45,
+        "spray_accuracy_pct": 37.3,
+        "spray_shots": 59,
+        "spotted_accuracy_pct": 37.9,
+        "spotted_shots": 124,
+        "headshot_accuracy_pct": 26.2,
+        "hits": 42
+      },
+      "prominent_problems": [
+        "poor_crosshair_placement"
+      ]
+    },
+    {
+      "number": "M10",
+      "match_id": "g161-20260929135849884675929_de_dust2",
+      "map_name": "de_dust2",
+      "rounds": 17,
+      "rounds_played": 17,
+      "score": [
+        13,
+        4
+      ],
+      "kills": 17,
+      "deaths": 9,
+      "assists": 5,
+      "aim_stats": {
+        "time_to_damage_ms": 453.0,
+        "time_to_damage_samples": 23,
+        "crosshair_placement_deg": 3.34,
+        "crosshair_placement_samples": 23,
+        "counter_strafing_pct": 91.4,
+        "counter_strafing_shots": 187,
+        "spray_accuracy_pct": 24.9,
+        "spray_shots": 205,
+        "spotted_accuracy_pct": 27.7,
+        "spotted_shots": 249,
+        "headshot_accuracy_pct": 18.1,
+        "hits": 72
+      },
+      "prominent_problems": [
+        "spray_control"
+      ]
+    },
+    {
+      "number": "M11",
+      "match_id": "g161-20260929221613531950574_de_inferno",
+      "map_name": "de_inferno",
+      "rounds": 24,
+      "rounds_played": 24,
+      "score": [
+        12,
+        12
+      ],
+      "kills": 14,
+      "deaths": 20,
+      "assists": 3,
+      "aim_stats": {
+        "time_to_damage_ms": 422.0,
+        "time_to_damage_samples": 16,
+        "crosshair_placement_deg": 6.71,
+        "crosshair_placement_samples": 16,
+        "counter_strafing_pct": 82.1,
+        "counter_strafing_shots": 39,
+        "spray_accuracy_pct": 10.6,
+        "spray_shots": 47,
+        "spotted_accuracy_pct": 20.1,
+        "spotted_shots": 274,
+        "headshot_accuracy_pct": 20.0,
+        "hits": 55
+      },
+      "prominent_problems": []
+    },
+    {
+      "number": "M12",
+      "match_id": "g161-20261008134757082775662_de_dust2",
+      "map_name": "de_dust2",
+      "rounds": 21,
+      "rounds_played": 21,
+      "score": [
+        13,
+        8
+      ],
+      "kills": 20,
+      "deaths": 16,
+      "assists": 1,
+      "aim_stats": {
+        "time_to_damage_ms": 516.0,
+        "time_to_damage_samples": 23,
+        "crosshair_placement_deg": 5.66,
+        "crosshair_placement_samples": 23,
+        "counter_strafing_pct": 93.3,
+        "counter_strafing_shots": 105,
+        "spray_accuracy_pct": 31.9,
+        "spray_shots": 141,
+        "spotted_accuracy_pct": 25.2,
+        "spotted_shots": 202,
+        "headshot_accuracy_pct": 25.9,
+        "hits": 54
+      },
+      "prominent_problems": [
+        "slow_reaction"
+      ]
+    },
+    {
+      "number": "M13",
+      "match_id": "g161-20261009192530992825357_de_dust2",
+      "map_name": "de_dust2",
+      "rounds": 21,
+      "rounds_played": 21,
+      "score": [
+        13,
+        8
+      ],
+      "kills": 24,
+      "deaths": 13,
+      "assists": 0,
+      "aim_stats": {
+        "time_to_damage_ms": 469.0,
+        "time_to_damage_samples": 23,
+        "crosshair_placement_deg": 3.0,
+        "crosshair_placement_samples": 23,
+        "counter_strafing_pct": 76.2,
+        "counter_strafing_shots": 80,
+        "spray_accuracy_pct": 28.8,
+        "spray_shots": 139,
+        "spotted_accuracy_pct": 29.9,
+        "spotted_shots": 184,
+        "headshot_accuracy_pct": 16.7,
+        "hits": 48
+      },
+      "prominent_problems": [
+        "slow_reaction",
+        "dry_peek_with_utility"
+      ]
+    },
+    {
+      "number": "M14",
+      "match_id": "g161-b-20260918203007790796881_de_inferno",
+      "map_name": "de_inferno",
+      "rounds": 24,
+      "rounds_played": 24,
+      "score": [
+        13,
+        11
+      ],
+      "kills": 28,
+      "deaths": 15,
+      "assists": 4,
+      "aim_stats": {
+        "time_to_damage_ms": 469.0,
+        "time_to_damage_samples": 26,
+        "crosshair_placement_deg": 5.67,
+        "crosshair_placement_samples": 26,
+        "counter_strafing_pct": 76.1,
+        "counter_strafing_shots": 88,
+        "spray_accuracy_pct": 29.5,
+        "spray_shots": 176,
+        "spotted_accuracy_pct": 33.9,
+        "spotted_shots": 227,
+        "headshot_accuracy_pct": 27.3,
+        "hits": 77
+      },
+      "prominent_problems": [
+        "slow_reaction"
+      ]
+    },
+    {
+      "number": "M15",
+      "match_id": "g161-b-20260919143305694257572_de_dust2",
+      "map_name": "de_dust2",
+      "rounds": 19,
+      "rounds_played": 19,
+      "score": [
+        13,
+        6
+      ],
+      "kills": 25,
+      "deaths": 7,
+      "assists": 2,
+      "aim_stats": {
+        "time_to_damage_ms": 414.0,
+        "time_to_damage_samples": 24,
+        "crosshair_placement_deg": 4.26,
+        "crosshair_placement_samples": 24,
+        "counter_strafing_pct": 83.3,
+        "counter_strafing_shots": 60,
+        "spray_accuracy_pct": 38.0,
+        "spray_shots": 108,
+        "spotted_accuracy_pct": 34.6,
+        "spotted_shots": 182,
+        "headshot_accuracy_pct": 22.2,
+        "hits": 63
+      },
+      "prominent_problems": []
+    },
+    {
+      "number": "M16",
+      "match_id": "g161-n-20260927233757853942668_de_dust2",
+      "map_name": "de_dust2",
+      "rounds": 16,
+      "rounds_played": 16,
+      "score": [
+        13,
+        3
+      ],
+      "kills": 21,
+      "deaths": 5,
+      "assists": 3,
+      "aim_stats": {
+        "time_to_damage_ms": 516.0,
+        "time_to_damage_samples": 21,
+        "crosshair_placement_deg": 3.66,
+        "crosshair_placement_samples": 21,
+        "counter_strafing_pct": 94.6,
+        "counter_strafing_shots": 37,
+        "spray_accuracy_pct": 45.7,
+        "spray_shots": 35,
+        "spotted_accuracy_pct": 50.7,
+        "spotted_shots": 69,
+        "headshot_accuracy_pct": 24.1,
+        "hits": 29
+      },
+      "prominent_problems": [
+        "slow_reaction",
+        "poor_crosshair_placement"
+      ]
+    },
+    {
+      "number": "M17",
+      "match_id": "g161-n-20260928224715762874577_de_inferno",
+      "map_name": "de_inferno",
+      "rounds": 20,
+      "rounds_played": 20,
+      "score": [
+        13,
+        7
+      ],
+      "kills": 27,
+      "deaths": 11,
+      "assists": 2,
+      "aim_stats": {
+        "time_to_damage_ms": 453.0,
+        "time_to_damage_samples": 26,
+        "crosshair_placement_deg": 5.85,
+        "crosshair_placement_samples": 26,
+        "counter_strafing_pct": 95.0,
+        "counter_strafing_shots": 80,
+        "spray_accuracy_pct": 44.9,
+        "spray_shots": 98,
+        "spotted_accuracy_pct": 40.4,
+        "spotted_shots": 146,
+        "headshot_accuracy_pct": 33.3,
+        "hits": 57
+      },
+      "prominent_problems": [
+        "slow_reaction",
+        "poor_crosshair_placement"
+      ]
+    },
+    {
+      "number": "M18",
+      "match_id": "g173-n-20261014223216271995270_de_mirage",
+      "map_name": "de_mirage",
+      "rounds": 28,
+      "rounds_played": 26,
+      "score": [
+        16,
+        12
+      ],
+      "kills": 32,
+      "deaths": 20,
+      "assists": 5,
+      "aim_stats": {
+        "time_to_damage_ms": 469.0,
+        "time_to_damage_samples": 39,
+        "crosshair_placement_deg": 3.21,
+        "crosshair_placement_samples": 39,
+        "counter_strafing_pct": 88.8,
+        "counter_strafing_shots": 134,
+        "spray_accuracy_pct": 44.5,
+        "spray_shots": 173,
+        "spotted_accuracy_pct": 42.3,
+        "spotted_shots": 227,
+        "headshot_accuracy_pct": 18.9,
+        "hits": 95
+      },
+      "prominent_problems": [
+        "slow_reaction",
+        "poor_crosshair_placement"
+      ]
+    },
+    {
+      "number": "M19",
+      "match_id": "g173-n-20261014233811572950094_de_dust2",
+      "map_name": "de_dust2",
+      "rounds": 16,
+      "rounds_played": 16,
+      "score": [
+        13,
+        3
+      ],
+      "kills": 15,
+      "deaths": 9,
+      "assists": 3,
+      "aim_stats": {
+        "time_to_damage_ms": 516.0,
+        "time_to_damage_samples": 17,
+        "crosshair_placement_deg": 4.66,
+        "crosshair_placement_samples": 17,
+        "counter_strafing_pct": 97.1,
+        "counter_strafing_shots": 70,
+        "spray_accuracy_pct": 25.6,
+        "spray_shots": 78,
+        "spotted_accuracy_pct": 27.9,
+        "spotted_shots": 172,
+        "headshot_accuracy_pct": 22.0,
+        "hits": 59
+      },
+      "prominent_problems": [
+        "spray_control"
+      ]
+    },
+    {
+      "number": "M20",
+      "match_id": "g201-20260927213614106266461_de_dust2",
+      "map_name": "de_dust2",
+      "rounds": 24,
+      "rounds_played": 24,
+      "score": [
+        13,
+        11
+      ],
+      "kills": 19,
+      "deaths": 17,
+      "assists": 2,
+      "aim_stats": {
+        "time_to_damage_ms": 562.0,
+        "time_to_damage_samples": 25,
+        "crosshair_placement_deg": 6.11,
+        "crosshair_placement_samples": 25,
+        "counter_strafing_pct": 88.9,
+        "counter_strafing_shots": 99,
+        "spray_accuracy_pct": 33.6,
+        "spray_shots": 113,
+        "spotted_accuracy_pct": 30.6,
+        "spotted_shots": 186,
+        "headshot_accuracy_pct": 19.7,
+        "hits": 61
+      },
+      "prominent_problems": [
+        "missed_trade"
+      ]
+    },
+    {
+      "number": "M21",
+      "match_id": "g201-20260930195112244070473_de_inferno",
+      "map_name": "de_inferno",
+      "rounds": 24,
+      "rounds_played": 24,
+      "score": [
+        11,
+        13
+      ],
+      "kills": 21,
+      "deaths": 17,
+      "assists": 3,
+      "aim_stats": {
+        "time_to_damage_ms": 438.0,
+        "time_to_damage_samples": 17,
+        "crosshair_placement_deg": 2.52,
+        "crosshair_placement_samples": 17,
+        "counter_strafing_pct": 92.6,
+        "counter_strafing_shots": 68,
+        "spray_accuracy_pct": 32.6,
+        "spray_shots": 92,
+        "spotted_accuracy_pct": 28.9,
+        "spotted_shots": 173,
+        "headshot_accuracy_pct": 31.4,
+        "hits": 51
+      },
+      "prominent_problems": [
+        "peeked_into_held_angle"
+      ]
+    }
+  ],
+  "skipped": [],
+  "rounds_played_total": 438,
+  "frequency": [
+    {
+      "problem": "slow_reaction",
+      "label": "出枪慢",
+      "hits": 145,
+      "per_10_rounds": 3.310502283105023,
+      "pro_per_10_rounds": 1.3754045307443366,
+      "ratio": 2.40692989524577,
+      "prominent": true,
+      "expected_hits": 60.24271844660194,
+      "excess_hits": 84.75728155339806,
+      "chance": 1.766278371218309e-20,
+      "needs_more_matches": false,
+      "matches_with_hits": 21,
+      "matches_above_pro": 19,
+      "by_map": {
+        "de_ancient": 6,
+        "de_dust2": 80,
+        "de_inferno": 38,
+        "de_mirage": 21
+      }
+    },
+    {
+      "problem": "poor_crosshair_placement",
+      "label": "准星没提前放好",
+      "hits": 132,
+      "per_10_rounds": 3.0136986301369864,
+      "pro_per_10_rounds": 1.6213592233009708,
+      "ratio": 1.858748256910836,
+      "prominent": true,
+      "expected_hits": 71.01553398058252,
+      "excess_hits": 60.98446601941748,
+      "chance": 6.546210451375651e-11,
+      "needs_more_matches": false,
+      "matches_with_hits": 21,
+      "matches_above_pro": 16,
+      "by_map": {
+        "de_ancient": 3,
+        "de_dust2": 68,
+        "de_inferno": 40,
+        "de_mirage": 21
+      }
+    },
+    {
+      "problem": "spray_control",
+      "label": "压枪差",
+      "hits": 22,
+      "per_10_rounds": 0.502283105022831,
+      "pro_per_10_rounds": 0.20064724919093851,
+      "ratio": 2.503314184710561,
+      "prominent": true,
+      "expected_hits": 8.788349514563107,
+      "excess_hits": 13.211650485436893,
+      "chance": 0.00012630046964318635,
+      "needs_more_matches": false,
+      "matches_with_hits": 12,
+      "matches_above_pro": 12,
+      "by_map": {
+        "de_dust2": 17,
+        "de_inferno": 4,
+        "de_mirage": 1
+      }
+    },
+    {
+      "problem": "dry_peek_with_utility",
+      "label": "身上有道具却直接拉出",
+      "hits": 15,
+      "per_10_rounds": 0.3424657534246575,
+      "pro_per_10_rounds": 0.1488673139158576,
+      "ratio": 2.300476474091721,
+      "prominent": true,
+      "expected_hits": 6.520388349514563,
+      "excess_hits": 8.479611650485438,
+      "chance": 0.003041254396853444,
+      "needs_more_matches": false,
+      "matches_with_hits": 10,
+      "matches_above_pro": 10,
+      "by_map": {
+        "de_dust2": 8,
+        "de_inferno": 4,
+        "de_mirage": 3
+      }
+    },
+    {
+      "problem": "overpeek_in_advantage",
+      "label": "人数优势时冒进",
+      "hits": 10,
+      "per_10_rounds": 0.228310502283105,
+      "pro_per_10_rounds": 0.07766990291262135,
+      "ratio": 2.9394977168949774,
+      "prominent": true,
+      "expected_hits": 3.4019417475728155,
+      "excess_hits": 6.598058252427185,
+      "chance": 0.002719592834264943,
+      "needs_more_matches": false,
+      "matches_with_hits": 9,
+      "matches_above_pro": 9,
+      "by_map": {
+        "de_dust2": 7,
+        "de_inferno": 2,
+        "de_mirage": 1
+      }
+    },
+    {
+      "problem": "peeked_into_held_angle",
+      "label": "主动拉出撞上对手架点",
+      "hits": 30,
+      "per_10_rounds": 0.684931506849315,
+      "pro_per_10_rounds": 0.5566343042071198,
+      "ratio": 1.2304874163746413,
+      "prominent": false,
+      "expected_hits": 24.380582524271844,
+      "excess_hits": 5.619417475728156,
+      "chance": 0.15006123526644405,
+      "needs_more_matches": true,
+      "matches_with_hits": 14,
+      "matches_above_pro": 13,
+      "by_map": {
+        "de_dust2": 15,
+        "de_inferno": 10,
+        "de_mirage": 5
+      }
+    },
+    {
+      "problem": "missed_trade",
+      "label": "漏补枪",
+      "hits": 38,
+      "per_10_rounds": 0.867579908675799,
+      "pro_per_10_rounds": 0.8090614886731392,
+      "ratio": 1.0723287671232875,
+      "prominent": false,
+      "expected_hits": 35.43689320388349,
+      "excess_hits": 2.5631067961165073,
+      "chance": 0.35527854380138485,
+      "needs_more_matches": true,
+      "matches_with_hits": 19,
+      "matches_above_pro": 10,
+      "by_map": {
+        "de_ancient": 2,
+        "de_dust2": 24,
+        "de_inferno": 8,
+        "de_mirage": 4
+      }
+    },
+    {
+      "problem": "shot_while_moving",
+      "label": "开枪时没停稳",
+      "hits": 41,
+      "per_10_rounds": 0.9360730593607306,
+      "pro_per_10_rounds": 0.8802588996763754,
+      "ratio": 1.0634065269943593,
+      "prominent": false,
+      "expected_hits": 38.55533980582524,
+      "excess_hits": 2.4446601941747588,
+      "chance": 0.36794372161956496,
+      "needs_more_matches": true,
+      "matches_with_hits": 19,
+      "matches_above_pro": 11,
+      "by_map": {
+        "de_ancient": 1,
+        "de_dust2": 19,
+        "de_inferno": 14,
+        "de_mirage": 7
+      }
+    },
+    {
+      "problem": "post_plant_utility_unused",
+      "label": "下包后带着火没用",
+      "hits": 2,
+      "per_10_rounds": 0.045662100456621,
+      "pro_per_10_rounds": 0.022653721682847898,
+      "ratio": 2.0156555772994125,
+      "prominent": false,
+      "expected_hits": 0.9922330097087378,
+      "excess_hits": 1.007766990291262,
+      "chance": 0.261383830449483,
+      "needs_more_matches": true,
+      "matches_with_hits": 2,
+      "matches_above_pro": 2,
+      "by_map": {
+        "de_inferno": 1,
+        "de_mirage": 1
+      }
+    },
+    {
+      "problem": "glock_long_range",
+      "label": "用 Glock 远距离对枪",
+      "hits": 3,
+      "per_10_rounds": 0.0684931506849315,
+      "pro_per_10_rounds": 0.05177993527508091,
+      "ratio": 1.3227739726027397,
+      "prominent": false,
+      "expected_hits": 2.267961165048544,
+      "excess_hits": 0.7320388349514562,
+      "chance": 0.39544774472258476,
+      "needs_more_matches": true,
+      "matches_with_hits": 3,
+      "matches_above_pro": 3,
+      "by_map": {
+        "de_dust2": 2,
+        "de_inferno": 1
+      }
+    },
+    {
+      "problem": "deagle_moving_shot",
+      "label": "沙鹰移动开枪",
+      "hits": 0,
+      "per_10_rounds": 0.0,
+      "pro_per_10_rounds": 0.022653721682847898,
+      "ratio": 0.0,
+      "prominent": false,
+      "expected_hits": 0.9922330097087378,
+      "excess_hits": -0.9922330097087378,
+      "chance": 1.0,
+      "needs_more_matches": false,
+      "matches_with_hits": 0,
+      "matches_above_pro": 0,
+      "by_map": {}
+    }
+  ],
+  "aim_overall": {
+    "time_to_damage_ms": {
+      "median": 469.0,
+      "matches": 21
+    },
+    "crosshair_placement_deg": {
+      "median": 4.26,
+      "matches": 21
+    },
+    "counter_strafing_pct": {
+      "median": 88.9,
+      "matches": 21
+    },
+    "spray_accuracy_pct": {
+      "median": 33.6,
+      "matches": 21
+    },
+    "spotted_accuracy_pct": {
+      "median": 33.1,
+      "matches": 21
+    },
+    "headshot_accuracy_pct": {
+      "median": 22.0,
+      "matches": 21
+    }
+  }
+}

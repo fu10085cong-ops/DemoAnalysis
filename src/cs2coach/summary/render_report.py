@@ -6,19 +6,22 @@ from collections import Counter
 from typing import TYPE_CHECKING
 
 from cs2coach.features.problems import PROBLEMS
+from cs2coach.config import load_config
 from cs2coach.report.evidence import evidence_sentence
 from cs2coach.report.facts import missed_trade_facts, render_moment_card
 from cs2coach.report.render import SEVERITY
 from cs2coach.summary.aggregate import PlayerSummary
 from cs2coach.summary.render import summary_frequency_table, summary_match_table
+from cs2coach.tools.drills import drill_labels
 
 if TYPE_CHECKING:
     from cs2coach.summary.diagnose import SummaryDiagnosis
 
 
 def render_summary_diagnosis(d: SummaryDiagnosis, summary: PlayerSummary,
-                             baseline: dict | None) -> str:
+                             baseline: dict | None, cfg: dict | None = None) -> str:
     sub = d.submission
+    labels = drill_labels(cfg or load_config())
     matches = {match.number: match for match in summary.matches}
     maps = Counter(match.map_name for match in summary.matches)
     map_text = "、".join(f"{name} {count} 场" for name, count in sorted(maps.items()))
@@ -65,7 +68,9 @@ def render_summary_diagnosis(d: SummaryDiagnosis, summary: PlayerSummary,
     for entry in sub.findings:
         lines.extend([f"### {label(entry.problem)} · {SEVERITY[entry.severity]}"])
         facts(entry)
-        lines.extend(["", "**分析**", "", entry.analysis, "", "**怎么练**", "", entry.training, ""])
+        lines.extend(["", "**分析**", "", entry.analysis, "", "**怎么练**", ""])
+        lines.extend(f"- {labels[drill]}" for drill in entry.drills if drill in labels)
+        lines.extend(["", entry.training, ""])
     lines.extend(["## 反复出现的问题", ""])
     for entry in sub.patterns:
         lines.extend([f"### {label(entry.problem)}", ""])

@@ -36,7 +36,7 @@ def mm(match):
 def payload(**overrides):
     return dict(overview="本场应重点复盘接敌准备。训练围绕首枪稳定性展开。下次复盘继续观察变化。",
         findings=[dict(problem="other", targets=["R1-death"], severity="low",
-                       analysis="这次交火的准备值得复盘，具体细节应结合上下文判断。", training="每天练100次目标切换。")],
+                       analysis="这次交火的准备值得复盘，具体细节应结合上下文判断。", training="每天练100次目标切换。", drills=[])],
         patterns=[], highlights=[], training_plan=["每天练15分钟。"] ) | overrides
 
 

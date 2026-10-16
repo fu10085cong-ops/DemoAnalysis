@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from cs2coach.features.problems import PROBLEMS, ProblemReport
 
@@ -22,6 +22,7 @@ class Finding(_SubmissionModel):
     severity: Literal["high", "medium", "low"]
     analysis: str
     training: str
+    drills: list[str] = Field(default_factory=list, max_length=2)
 
 
 class Pattern(_SubmissionModel):
@@ -94,6 +95,10 @@ def submit_tool(report: ProblemReport, cfg: dict, summary: bool = False) -> dict
         if name == "Finding":
             props["severity"]["description"] = "问题严重程度：high 高、medium 中、low 低。"
             text(props["training"], "针对本条问题提出具体、可执行的训练，不需要填写引用编号。", p["max_training_length"])
+            props["drills"].update(maxItems=2, uniqueItems=True,
+                description="仅选择白名单中适用于本问题的练习图；无指定练习图时填空数组。",
+                items={"type": "string", "enum": [d["id"] for d in cfg["training"]["drills"]]})
+            definitions[name]["required"].append("drills")
     props = schema["properties"]
     text(props["overview"], "整场总览，三到五句；数字和人数须来自摘要，不要写引用编号。", p["max_overview_length"])
     for name, minimum, maximum, description in (

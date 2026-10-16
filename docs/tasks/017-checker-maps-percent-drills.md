@@ -1,6 +1,6 @@
 # 017 检查器：地图名、百分比口径、练习图白名单
 
-状态：待做
+状态：完成
 
 ## 目标
 
@@ -111,9 +111,13 @@
 
 ## 完成报告（GPT 填写）
 
-- 改动的文件及原因：
-- 测试结果：
-- 真实 demo 验证（如有）：
-- 遗留问题 / 需要确认的地方：
+- 改动的文件及原因：`config/default.toml`、`src/cs2coach/config.py` 新增并校验地图别名、练习图和训练英文允许清单；`tools/checker.py`、`tools/digest.py`、`summary/digest.py` 区分百分比和普通数值，核对地图与场次绑定，限制练习图及训练文字；`tools/submission.py` 增加 `drills` 字段和动态 enum（旧提交缺该字段时按空数组解析）；`tools/drills.py`、单/多场提示词与摘要列出各类问题可用练习图；单/多场报告渲染在“怎么练”先显示选中名称。更新 `tests/fixtures/` 中三份历史样例以显式包含空 `drills`，新增 016 原始提交、实测汇总及 `tests/test_checker_017.py` 回归测试；`tests/test_ai.py`、`tests/test_render.py`、`tests/test_summary_ai.py` 同步字段与排版断言。
+- 测试结果：`.venv/Scripts/python.exe -m pytest -q`：**553 passed, 3 skipped**；`git diff --check` 通过。016 留存提交的关键违规：`overview` 的 `68%`、`38%` 均为地图命中次数，报 `number_not_found`；`findings[0].analysis` 把 M12 写成 de_inferno（实际 de_dust2），`highlights[0].analysis` 把 M1 写成 de_dust2（实际 de_inferno），均报 `map_mismatch`；`findings[0].training` 的《Deagle Duel》，以及 `training_plan[0]` 的《Deagle Duel》《Inferno B》《Spray Control》均报 `unknown_drill`。
+- 真实 demo 验证（如有）：未重新解析 demo、未调用任何模型；回归使用 016 实际生成的 `submission.json` 与 `summary.json`，保存在 `tests/fixtures/016_local_submission.json`、`016_local_summary.json`。
+- 遗留问题 / 需要确认的地方：016 输出未保存全部 21 场的 `MatchMoments` / `ProblemReport`，回归测试对这些详情使用空壳，仅核对依赖原始提交和实测汇总的三类新规则；因此旧规则还会产生无目标、无命中等附加违规。训练方式“平台（5E / 完美）的预瞄训练图”作为一个白名单项登记；如产品希望拆分为两个独立练习图，可在后续任务明确。
 
 ## 审查意见（Claude 填写）
+
+**审查通过（2026-10-16）。** 三类规则都已实现，并有测试覆盖：地图名（含中文别名、场次绑定、总览）、百分比口径、练习图（适用问题、5E 练枪图的条件、文字中编造的地图名）。016 本地报告的回归测试抓到了全部错误，还多找出一处 Claude 漏掉的地图错误（M1 实际是 Inferno）。553 个测试通过。
+
+提醒：`tests/fixtures/016_local_*.json` 含真实玩家名和 steamid。公开仓库前需要匿名化，已记入 `docs/product.md` 的"数据与隐私"。
