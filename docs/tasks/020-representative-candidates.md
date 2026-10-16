@@ -1,6 +1,6 @@
 # 020 代表例子由程序给出候选，补"下包前"规则
 
-状态：待做（在 019 完成之后做）
+状态：完成
 
 ## 目标
 
@@ -67,11 +67,22 @@
 
 ---
 
-## 完成报告（GPT 填写）
+## 完成报告
 
-- 改动的文件及原因：
-- 测试结果：
-- 真实 demo 验证（如有）：
-- 遗留问题 / 需要确认的地方：
+GPT 额度用完，本任务由 Claude 完成（2026-10-16）。
+
+- **改动的文件及原因**：
+  - `features/ranking.py`（新建）：`deviation`、`rank_key`、`ranked_hits`、`candidate_targets`；
+  - `summary/digest.py`：`representative_hits` 改为复用 `rank_key`，结果不变；
+  - `tools/digest.py`：单场摘要按代表性排序列出命中，并标出"〔候选〕"；
+  - `tools/checker.py`：`not_representative`，以及谓词 `not_planted`（对瞬间和漏补记录都适用）；
+  - `config/default.toml`：`finding_candidates = 3`，新增"下包前"说法；`config.py` 校验新配置；
+  - `docs/features.md`；
+  - 测试：`tests/test_ranking_candidates.py`。
+- **与任务单的差别**：如果 target 根本没有该问题的命中，只报 `precondition_failed`，不再重复报 `not_representative`。
+- **测试结果**：`pytest -q`：578 passed, 3 skipped。多场原有测试不改即通过，说明排序代码换位置后结果不变。
+- **真实 demo 验证**：没有单独跑。
 
 ## 审查意见（Claude 填写）
+
+由 Claude 实现，没有经过另一方审查。真实效果在 021 的评测中检验。

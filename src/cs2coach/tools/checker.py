@@ -14,6 +14,7 @@ from cs2coach.features.labels import WEAPON_LABELS
 from cs2coach.features.models import MatchMoments, Moment
 from cs2coach.features.problems import CONTEXT_ONLY, PROBLEMS, ProblemReport
 from cs2coach.tools.drills import AIM_PROBLEMS
+from cs2coach.features.ranking import candidate_targets
 from cs2coach.tools.slots import SLOT, make_slot_resolver, render_slots, suggest_slots
 
 if TYPE_CHECKING:
@@ -42,6 +43,7 @@ PREDICATES: dict[str, Callable[[Moment], bool]] = {
                             and math.isfinite(s.recoil_index) and s.recoil_index >= 1 for s in m.engagement.shots),
     "weapon_not_ready": lambda m: m.death is not None and m.death.weapon_ready is False,
     "planted": lambda m: m.context.bomb_planted is True,
+    "not_planted": lambda m: m.context.bomb_planted is False,
     "never": lambda m: False,
     "death": lambda m: m.kind == "death",
     "kill": lambda m: m.kind == "kill",
@@ -261,7 +263,8 @@ def _summary_resolver(summary):
 def _check_entries(sub: ReportSubmission, cfg: dict,
                    resolve, disabled: set[str], slot_factory, summary_count: int = 0,
                    match_maps: dict[str, str] | None = None,
-                   single_map: str | None = None) -> list[Violation]:
+                   single_map: str | None = None, *, candidates=None) -> list[Violation]:
+    """candidates(problem) 返回 (该问题全部命中 target, finding 可选的前几名)；None 表示不限（020）。"""
     out: list[Violation] = []
     other_paths = []
     seen_findings: set[str] = set()
@@ -282,6 +285,14 @@ def _check_entries(sub: ReportSubmission, cfg: dict,
                 if len(entry.targets) > cfg["checker"]["max_finding_targets"]:
                     add(path + ".targets", "too_many_targets",
                         f"finding 最多关联 {cfg['checker']['max_finding_targets']} 个 target，实际为 {len(entry.targets)} 个。")
+                ranked, allowed = candidates(pid) if candidates is not None and pid != "other" else ((), None)
+                if allowed is not None:
+                    for j, target in enumerate(entry.targets):
+                        # 没有这个问题命中的 target 由 precondition_failed 报告，这里只管排名靠后的真命中
+                        if target in ranked and target not in allowed:
+                            add(f"{path}.targets[{j}]", "not_representative",
+                                f"{target} 不在“{PROBLEMS[pid].label if pid in PROBLEMS else pid}”的代表候选中；"
+                                f"finding 只能从这几个中选：{'、'.join(allowed) or '无'}。其余命中可以放进 patterns。")
             if pid == "other":
                 other_paths.append(path)
             known = pid in PROBLEMS or pid == "other"
@@ -373,7 +384,8 @@ def _check_entries(sub: ReportSubmission, cfg: dict,
                     continue
                 supported = (any(PREDICATES[require](m) for m in predicate_moments)
                              or (require == "trade" and bool(records))
-                             or (require == "planted" and any(r.bomb_planted is True for r in records)))
+                             or (require == "planted" and any(r.bomb_planted is True for r in records))
+                             or (require == "not_planted" and any(r.bomb_planted is False for r in records)))
                 if not supported:
                     actual = _describe(predicate_moments, records)
                     message = ("round_time_s 是已经过去的秒数，请写成\"回合第 N 秒\"。"
@@ -420,7 +432,18 @@ def check_submission(sub: ReportSubmission, mm: MatchMoments, report: ProblemRep
     return (_check_overview(sub, digest, cfg, slots, _MOMENT_ID, maps={mm.map_name})
             + _check_entries(sub, cfg, _single_resolver(mm, report),
                              set(report.disabled) | set(cfg["problems"]["disabled"]),
-                             slots, single_map=mm.map_name))
+                             slots, single_map=mm.map_name,
+                             candidates=lambda pid: (
+                                 candidate_targets(mm, report.hits, pid, len(report.hits)),
+                                 candidate_targets(mm, report.hits, pid, cfg["checker"]["finding_candidates"]))))
+
+
+def _summary_candidates(summary, pid: str, cfg: dict) -> tuple[list[str], list[str]]:
+    """多场：该问题的全部跨场命中，以及摘要中列出的代表（finding 只能从代表中选）。"""
+    from cs2coach.summary.digest import problem_hits, representative_hits  # 避免循环导入
+    every = [ref for ref, _ in problem_hits(summary, pid)]
+    chosen = [ref for ref, _ in representative_hits(summary, pid, cfg["summary"]["representatives_per_problem"])]
+    return every, chosen
 
 
 def check_summary_submission(sub: ReportSubmission, summary, digest: str, cfg: dict,
@@ -434,4 +457,5 @@ def check_summary_submission(sub: ReportSubmission, summary, digest: str, cfg: d
         summary=summary, baseline=baseline, problem=problem, targets=targets, overview=overview)
     return (_check_overview(sub, digest, cfg, slots, _SUMMARY_ID, len(summary.matches), set(match_maps.values()))
             + _check_entries(sub, cfg, _summary_resolver(summary), disabled,
-                             slots, len(summary.matches), match_maps))
+                             slots, len(summary.matches), match_maps,
+                             candidates=lambda pid: _summary_candidates(summary, pid, cfg)))

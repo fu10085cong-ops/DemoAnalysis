@@ -266,6 +266,8 @@ number_relative_tolerance = 0.10
 number_absolute_tolerance = 0.000000001
 # 常见分位数标签，不把“75 分位”或“p90”当成比赛事实数字
 quantile_labels = [25, 50, 75, 90]
+# 单场 finding 的代表交火只能从每个问题按代表性排序的前几名中选（多场用 summary.representatives_per_problem）
+finding_candidates = 3
 # “站位偏散/离队友远”“离队友近”的距离门槛（游戏单位）。依据补枪概率实测：
 # 阵亡时最近队友 < 300 单位被补回约 34%，> 1000 单位约 5%（docs/product.md「思路分析的方法」）
 teammate_far_distance = 1000.0
@@ -339,6 +341,11 @@ require = "weapon_not_ready"
 # 下包后的描述需有瞬间或漏补记录的下包证据；否定和下包前不触发
 pattern = "(?<!没)(?<!未)(?<!还没)(?:下包后|下包的残局)|(?<!没)(?<!未)(?:已下包|包已下)"
 require = "planted"
+
+[[checker.phrases]]
+# “下包前”类说法需有未下包的证据（本地模型曾把已下包时的闪光助攻写成“下包前”，020）
+pattern = "下包前|下包之前|没下包|未下包|包还没下"
+require = "not_planted"
 
 [[checker.phrases]]
 # round_time_s 只有已过时间，不能据此推算回合剩余时间

@@ -67,6 +67,8 @@ def _validate_training(cfg: dict[str, Any]) -> None:
 def _validate_checker(cfg: dict[str, Any]) -> None:
     """敏感说法允许配置扩展，但谓词名称和正则必须能被检查器执行。"""
     from cs2coach.tools.checker import DISTANCE_PREDICATES, PHRASE_SCOPES, PREDICATES
+    if type(cfg.get("finding_candidates")) is not int or cfg["finding_candidates"] < 1:
+        raise ConfigError("配置项 checker.finding_candidates 应为正整数")
     for key in ("teammate_far_distance", "teammate_near_distance"):
         if type(cfg.get(key)) not in (int, float) or cfg[key] <= 0:
             raise ConfigError(f"配置项 checker.{key} 应为正数")

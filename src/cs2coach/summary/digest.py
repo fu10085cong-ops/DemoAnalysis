@@ -8,6 +8,7 @@ from collections import Counter
 
 from cs2coach.baseline import compare, pro_training_note
 from cs2coach.features.problems import PROBLEMS, ProblemHit
+from cs2coach.features.ranking import rank_key
 from cs2coach.report.evidence import evidence_sentence
 from cs2coach.summary.aggregate import PlayerSummary
 from cs2coach.summary.render import summary_frequency_table, summary_match_table
@@ -45,16 +46,6 @@ def _percent_leaves(value, path="") -> list[float]:
     return []
 
 
-def _deviation(hit: ProblemHit) -> float:
-    """同名数值证据相对阈值的最大偏离；无可比较字段时由时间顺序决定。"""
-    ratios = [abs(value / threshold - 1) for key, value in hit.evidence.items()
-              if isinstance(value, (int, float)) and not isinstance(value, bool)
-              and isinstance((threshold := hit.thresholds.get(key)), (int, float))
-              and not isinstance(threshold, bool) and math.isfinite(value)
-              and math.isfinite(threshold) and threshold != 0]
-    return max(ratios, default=-1.0)
-
-
 def problem_hits(summary: PlayerSummary, problem: str) -> list[tuple[str, ProblemHit]]:
     """返回跨场编号及命中，按场次与原始顺序排列。"""
     return [(f"{match.number}:{hit.target}", hit) for match in summary.matches
@@ -63,13 +54,9 @@ def problem_hits(summary: PlayerSummary, problem: str) -> list[tuple[str, Proble
 
 
 def representative_hits(summary: PlayerSummary, problem: str, limit: int) -> list[tuple[str, ProblemHit]]:
-    """先覆盖不同场次；漏补先看是否无人补回和距离，其余按阈值偏离。"""
+    """先覆盖不同场次；场内排序与单场候选相同（features/ranking.py）。"""
     def rank(hit: ProblemHit):
-        if problem == "missed_trade":
-            return (bool(hit.evidence.get("killer_traded_by_other")),
-                    float(hit.evidence.get("distance", math.inf)),
-                    int(hit.evidence.get("tick", 0)))
-        return (-_deviation(hit),)
+        return rank_key(problem, hit)
 
     groups: dict[str, list[tuple[str, ProblemHit]]] = {}
     for ref, hit in problem_hits(summary, problem):

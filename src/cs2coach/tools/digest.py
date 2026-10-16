@@ -16,6 +16,7 @@ from cs2coach.report.evidence import evidence_sentence, missed_trade_context
 from cs2coach.report.problems import frequency_table
 from cs2coach.parsing.match import MatchData
 from cs2coach.parsing.models import Team
+from cs2coach.features.ranking import candidate_targets, ranked_hits
 from cs2coach.tools.drills import drill_guidance
 from cs2coach.tools.slots import slot_guidance
 
@@ -97,11 +98,17 @@ def build_digest(match: MatchData, mm: MatchMoments, baseline: dict[str, Any] | 
             "因此这两类问题在击杀中出现得更多，击杀和死亡的比例不说明问题。"
             "TTD 是从看见对手到第一次命中的时间，分为“看见→开枪”和“开枪→命中”，不能说成开第一枪用了相同时间。"
             "频率按每 10 回合计算，与职业比较的是整体频率，不按击杀和死亡分开。"])
+        limit = (cfg or load_config())["checker"]["finding_candidates"]
+        lines.append(f"每个问题按代表性排序（偏离职业阈值越大越靠前），finding 的 targets 只能从标“〔候选〕”的前 {limit} 个中选；"
+                     "pattern 可以列出全部命中。")
         for pid, spec in PROBLEMS.items():
             hits = [h for h in problems.hits if h.problem == pid]
             if hits:
+                ranked = ranked_hits(mm, hits, pid) + [h for h in hits if h.target == "match"]
+                chosen = set(candidate_targets(mm, hits, pid, limit))
                 lines.append(f"### {spec.label}（{pid}）")
-                lines.extend(f"- {h.target}：{evidence_sentence(h)}" for h in hits)
+                lines.extend(f"- {'〔候选〕' if h.target in chosen else ''}{h.target}：{evidence_sentence(h)}"
+                             for h in ranked)
         if not problems.hits:
             lines.append("没有已启用规则的命中，不要将背景数据当作已检测的问题。")
     lines.extend(["", _moments_section(mm)])
