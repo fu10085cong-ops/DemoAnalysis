@@ -289,6 +289,8 @@ spray_late_recoil_index = 3
 spray_min_late_shots = 6
 # 比职业期望命中率低多少个百分点才命中
 spray_margin_pct = 15.0
+# 超过此交火距离（米）不评价单次交火压枪
+spray_max_distance_m = 30.0
 # 整场按武器、按发数段评价至少需要的子弹数
 spray_min_segment_shots = 30
 # 移动扫射评价从连射第 2 发开始，排除首枪
@@ -298,9 +300,7 @@ spray_moving_min_shots = 4
 # 移动扫射中未停稳子弹的比例阈值（待用数据校准）
 spray_moving_ratio = 0.5
 # 看见对手前至少开出多少枪时，不判断出枪慢和准星
-max_shots_before_seen = 2
-# 看见后首枪速度相对急停阈值的余量
-moving_shot_margin = 0.10
+max_shots_before_seen = 1
 # 准星转角相对职业 75 分位的余量
 crosshair_margin_ratio = 0.10
 # 先看见、先开枪至少领先的秒数；0.045 让 64 tick 下的 3 tick（0.047 秒）刚好够格
@@ -308,10 +308,23 @@ highlight_min_lead_s = 0.045
 # 已被其他队友补上的记录不作为漏补枪问题
 missed_trade_exclude_traded_by_other = true
 
+[problems.moving_shot_thresholds]
+ak47 = 0.374
+# Galil 样本少，暂按 AK 同类处理，待校准
+galilar = 0.374
+m4a1 = 0.45
+m4a1_silencer = 0.45
+# FAMAS、AUG、SG 553 样本少，暂按 M4 同类处理，待校准
+famas = 0.45
+aug = 0.45
+sg556 = 0.45
+deagle = 0.45
+
 [problems.exclusions]
 through_smoke = ["slow_reaction", "poor_crosshair_placement", "spray_control", "spray_while_moving", "peeked_into_held_angle", "dry_peek_with_utility", "overpeek_in_advantage", "won_duel_seen_first", "died_without_seeing"]
+first_seen_through_smoke = ["spray_control", "spray_while_moving", "won_duel_seen_first"]
 wallbang = ["peeked_into_held_angle", "dry_peek_with_utility", "overpeek_in_advantage", "died_without_seeing"]
-player_blinded_in_fight = ["slow_reaction", "poor_crosshair_placement", "spray_control", "spray_while_moving", "shot_while_moving", "peeked_into_held_angle", "dry_peek_with_utility"]
+player_blinded_in_fight = ["slow_reaction", "poor_crosshair_placement", "spray_control", "spray_while_moving", "shot_while_moving", "deagle_moving_shot", "peeked_into_held_angle", "dry_peek_with_utility"]
 opponent_blinded_by_own_side = ["peeked_into_held_angle", "overpeek_in_advantage"]
 killed_by_utility = ["died_without_seeing", "peeked_into_held_angle"]
 fired_before_seen = ["slow_reaction", "poor_crosshair_placement"]
