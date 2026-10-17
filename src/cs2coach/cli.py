@@ -14,6 +14,7 @@ from pathlib import Path
 from cs2coach.config import ConfigError, load_config
 from cs2coach.console import ensure_utf8_stdio
 from cs2coach.parsing.loader import DemoLoadError, resolve_demo
+from cs2coach.report.index_page import write_index
 
 
 def _output_folder(root: Path, demo: Path, name: str, steamid: int) -> Path:
@@ -40,6 +41,12 @@ def _check_report_page(page, cfg: dict) -> None:
         print(f"报告页一致性检查：{len(issues)} 处")
         for issue in issues:
             print(f"  {issue}")
+
+
+def _refresh_index(root: Path) -> None:
+    """在输出根目录刷新可点击的报告目录。"""
+    path = write_index(root)
+    print(f"报告目录：{path}")
 
 
 def _archive_reports(folder: Path, names: tuple[str, ...] = ("report.md", "submission.json", "report_data.json", "report.html")) -> None:
@@ -168,6 +175,7 @@ def _summary(args: argparse.Namespace) -> int:
     (folder / "report_data.json").write_text(page.model_dump_json(indent=2) + "\n", encoding="utf-8", newline="\n")
     _check_report_page(page, cfg)
     (folder / "report.html").write_text(render_page(page), encoding="utf-8", newline="\n")
+    _refresh_index(args.out)
     print(f"汇总完成：{len(result.matches)} 场，在场 {result.rounds_played_total} 回合，"
           f"跳过 {len(result.skipped)} 场")
     if args.ai:
@@ -333,6 +341,7 @@ def _analyze(args: argparse.Namespace) -> int:
     (folder / "report_data.json").write_text(page.model_dump_json(indent=2) + "\n", encoding="utf-8", newline="\n")
     _check_report_page(page, cfg)
     (folder / "report.html").write_text(render_page(page), encoding="utf-8", newline="\n")
+    _refresh_index(args.out)
     if not args.ai:
         print("加上 --ai 生成 AI 复盘报告")
         print(f"输出目录：{folder}")
