@@ -4,6 +4,7 @@ from cs2coach.baseline import build_baseline
 from cs2coach.config import load_config
 from cs2coach.features.models import MissedTrade
 from cs2coach.features.problems import FrequencyRow, ProblemHit, ProblemReport
+from cs2coach.report.evidence import evidence_sentence
 from cs2coach.tools.checker import check_submission
 from cs2coach.tools.slots import SlotError, count_values, make_slot_resolver, render_slots, render_submission
 from cs2coach.tools.submission import parse_submission
@@ -29,6 +30,7 @@ def moments():
                               "bomb_planted": True},
                      engagement={"time_to_damage_s": 0.875, "seen_to_first_shot_s": 0.578,
                                  "first_shot_to_damage_s": 0.297, "crosshair_placement_deg": 46.35,
+                                 "crosshair_initial_offset_m": 4.62,
                                  "first_shot_lead_s": 0.27, "seen_first_lead_s": -0.42,
                                  "shots": shots(False, True, True), "shots_fired": 3, "shots_hit": 2,
                                  "contact_type": "peek", "player_speed_at_contact": 209.4,
@@ -82,7 +84,7 @@ def test_moment_fields_display_like_fact_cards():
     assert render("回合第{R5-kill2.round_time}，{R5-kill2.people}") == "回合第47 秒，1v3"
     assert render("{R5-kill2.distance}") == "12 米"
     assert render("{R5-kill2.ttd}={R5-kill2.seen_to_shot}+{R5-kill2.shot_to_hit}") == "875 毫秒=578 毫秒+297 毫秒"
-    assert render("{R5-kill2.crosshair}") == "46.4°"
+    assert render("{R5-kill2.crosshair_turn}") == "46.4°"
     assert render("{R5-kill2.shots}/{R5-kill2.hits}/{R5-kill2.hit_rate}") == "3/2/66.7%"
     assert render("{R5-kill2.speed}") == "209 单位/秒"
     assert render("{R19-kill1.first_hit_shot}") == "第 8 发"
@@ -97,14 +99,16 @@ def test_order_sentences_follow_sign():
     assert "拉出" in render("{R5-kill2.contact}")
 
 
-def test_value_threshold_gap_use_the_entry_problem():
-    assert render("{R5-kill2.value}/{R5-kill2.threshold}/{R5-kill2.gap}", problem="slow_reaction") == \
-        "875 毫秒/531 毫秒/344 毫秒"
-    # 同一瞬间、不同问题取各自的键：这正是"9.7° 配错武器"一类错误的根除方式
-    assert render("{R5-kill2.threshold}", problem="poor_crosshair_placement") == "2.3 米"
-    assert render("{R19-kill1.value}/{R19-kill1.threshold}", problem="spray_control") == "15.4%/39.2%"
-    _, errors = render_slots("{R19-kill1.threshold}", resolver(problem="slow_reaction"))
-    assert errors and errors[0].code == "slot_unavailable"  # 该瞬间没有出枪慢命中
+def test_basis_uses_the_entry_problem():
+    for problem, target in (("slow_reaction", "R5-kill2"), ("poor_crosshair_placement", "R5-kill2"),
+                            ("spray_control", "R19-kill1")):
+        hit = next(h for h in report().hits if h.problem == problem and h.target == target)
+        assert render("{" + target + ".basis}", problem=problem) == evidence_sentence(hit).removesuffix("。")
+    _, errors = render_slots("{R19-kill1.basis}", resolver(problem="slow_reaction"))
+    assert errors and errors[0].code == "slot_unavailable"
+    for field in ("value", "threshold", "gap"):
+        _, errors = render_slots("{R5-kill2." + field + "}", resolver(problem="slow_reaction"))
+        assert errors and errors[0].code == "comparison_slot_removed"
 
 
 def test_missed_trade_round_index():
@@ -177,8 +181,8 @@ def test_regression_2026_10_16_sentences_render_true_values():
     extra = make_moment(kind="kill", id="R7-kill1", round=7, tags=["opening_kill"])
     counts = count_values(make_mm([*moments(), extra], rounds=30))
     assert (counts["opening_kills"], counts["saw_first_kills"]) == (2, 1)  # 两个计数口径不同，不会混用
-    # 本地 M7：Five-SeveN 的交火配上 AK 的 9.7° → threshold 按命中取对应武器阈值
-    assert render("{R5-kill2.threshold}", problem="poor_crosshair_placement") == "2.3 米"
+    # 本地 M7：准星问题的比较由程序依据句按命中武器拼好
+    assert "2.3 米" in render("{R5-kill2.basis}", problem="poor_crosshair_placement")
     # flash 玩家02："其中两次随后阵亡"→ 只能写计数占位符或不写数量
     assert "chinese_number" in _check("其中两次随后阵亡。")
     # flash 汇总："整段九发只中两发"（9 发其实是后段）→ shots/hits 取整段
@@ -197,12 +201,12 @@ def test_duplicate_units_and_ordinal_are_removed():
     # 本地千问实测（2026-10-16）：在带单位的占位符后面又写单位
     assert render("用了{R5-kill2.ttd}ms") == "用了875 毫秒"
     assert render("用了{R5-kill2.ttd} 毫秒，距离{R5-kill2.distance}米") == "用了875 毫秒，距离12 米"
-    assert render("转了{R5-kill2.crosshair}°，速度{R5-kill2.speed}u/s") == "转了46.4°，速度209 单位/秒"
+    assert render("转了{R5-kill2.crosshair_turn}°，速度{R5-kill2.speed}u/s") == "转了46.4°，速度209 单位/秒"
     assert render("第{R5-kill2.round}回合") == "第 5 回合"
     assert render("直到第{R19-kill1.first_hit_shot}才命中") == "直到第 8 发才命中"
     assert render("{freq.slow_reaction.chance}%", overview=True) == "0.1%"
     assert render("{R5-kill2.distance} meters") == "12 米 meters"  # 后面是英文单词时不当作单位
-    assert render("共{R5-kill2.gap}ms差距", problem="slow_reaction") == "共344 毫秒差距"  # 实测："344 毫秒ms差距"
+    assert render("共{R5-kill2.seen_to_shot}ms", problem="slow_reaction") == "共578 毫秒"
     # 评测实测（2026-10-16）："你你先看见对手"、"从第 第 5 发"、"多 7.90291 次"
     assert render("你{R5-kill2.shot_order}") == "你先开枪，领先 0.27 秒"
     assert render("而对手{R19-kill1.shot_order}") == "而对手先开枪，领先 0.03 秒"
@@ -243,7 +247,7 @@ def test_training_text_may_use_slots():
 
 def test_quantile_names_people_and_ambiguous_suggestions():
     # 本地千问实测：“75分位”“残局1v3”被当成数字；小整数推荐了无关问题的频率
-    assert _check("{R5-kill2.gap}，高于职业同武器 75 分位 {R5-kill2.threshold}，p90 也更高。") == set()
+    assert _check("{R5-kill2.basis}，职业同武器 75 分位与 p90 是不同基准。") == set()
     sub = parse_submission(dict(overview="本场值得复盘。", findings=[dict(problem="slow_reaction",
         targets=["R5-kill2"], severity="medium", analysis="残局1v3，开了3枪。", training="练。", drills=[])],
         patterns=[], highlights=[], training_plan=["练。"]))
@@ -251,6 +255,49 @@ def test_quantile_names_people_and_ambiguous_suggestions():
     message = next(x.message for x in v if x.code == "raw_number")
     assert "1v3 → {R5-kill2.people}" in message
     assert "3 → {R5-kill2.shots}" in message  # 本条瞬间的字段优先于整场计数和频率
+
+
+def test_s03_crosshair_slots_and_metric_wording():
+    assert render("{R5-kill2.crosshair_offset}") == "4.6 米"
+    _, errors = render_slots("{R5-kill2.crosshair}", resolver())
+    assert errors[0].code == "unknown_slot" and "crosshair_turn" in errors[0].message
+    assert _check("刚看见对手时准星离头部{R5-kill2.crosshair_turn}。", problem="poor_crosshair_placement") >= {"metric_mismatch"}
+    assert "metric_mismatch" not in _check("准星转过{R5-kill2.crosshair_turn}。", problem="poor_crosshair_placement")
+    assert "metric_mismatch" in _check("准星转过{R5-kill2.crosshair_offset}。", problem="poor_crosshair_placement")
+    assert "metric_mismatch" not in _check("刚看见对手时准星离头部{R5-kill2.crosshair_offset}。", problem="poor_crosshair_placement")
+    assert "unknown_slot" in _check("刚看见对手时准星离他很远，准星已经转过{R5-kill2.crosshair}。",
+                                    problem="poor_crosshair_placement")
+
+
+def test_s03_overview_and_training_targets():
+    def check(overview="本场值得复盘。", training="每组 20 次，共 3 组。", plan="每周练 3 次。"):
+        sub = parse_submission(dict(overview=overview, findings=[dict(problem="poor_crosshair_placement",
+            targets=["R5-kill2"], severity="low", analysis="准星值得调整。", training=training, drills=[])],
+            patterns=[], highlights=[], training_plan=[plan]))
+        return {v.code for v in check_submission(sub, match_moments(), report(), "地图 de_test。", CFG,
+                                                  None, (16, 14), FREQ, BASELINE)}
+    assert "overview_contradiction" in check(overview="本场准星不差。")
+    assert "overview_contradiction" in check(overview="本场 Crosshair Placement 为{match.crosshair}。")
+    assert "overview_contradiction" not in check()
+    assert "training_target_number" not in check()
+    for target in ("命中率达到 90%", "10 发至少中 8 发", "首枪命中率低于九成", "前 10 发全部落在靶心区域"):
+        assert "training_target_number" in check(training=target)
+        assert "training_target_number" in check(plan=target)
+    assert "slot_unavailable" in check(training="{R5-kill2.basis}")
+    assert "slot_target_not_cited" in check(overview="{R5-kill2.basis}")
+
+
+def test_s03_baseline_comparison_sentence_is_rejected_and_overview_without_hit_is_allowed():
+    assert "comparison_slot_removed" in _check(
+        "从看见到第一次命中一共用了{R5-kill2.value}，职业同武器 75 分位是{R5-kill2.threshold}。")
+    sub = parse_submission(dict(overview="本场准星不差。", findings=[dict(problem="slow_reaction",
+        targets=["R5-kill2"], severity="low", analysis="出枪值得复盘。", training="练。", drills=[])],
+        patterns=[], highlights=[], training_plan=["练。 "]))
+    no_crosshair = ProblemReport(hits=[h for h in report().hits if h.problem != "poor_crosshair_placement"],
+                                 disabled=[], skipped={}, baseline_source="测试")
+    codes = {v.code for v in check_submission(sub, match_moments(), no_crosshair, "地图 de_test。", CFG,
+                                               None, (16, 14), FREQ, BASELINE)}
+    assert "overview_contradiction" not in codes
 
 
 def test_unit_value_used_as_count_is_flagged():

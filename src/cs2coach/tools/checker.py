@@ -15,7 +15,7 @@ from cs2coach.features.models import MatchMoments, Moment
 from cs2coach.features.problems import CONTEXT_ONLY, PROBLEMS, ProblemReport
 from cs2coach.tools.drills import AIM_PROBLEMS
 from cs2coach.features.ranking import candidate_targets
-from cs2coach.tools.slots import SLOT, make_slot_resolver, render_slots, suggest_slots
+from cs2coach.tools.slots import SLOT, SlotError, make_slot_resolver, render_slots, suggest_slots
 
 if TYPE_CHECKING:
     from cs2coach.tools.submission import ReportSubmission
@@ -100,6 +100,7 @@ DISTANCE_PREDICATES = {"teammate_far", "teammate_near", "close_range", "long_ran
 # 分段主次依赖 checker.segment_major_ratio，只允许 all 分支从当前配置取阈值。
 SEGMENT_PREDICATES = {"seen_to_shot_major", "shot_to_hit_major"}
 PHRASE_SCOPES = {"any", "all"}
+METRIC_MISMATCH_PREDICATES = {"crosshair_turn_context", "crosshair_offset_context"}
 
 
 def range_phrase_pattern(phrase: dict, checker_cfg: dict) -> str:
@@ -142,7 +143,7 @@ def _slot_violations(text: str, path: str, resolver, cfg: dict) -> list[Violatio
     for found in _SEGMENT_VS_THRESHOLD.finditer(text):
         out.append(Violation(path=path, code="slot_misuse",
             message=f"{{{found[1]}.{found[2]}}} 只是 TTD 的一段，不能和职业阈值比较；阈值对应的是整个 TTD，"
-                    f"请写成“{{{found[1]}.value}} 高于 {{{found[1]}.threshold}}”，分段只用来说明慢在哪一段。"))
+                    f"请引用 {{{found[1]}.basis}} 中同一口径的程序检测依据。"))
     clean = SLOT.sub(" ", text)
     clean = _WEAPONS.sub(" ", clean)
     for names in cfg["checker"]["map_aliases"].values():
@@ -221,6 +222,11 @@ def _map_violations(text: str, path: str, allowed: set[str], cfg: dict,
 def _training_violations(text: str, path: str, cfg: dict, resolver=None) -> list[Violation]:
     from cs2coach.tools.digest import METRIC_LABELS
     slot_errors = render_slots(text, resolver)[1] if resolver is not None else []
+    if any(slot.group(1).endswith(".basis") for slot in SLOT.finditer(text)) and not any(
+            error.slot.endswith(".basis") for error in slot_errors):
+        slot_errors.append(SlotError("slot_unavailable", "basis", "basis 只能用在问题条目的分析里。"))
+    forbidden = [match.group() for pattern in cfg["checker"]["training_forbidden_patterns"]
+                 if (match := re.search(pattern, text))]
     text = SLOT.sub(" ", text)  # 训练文字可以引用比赛数据的占位符，不算英文名称
     allowed_labels = {d["label"].casefold() for d in cfg["training"]["drills"]}
     allowed = allowed_labels | {s.casefold() for s in cfg["training"]["allowed_latin"]}
@@ -228,6 +234,9 @@ def _training_violations(text: str, path: str, cfg: dict, resolver=None) -> list
     allowed.update(v[0].casefold() for v in METRIC_LABELS.values())
     allowed.update(alias.casefold() for names in cfg["checker"]["map_aliases"].values() for alias in names)
     out = [Violation(path=path, code=e.code, message=e.message) for e in slot_errors]
+    if forbidden:
+        out.append(Violation(path=path, code="training_target_number",
+                             message=f"训练达标标准不能写具体数字或成功率：{'、'.join(forbidden)}；请写直到动作稳定或下次复盘对比。"))
     for match in _BOOK.finditer(text):
         if match[1].casefold() not in allowed_labels:
             out.append(Violation(path=path, code="unknown_drill",
@@ -465,7 +474,7 @@ def _check_entries(sub: ReportSubmission, cfg: dict,
                         f"“{every.group()}”与数据不符：{PROBLEMS[pid].label if pid in PROBLEMS else pid}出现在 "
                         f"{covered}/{summary_count} 场。请写成 {{freq.{pid}.matches_with_hits}} 场。")
             out.extend(_slot_violations(entry.analysis, text_path,
-                                        slot_factory(pid, entry.targets), cfg))
+                                        slot_factory(pid if group != "highlights" else None, entry.targets), cfg))
             if group == "findings":
                 for j, drill_id in enumerate(entry.drills):
                     drill = drills.get(drill_id)
@@ -474,7 +483,7 @@ def _check_entries(sub: ReportSubmission, cfg: dict,
                         add(f"{path}.drills[{j}]", "drill_not_allowed",
                             f"练习图 {drill_id} 不适用于 {pid} 或本报告枪法问题类别不足。")
                 out.extend(_training_violations(entry.training, path + ".training", cfg,
-                                                slot_factory(pid, entry.targets)))
+                                                slot_factory(None, entry.targets)))
             # 用户确认：match 可用整场逐枪数据核对说法，但不扩大其允许数值集合。
             predicate_moments = moments
             if "match" in entry.targets and pid == "spray_control":
@@ -483,6 +492,9 @@ def _check_entries(sub: ReportSubmission, cfg: dict,
                 require = phrase["require"]
                 reported_sentences: set[tuple[int, int]] = set()
                 for match in re.finditer(range_phrase_pattern(phrase, cfg["checker"]), entry.analysis):
+                    if require in METRIC_MISMATCH_PREDICATES:
+                        add(text_path, "metric_mismatch", "准星初始距离与 Leetify 转角口径不能混用；请更换准星占位符。")
+                        continue
                     span, selected, indices = _sentence_targets(entry.analysis, match.start(), target_data)
                     if span in reported_sentences:
                         continue
@@ -556,9 +568,13 @@ def _check_entries(sub: ReportSubmission, cfg: dict,
 
 def _check_overview(sub: ReportSubmission, digest: str, cfg: dict, slot_factory,
                     id_pattern: re.Pattern, summary_count: int = 0,
-                    maps: set[str] | None = None) -> list[Violation]:
+                    maps: set[str] | None = None, crosshair_hit: bool = False) -> list[Violation]:
     out = _slot_violations(sub.overview, "overview", slot_factory(None, (), True), cfg)
     out.extend(_map_violations(sub.overview, "overview", maps or set(), cfg))
+    if crosshair_hit and any(re.search(pattern, sub.overview)
+                             for pattern in cfg["checker"]["overview_crosshair_forbidden_patterns"]):
+        out.append(Violation(path="overview", code="overview_contradiction",
+                             message="本报告命中准星预瞄问题；总览不要评价整场 Crosshair Placement 数值或说准星不差。"))
     identifiers = CITATION.findall(sub.overview) + id_pattern.findall(CITATION.sub(" ", sub.overview))
     if identifiers:
         out.append(Violation(path="overview", code="id_in_text", message="总览中不能写引用编号：" + "、".join(identifiers)))
@@ -581,7 +597,8 @@ def check_submission(sub: ReportSubmission, mm: MatchMoments, report: ProblemRep
     """
     slots = lambda problem, targets, overview=False: make_slot_resolver(
         mm, report, score, frequency, baseline, problem=problem, targets=targets, overview=overview)
-    return (_check_overview(sub, digest, cfg, slots, _MOMENT_ID, maps={mm.map_name})
+    return (_check_overview(sub, digest, cfg, slots, _MOMENT_ID, maps={mm.map_name},
+                            crosshair_hit=any(h.problem == "poor_crosshair_placement" for h in report.hits))
             + _check_entries(sub, cfg, _single_resolver(mm, report),
                              set(report.disabled) | set(cfg["problems"]["disabled"]),
                              slots, single_map=mm.map_name,
@@ -607,7 +624,9 @@ def check_summary_submission(sub: ReportSubmission, summary, digest: str, cfg: d
     match_maps = {match.number: match.map_name for match in summary.matches}
     slots = lambda problem, targets, overview=False: make_slot_resolver(
         summary=summary, baseline=baseline, problem=problem, targets=targets, overview=overview)
-    return (_check_overview(sub, digest, cfg, slots, _SUMMARY_ID, len(summary.matches), set(match_maps.values()))
+    return (_check_overview(sub, digest, cfg, slots, _SUMMARY_ID, len(summary.matches), set(match_maps.values()),
+                            crosshair_hit=any(h.problem == "poor_crosshair_placement"
+                                              for match in summary.matches for h in summary.detail(match.number)[1].hits))
             + _check_entries(sub, cfg, _summary_resolver(summary), disabled,
                              slots, len(summary.matches), match_maps,
                              candidates=lambda pid: _summary_candidates(summary, pid, cfg),

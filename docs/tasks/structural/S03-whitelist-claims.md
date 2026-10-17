@@ -1,6 +1,6 @@
 # S03 事实性说法改由程序提供：对比句、准星两种口径、训练目标
 
-状态：待做
+状态：完成（改动后的评测待运行）
 难度：A（改检查器、占位符和提示词的分工）
 执行：Codex，思考强度 medium（产品负责人指定）
 分支：`task/S03-whitelist-claims`
@@ -86,9 +86,16 @@
 
 ## 完成报告（实现方填写，尽量简短）
 
-- 改动的文件及原因：
-- 测试结果（最后一行）：
-- 更新了哪些旧测试的预期：
-- 遗留问题 / 需要确认的地方：
+- 改动的文件及原因：`slots.py`、`checker.py`、`config.py`、`default.toml`、`ai/prompts.py`：依据句占位符、准星双口径、总览和训练目标检查及固定提示词；`docs/eval_log.md`：匿名化基线中的玩家名以通过隐私扫描；相关测试覆盖单场、多场及基线错句。
+- 测试结果（最后一行）：`825 passed, 3 skipped in 19.67s`。`privacy_scan.py` 退出码 0（身份信息命中 0 处）；未调用付费 API。
+- 更新了哪些旧测试的预期：`test_slots.py` 的 crosshair 与 value/threshold/gap 渲染预期改为双口径和 basis/停用违规；`test_checker.py` 的 match.value 改为 match.basis；`test_situation_claims.py` 的旧对比句改为停用违规与 basis 通过。
+- 遗留问题 / 需要确认的地方：无。
 
 ## 审查意见（Claude 填写）
+
+**审查通过（2026-10-17，Claude）。** 新的违规代码 `comparison_slot_removed`、`metric_mismatch`、`overview_contradiction`、`training_target_number` 和 `{对象.basis}` 都和任务单一致，正则都放在配置里；基线报告中的错句改动后都会被拦下。
+
+Codex 还发现 Claude 写进 `eval_log.md` 的基线记录里有真实玩家名，已经匿名化。
+
+改动后的效果，要用评测集测量。
+

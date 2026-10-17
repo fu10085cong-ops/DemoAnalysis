@@ -9,6 +9,7 @@ from cs2coach.ai.providers import ToolCall, Turn, Usage
 from cs2coach.config import load_config
 from cs2coach.features.models import MissedTrade
 from cs2coach.features.problems import ProblemHit, ProblemReport
+from cs2coach.report.evidence import evidence_sentence
 from cs2coach.summary.aggregate import aggregate_matches
 from cs2coach.summary.diagnose import diagnose_summary
 from cs2coach.summary.diagnose import SummaryDiagnosis
@@ -18,6 +19,7 @@ from cs2coach.summary.discover import DemoRef
 from cs2coach.summary.queries import SUMMARY_TOOLS, run_summary_tool
 from cs2coach.summary.render import render_summary_problems
 from cs2coach.tools.checker import check_summary_submission
+from cs2coach.tools.slots import make_slot_resolver, render_slots
 from cs2coach.tools.queries import ToolError
 from cs2coach.tools.submission import parse_submission, submit_tool
 from tests.helpers.moments import make_mm, make_moment
@@ -56,6 +58,18 @@ def submission(target="M1:R1-death", analysis="这次交火的准备值得复盘
     return dict(overview=overview, findings=[dict(problem="slow_reaction", targets=[target],
         severity="medium", analysis=analysis, training="每周练习三次接敌准备。")],
         patterns=[], highlights=[], training_plan=["每周复盘两次首枪准备。"])
+
+
+def test_summary_basis_uses_cross_match_target_and_rejects_old_comparison_slots():
+    summary, baseline, cfg = sample()
+    resolve = make_slot_resolver(summary=summary, baseline=baseline, problem="slow_reaction",
+                                 targets=("M1:R1-death",))
+    shown, errors = render_slots("{M1:R1-death.basis}", resolve)
+    assert errors == []
+    assert shown == evidence_sentence(summary.detail("M1")[1].hits[0]).removesuffix("。")
+    sub = parse_submission(submission(analysis="{M1:R1-death.value} 高于 {M1:R1-death.threshold}。"))
+    codes = {v.code for v in check_summary_submission(sub, summary, "地图 de_test。", cfg, [], baseline)}
+    assert "comparison_slot_removed" in codes
 
 
 class FakeProvider:

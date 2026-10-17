@@ -21,11 +21,11 @@ METRICS = {
     "headshot": ("headshot_accuracy_pct", "hits"),
 }
 MOMENT_FIELDS = ("round side people round_time place opponent_place distance health opponent_health equip opponent_equip "
-                 "ttd seen_to_shot shot_to_hit opponent_ttd crosshair shots hits hit_rate speed "
+                 "ttd seen_to_shot shot_to_hit opponent_ttd crosshair_turn crosshair_offset basis shots hits hit_rate speed "
                  "opponent_speed trade_delay teammate_distance first_hit_shot shot_order seen_order contact "
                  "situation value threshold gap").split()
 ROUND_FIELDS = "situation people round_time distance count".split()
-MATCH_FIELDS = ("score rounds rounds_played kills deaths assists value threshold gap " + " ".join(METRICS) +
+MATCH_FIELDS = ("score rounds rounds_played kills deaths assists value threshold gap basis " + " ".join(METRICS) +
                 " " + " ".join(f"{m}_samples" for m in METRICS)).split()
 FREQ_FIELDS = "hits expected excess chance ratio matches_with_hits matches_above_pro".split()
 COUNT_LABELS = {
@@ -231,7 +231,8 @@ def _moment_value(m: Moment, field: str, slot: str):
         "seen_to_shot": (e.seen_to_first_shot_s * 1000 if e and e.seen_to_first_shot_s is not None else None, "ms"),
         "shot_to_hit": (e.first_shot_to_damage_s * 1000 if e and e.first_shot_to_damage_s is not None else None, "ms"),
         "opponent_ttd": (e.opponent_time_to_damage_s * 1000 if e and e.opponent_time_to_damage_s is not None else None, "ms"),
-        "crosshair": (e.crosshair_placement_deg if e else None, "deg"),
+        "crosshair_turn": (e.crosshair_placement_deg if e else None, "deg"),
+        "crosshair_offset": (e.crosshair_initial_offset_m if e else None, "offset_m"),
         "shots": (e.shots_fired if e else None, "count"), "hits": (e.shots_hit if e else None, "count"),
         "hit_rate": (100 * e.shots_hit / e.shots_fired if e and e.shots_fired else None, "pct"),
         "speed": (e.player_speed_at_contact if e else None, "speed"),
@@ -271,6 +272,12 @@ def make_slot_resolver(mm: MatchMoments | None = None, report: ProblemReport | N
         if len(parts) < 2:
             return SlotError("unknown_slot", slot, "占位符应为 {对象.字段}。")
         obj, field = parts[0], FIELD_ALIASES.get(parts[1], parts[1])
+        if len(parts) == 2 and field in ("value", "threshold", "gap"):
+            return SlotError("comparison_slot_removed", slot,
+                             f"{{{slot}}} 已停用；请引用本条问题的 {{对象.basis}} 程序检测依据句。")
+        if len(parts) == 2 and field == "crosshair":
+            return SlotError("unknown_slot", slot,
+                             f"{{{slot}}} 已停用；请按口径使用 {{对象.crosshair_turn}} 或 {{对象.crosshair_offset}}。")
         if obj == "count" and len(parts) == 2:
             if field not in COUNT_LABELS:
                 return SlotError("unknown_slot", slot, "count 可用字段：" + "、".join(COUNT_LABELS))
@@ -308,15 +315,14 @@ def make_slot_resolver(mm: MatchMoments | None = None, report: ProblemReport | N
             fields = MATCH_FIELDS if obj == "match" else ["score", "kills", "deaths", "rounds_played"]
             if field not in fields:
                 return SlotError("unknown_slot", slot, f"{obj} 可用字段：" + "、".join(fields))
-            if field in ("value", "threshold", "gap"):
+            if field == "basis":
+                if problem is None:
+                    return SlotError("slot_unavailable", slot, "basis 只能用在问题条目的分析里。")
                 hit = next((h for h in report.hits if h.target == "match" and h.problem == problem), None) if report else None
-                mapping = problem_values(problem, hit)
-                if not mapping or not hit:
+                if not hit:
                     return _missing(slot, mm)
-                ev, th, unit = mapping
-                a, b = hit.evidence.get(ev), hit.thresholds.get(th)
-                value = a if field == "value" else b if field == "threshold" else a - b if a is not None and b is not None else None
-                return _fmt(value, unit) if value is not None else _missing(slot, mm)
+                from cs2coach.report.evidence import evidence_sentence
+                return evidence_sentence(hit).removesuffix("。")
             game = matches.get(obj) if obj != "match" else None
             if game:
                 data = {"score": f"{game.score[0]}:{game.score[1]}", "kills": game.kills,
@@ -361,18 +367,14 @@ def make_slot_resolver(mm: MatchMoments | None = None, report: ProblemReport | N
                 return SlotError("unknown_slot", slot, "瞬间可用字段：" + "、".join(MOMENT_FIELDS))
             if not any_target and obj not in target_set:
                 return SlotError("slot_target_not_cited", slot, f"{obj} 不在本条 targets 中。")
-            if field in ("value", "threshold", "gap"):
+            if field == "basis":
                 if problem is None:
-                    return SlotError("slot_unavailable", slot, "value/threshold/gap 只能用在问题条目的分析里"
-                                     "（按该条问题取值）；训练计划、总览里请改用 pro.* 或直接删去。")
+                    return SlotError("slot_unavailable", slot, "basis 只能用在问题条目的分析里。")
                 hit = next((h for h in local_report.hits if h.target == local and h.problem == problem), None)
-                mapping = problem_values(problem, hit)
-                if not mapping or not hit:
+                if not hit:
                     return _missing(slot, moment)
-                ev, th, unit = mapping
-                a, b = hit.evidence.get(ev), hit.thresholds.get(th)
-                value = a if field == "value" else b if field == "threshold" else a - b if a is not None and b is not None else None
-                return _fmt(value, unit) if value is not None else _missing(slot, moment)
+                from cs2coach.report.evidence import evidence_sentence
+                return evidence_sentence(hit).removesuffix("。")
             return _moment_value(moment, field, slot)
         if round_match:
             if len(parts) != 2 or field not in ROUND_FIELDS:
@@ -401,7 +403,7 @@ def make_slot_resolver(mm: MatchMoments | None = None, report: ProblemReport | N
 
     def candidates() -> list[str]:
         """本条可以使用的全部占位符名称（不含 value/threshold/gap 以外依赖问题的字段判断）。"""
-        names = [f"match.{f}" for f in MATCH_FIELDS if f not in ("value", "threshold", "gap")]
+        names = [f"match.{f}" for f in MATCH_FIELDS if f not in ("value", "threshold", "gap", "basis")]
         names += [f"pro.{m}.{f}" for m in METRICS for f in ("median", "p25", "p75", "better_than")]
         rows = summary.frequency if summary_mode else frequency or []
         names += [f"freq.{r.problem}.{f}" for r in rows for f in (FREQ_FIELDS if summary_mode else FREQ_FIELDS[:5])]
@@ -480,14 +482,14 @@ MOMENT_GUIDE = [
     ("ttd", "看见到第一次命中（Time to Damage）", "781 毫秒"),
     ("seen_to_shot / shot_to_hit", "TTD 拆成的两段：看见→开枪、开枪→命中。只是 TTD 的一部分，不要拿它和 threshold 比较", "594 毫秒"),
     ("opponent_ttd", "对手从看见你到第一次打中你", "641 毫秒"),
-    ("crosshair", "看见到第一次命中准星转过的角度", "21.7°"),
+    ("crosshair_turn", "准星转过的角度（Leetify 口径）", "21.7°"),
+    ("crosshair_offset", "刚看见对手时准星离头部的距离", "2.3 米"),
     ("shots / hits", "瞄准这名对手开的枪数 / 命中数", "6"), ("hit_rate", "这次交火的命中率（程序计算）", "33.3%"),
     ("first_hit_shot", "第几发**第一次打中**。不是“弹道从第几发开始飘”", "第 8 发"), ("speed / opponent_speed", "接触时速度", "209 单位/秒"),
     ("trade_delay", "被补回或补枪用时", "1.3 秒"), ("teammate_distance", "阵亡时最近存活队友的距离", "480 单位"),
     ("shot_order / seen_order", "谁先开枪 / 谁先看见的完整句（不带句号）", "你先开枪，领先 0.27 秒"),
     ("contact", "接触类型的完整句（谁拉出、谁架点）", "自己移动进入对手视野、对手几乎静止：主动拉出，对手在架点"),
-    ("value / threshold / gap", "本条问题在这次交火的数值 / 职业同武器阈值（75 分位等）/ 两者之差",
-     "781 毫秒 / 531 毫秒 / 250 毫秒"),
+    ("basis", "本条问题的程序检测依据全文（不带句号），只能用于分析", "看见对手到开枪 594 毫秒，高于职业同武器 75 分位 391 毫秒"),
 ]
 
 
@@ -507,13 +509,13 @@ def slot_guidance_fixed(summary: bool = False) -> str:
         "总览、analysis 里不写任何数字（包括“两次”“三发”这类中文数字），需要数字时写 {对象.字段}，程序会换成带单位的数值。",
         "**占位符已经带单位，后面不要再写单位**：写“用了{" + prefix + ".ttd}”，不要写“{" + prefix + ".ttd}ms”。"
         "次数、人数、血量等显示为纯数字，可以在后面写“次”“人”，但不能写“%”“秒”。",
-        "训练文字（training、training_plan）可以写计划数字（如 3 组 30 次），也可以用占位符。",
+        "训练文字（training、training_plan）可以写练习量（如 3 组 30 次），不能写数字达标标准或命中率。",
         "",
         f"### 瞬间：{{{prefix}.字段}}（只能用本条 targets 中的瞬间）",
         "| 字段 | 含义 | 显示示例 |", "|---|---|---|"]
     lines += [f"| {f} | {m} | {e} |" for f, m, e in MOMENT_GUIDE]
-    lines += ["“职业同武器 75 分位”请用 {瞬间.threshold}，它按本条问题和这次交火的武器取值，比较对象是 {瞬间.value}"
-              "（出枪慢时就是整个 TTD），不要拿 seen_to_shot 等分段去比；不要用 pro.*（那是整场指标）。",
+    lines += ["需要说明和职业阈值的对比时，请引用 {瞬间.basis}；报告已有程序检测依据，也可以不重复。"
+              "不要自己用数值或 TTD 分段拼对比句；pro.* 是整场指标。",
               "两个交火的特征要分开写：一次先开枪、一次同时开枪，就不能写“都先开枪”。程序会核对“都……”“始终……”是否对每个交火都成立。",
         "",
         "### 漏补回合：{R9.字段}（只能用本条 targets 中的回合）",
@@ -522,7 +524,8 @@ def slot_guidance_fixed(summary: bool = False) -> str:
         "",
         "### 整场：{match.字段}（多场时为整批合计或各场中位数）",
         "score（比分）、rounds（总回合）、rounds_played（在场回合）、kills、deaths、assists；"
-        "六项枪法 ttd、crosshair、counter_strafing、spray、spotted、headshot，加 _samples 为样本数。",
+        "六项枪法 ttd、crosshair、counter_strafing、spray、spotted、headshot，加 _samples 为样本数；"
+        "问题目标为 match 时，分析可用 {match.basis} 引用程序依据句。",
         "### 职业：{pro.指标.字段}",
         "指标同上六项；字段 median（中位数）、p25、p75、better_than（优于多少比例的职业样本，显示如 8%）。"
         "例：{pro.ttd.median}、{pro.crosshair.better_than}。",
@@ -544,10 +547,11 @@ def render_submission(sub, factory) -> dict:
     result["overview"], errors = render_slots(sub.overview, factory(None, (), True))
     for group in ("findings", "patterns", "highlights"):
         for i, entry in enumerate(getattr(sub, group)):
-            result[group][i]["analysis"], found = render_slots(entry.analysis, factory(entry.problem, entry.targets))
+            result[group][i]["analysis"], found = render_slots(
+                entry.analysis, factory(entry.problem if group != "highlights" else None, entry.targets))
             errors.extend(found)
             if group == "findings":
-                result[group][i]["training"], found = render_slots(entry.training, factory(entry.problem, entry.targets))
+                result[group][i]["training"], found = render_slots(entry.training, factory(None, entry.targets))
                 errors.extend(found)
     for i, item in enumerate(sub.training_plan):
         result["training_plan"][i], found = render_slots(item, factory(None, None))
