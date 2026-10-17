@@ -24,7 +24,7 @@ def cfg():
 
 @pytest.fixture
 def baseline():
-    stats = {"time_to_damage_ms": {"p75": 500.0}, "crosshair_placement_deg": {"p75": 10.0},
+    stats = {"time_to_damage_ms": {"p75": 500.0}, "seen_to_first_shot_ms": {"p75": 500.0}, "crosshair_placement_deg": {"p75": 10.0},
              "crosshair_initial_offset_m": {"p75": 2.0},
              "distance_m": {"p90": 30.0}}
     segments = [{"from": start, "to": end, "hit_pct": 65.0, "shots": 100}
@@ -57,13 +57,15 @@ CASES = [
     ("died_without_seeing", dict(tags=["died_without_seeing"], engagement={"opponent_off_screen": True}),
      dict(tags=["died_without_seeing"], engagement={"opponent_off_screen": False})),
     ("turned_into_flash", dict(engagement={"player_blind": blind()}), dict(engagement={"player_blind": blind("teammate")})),
-    ("post_plant_utility_unused", dict(context={"bomb_planted": True}, death={"unused_grenades": ["molotov"]}),
+    ("post_plant_utility_unused", dict(context={"bomb_planted": True, "seconds_since_plant": 10.0}, death={"unused_grenades": ["molotov"]}),
      dict(context={"bomb_planted": True, "side": "CT"}, death={"unused_grenades": ["molotov"]})),
     ("weapon_not_ready", dict(tags=["weapon_not_ready"]), dict(tags=[])),
     ("awp_unscoped_shot", dict(weapon="awp"), dict(weapon="awp", context={"distance": 5})),
     ("deagle_moving_shot", dict(weapon="deagle", engagement={"first_shot_stopped": False, "first_shot_hit": True}),
      dict(weapon="deagle", engagement={"first_shot_stopped": True})),
-    ("glock_long_range", dict(weapon="glock", context={"distance": 31}), dict(weapon="glock", context={"distance": 30})),
+    # 032：死亡瞬间的 weapon 是击杀者的武器，只算被步枪或狙打死
+    ("glock_long_range", dict(weapon="ak47", engagement={"shots": [make_shot(weapon="glock")]}, context={"distance": 31}),
+     dict(weapon="glock", context={"distance": 30})),
     ("spray_control", dict(engagement={"shots": bullets()}), dict(engagement={"shots": bullets(n=5)})),
     ("spray_while_moving", dict(engagement={"shots": bullets(n=4, start=1, stopped=False)}),
      dict(engagement={"shots": bullets(n=3, start=1, stopped=False)})),
@@ -307,7 +309,7 @@ def test_unknown_weapon_and_missing_quantile_are_skipped(cfg, baseline):
     m = make_moment(weapon="mp9", engagement={"time_to_damage_s": .8})
     report = detect_problems(make_mm([m]), baseline, cfg)
     assert report.skipped["slow_reaction"] == report.skipped["poor_crosshair_placement"] == 1
-    baseline["weapons"]["ak47"]["time_to_damage_ms"]["p75"] = None
+    baseline["weapons"]["ak47"]["seen_to_first_shot_ms"]["p75"] = None
     assert detect_problems(make_mm([make_moment()]), baseline, cfg).skipped["slow_reaction"] == 1
 
 
@@ -328,7 +330,7 @@ def test_slow_reaction_kill_does_not_require_opponent_ttd(cfg, baseline):
     m = make_moment(kind="kill", engagement={"time_to_damage_s": .8, "opponent_time_to_damage_s": None})
     h = next(h for h in detect_problems(make_mm([m]), baseline, cfg).hits if h.problem == "slow_reaction")
     assert h.evidence["ttd_ms"] == 800 and h.evidence["opponent_ttd_ms"] is None
-    assert h.thresholds == {"ttd_ms": 500, "source": "pro_p75", "ttd_max_seconds": 1.0, "ttd_max_source": "config"}
+    assert h.thresholds == {"seen_to_first_shot_ms": 500, "source": "pro_p75", "ttd_max_seconds": 1.0, "ttd_max_source": "config"}
 
 
 @pytest.mark.parametrize("role,at_event", [("self", True), (None, True), ("enemy", False), ("teammate", True)])

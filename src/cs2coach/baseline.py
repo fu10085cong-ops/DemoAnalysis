@@ -124,10 +124,13 @@ def weapon_stats(mms: list[MatchMoments], cfg: dict) -> dict:
         reliable = [m.engagement for m in ms if m.engagement.visibility_note not in ("smoke", "blind")]
         ttd = [e.time_to_damage_s * 1000 for e in reliable if e.time_to_damage_s is not None
                and e.time_to_damage_s < cfg["aim_stats"]["time_to_damage_max_seconds"]]
+        seen_shot = [e.seen_to_first_shot_s * 1000 for e in reliable if e.seen_to_first_shot_s is not None
+                     and e.time_to_damage_s is not None and e.time_to_damage_s < cfg["aim_stats"]["time_to_damage_max_seconds"]]
         stopped = [m.engagement.first_shot_stopped for m in ms if m.engagement.first_shot_stopped is not None]
         hit = [m.engagement.first_shot_hit for m in ms if m.engagement.first_shot_hit is not None]
         out[w] = {
             "engagements": len(ms), "time_to_damage_ms": _distribution(ttd),
+            "seen_to_first_shot_ms": _distribution(seen_shot),
             "crosshair_placement_deg": _distribution([e.crosshair_placement_deg for e in reliable]),
             "crosshair_initial_offset_m": _distribution([
                 e.crosshair_initial_offset_m for e in reliable if e.airborne_near_seen is not True]),

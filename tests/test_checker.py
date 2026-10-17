@@ -344,7 +344,10 @@ def test_real_mirage_submissions_regression():
         ("findings[2].problem", "context_only"), ("findings[2].problem", "disabled_problem")]
     valid.findings = [f for f in valid.findings if f.problem != "weapon_not_ready"]
     assert {v.code for v in check(valid, mm, rep, data["digest"])} <= numbers
-    v = [x for x in check(invalid, mm, rep, data["digest"]) if x.code not in numbers]
+    # 032 把 peeked_into_held_angle 降为背景；这份历史提交引用了它，这里沿用 032 之前的停用清单，只验证原有规则
+    before_032 = load_config()
+    before_032["problems"]["disabled"] = [d for d in before_032["problems"]["disabled"] if d != "peeked_into_held_angle"]
+    v = [x for x in check(invalid, mm, rep, data["digest"], cfg=before_032) if x.code not in numbers]
     assert [x.code for x in v] == ["unknown_target", "precondition_failed", "duplicate_problem",
                                  "phrase_unsupported"]
     assert "28" in v[0].message

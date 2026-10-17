@@ -274,7 +274,8 @@ g3sg1 = 120
 # weapon_not_ready：路人与职业一样多，多数是被迫的，降为背景
 # spray_while_moving：几乎不触发，暂时停用，待用数据校准
 # awp_unscoped_shot：路人样本中零次，暂时停用，待用数据校准
-disabled = ["turned_into_flash", "weapon_not_ready", "spray_while_moving", "awp_unscoped_shot"]
+# peeked_into_held_angle：拉出是常规动作，单独出现属于零和背景；只有加重版（有道具直接拉、优势冒进）算问题（032）
+disabled = ["turned_into_flash", "weapon_not_ready", "spray_while_moving", "awp_unscoped_shot", "peeked_into_held_angle"]
 # 整场同一发数段难以积累足够子弹，暂时关闭；不影响单次交火，待用数据校准
 spray_match_enabled = false
 # 假设真实频率与职业相同，单场碰巧出现至少本场次数的最大概率
@@ -313,6 +314,12 @@ missed_trade_min_react_seconds = 1.0
 missed_trade_other_fight_seconds = 2.0
 # 先看见、先开枪至少领先的秒数；0.045 让 64 tick 下的 3 tick（0.047 秒）刚好够格
 highlight_min_lead_s = 0.045
+# 有道具直接拉出：只算能帮自己拉出的道具。烟一般不用于自己的这次拉出（032）
+dry_peek_grenades = ["flashbang"]
+# 下包后带着火没用：下包后至少存活多少秒才判，太快阵亡来不及扔（032，待审计校准）
+post_plant_min_alive_seconds = 10.0
+# Glock 远距离：只在击杀者用这些武器时判（032）
+glock_long_range_opponent_weapons = ["ak47", "m4a1", "m4a1_silencer", "galilar", "famas", "aug", "sg556", "awp", "ssg08", "scar20", "g3sg1"]
 # 已被其他队友补上的记录不作为漏补枪问题
 missed_trade_exclude_traded_by_other = true
 

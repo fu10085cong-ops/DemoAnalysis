@@ -192,10 +192,11 @@ def test_default_disabled_rules_and_match_toggle_preserve_detection_conditions()
     shots = [make_shot(tick=i, recoil_index=3, stopped=False) for i in range(30)]
     mm = make_mm([make_moment(tags=["died_without_seeing", "weapon_not_ready"], engagement={"opponent_off_screen": True}),
                   make_moment(engagement={"player_blind": blind}), make_moment(weapon="awp"),
-                  make_moment(engagement={"shots": shots})])
+                  make_moment(engagement={"shots": shots}), make_moment(engagement={"contact_type": "peek"})])
     baseline = {"spray": {"ak47": [{"from": 3, "to": 5, "hit_pct": 65}]}}
     current = detect_problems(mm, baseline, cfg)
-    expected = {"turned_into_flash", "weapon_not_ready", "spray_while_moving", "awp_unscoped_shot"}
+    expected = {"turned_into_flash", "weapon_not_ready", "spray_while_moving", "awp_unscoped_shot",
+                "peeked_into_held_angle"}  # 032 降为背景
     assert set(cfg["problems"]["disabled"]) == expected
     assert not expected.intersection(h.problem for h in current.hits)
     assert any(h.problem == "died_without_seeing" for h in current.hits)  # 2026-10-17 启用
