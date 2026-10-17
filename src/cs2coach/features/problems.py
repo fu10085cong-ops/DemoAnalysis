@@ -61,6 +61,7 @@ _SPECS = [
     ("overpeek_in_advantage", "人数优势时冒进", "duel", ["death"], "medium"),
     ("died_without_seeing", "没看见对手就被打死", "duel", ["death"], "low"),
     ("turned_into_flash", "被对手闪中后被击杀", "duel", ["death"], "medium"),
+    ("died_while_reloading", "换弹时被打死", "duel", ["death"], "high"),
     ("missed_trade", "漏补枪", "utility_team", ["round"], "medium"),
     ("post_plant_utility_unused", "下包后带着火没用", "utility_team", ["death"], "high"),
     ("good_trade", "及时补枪", "highlight", ["kill"], "high"),
@@ -85,7 +86,7 @@ PROBLEMS: dict[str, ProblemSpec] = {pid: ProblemSpec(id=pid, label=label, catego
 DETECTED_PROBLEMS = (
     "slow_reaction", "poor_crosshair_placement", "shot_while_moving",
     "peeked_into_held_angle", "dry_peek_with_utility", "overpeek_in_advantage",
-    "died_without_seeing", "turned_into_flash", "missed_trade", "post_plant_utility_unused",
+    "died_without_seeing", "turned_into_flash", "died_while_reloading", "missed_trade", "post_plant_utility_unused",
     "weapon_not_ready", "awp_unscoped_shot", "deagle_moving_shot", "glock_long_range",
     "spray_control", "spray_while_moving", "good_trade", "flash_assist", "won_duel_seen_first",
 )
@@ -343,6 +344,13 @@ def detect_problems(mm: MatchMoments, baseline: dict | None, cfg: dict) -> Probl
                     "blinded": d.blinded, "blinded_by_teammate": d.blinded_by_teammate})
             elif d is not None and d.blinded and d.blinded_by_teammate is None:
                 missing("turned_into_flash")
+            if d is not None and d.reloading_at_death:
+                if d.ammo_before_reload is None:
+                    missing("died_while_reloading")
+                elif d.ammo_before_reload >= p["reload_min_ammo_left"]:
+                    hit("died_while_reloading", {"reloading_at_death": True,
+                        "ammo_before_reload": d.ammo_before_reload, "reload_started_s": d.reload_started_s},
+                        {"min_ammo_left": p["reload_min_ammo_left"], "source": "config"})
             if (d is not None and c.side == "T" and c.bomb_planted and {"molotov", "incgrenade"}.intersection(d.unused_grenades)
                     and _finite(c.seconds_since_plant) and c.seconds_since_plant >= p["post_plant_min_alive_seconds"]):
                 hit("post_plant_utility_unused", {"side": c.side, "bomb_planted": c.bomb_planted,

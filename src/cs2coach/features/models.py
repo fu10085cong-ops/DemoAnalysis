@@ -147,6 +147,9 @@ class Trade(BaseModel):
 class DeathState(BaseModel):
     unused_grenades: list[str]  # 死亡时身上没用掉的投掷物（规范名，重复保留）
     thrown_grenades: list[str] = []  # 本回合阵亡 tick 之前投出的道具，按时间顺序、保留重复
+    reloading_at_death: bool = False
+    reload_started_s: float | None = None  # 从换弹开始到阵亡
+    ammo_before_reload: int | None = None  # 换弹开始前一 tick 的弹匣剩余
     # 武器是否来得及开枪：上一枪到阵亡的间隔小于该武器两枪的最短间隔时为 False（如 AWP 刚开过一枪还在拉栓）。
     # 没有上一枪或该武器没有配置最短间隔时为 None
     weapon_ready: bool | None = None
