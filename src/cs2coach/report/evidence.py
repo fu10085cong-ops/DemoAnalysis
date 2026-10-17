@@ -85,6 +85,8 @@ def evidence_sentence(hit: ProblemHit) -> str:
     if pid == "died_while_reloading":
         return (f"阵亡时正在换弹，换弹前弹匣还有 {_number(e.get('ammo_before_reload'))} / "
                 f"{_number(e.get('magazine_size'))} 发，开始换弹 {_number(e.get('reload_started_s'))} 秒后阵亡。")
+    if pid == "saw_but_no_shot":
+        return f"看见对手 {_number(e.get('seen_to_death_s'))} 秒后阵亡，期间一枪没开。"
     if pid == "weapon_not_ready":
         return "有阵亡时武器还不能开枪的检测标签。"
     if pid == "awp_unscoped_shot":

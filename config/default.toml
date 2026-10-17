@@ -336,6 +336,9 @@ reload_min_ammo_left = 1
 reload_min_ammo_fraction = 0.30
 # 换弹时被打死：换弹开始至少这么多秒后阵亡才判（037：第四轮审计 2026-10-17，刚开始换弹就阵亡的来不及反应）
 reload_min_seconds = 0.3
+# 24 场业余与 26 场职业 demo：看见后至少 0.6 秒且近 2 秒没开枪的阵亡，每 10 回合分别为 0.24 和 0.11 次（039）
+no_shot_min_seen_seconds = 0.6
+no_shot_recent_seconds = 2.0
 # Glock 远距离：只在击杀者用这些武器时判（032）
 glock_long_range_opponent_weapons = ["ak47", "m4a1", "m4a1_silencer", "galilar", "famas", "aug", "sg556", "awp", "ssg08", "scar20", "g3sg1"]
 # 已被其他队友补上的记录不作为漏补枪问题
@@ -354,12 +357,12 @@ sg556 = 0.45
 deagle = 0.45
 
 [problems.exclusions]
-through_smoke = ["slow_reaction", "poor_crosshair_placement", "spray_control", "spray_while_moving", "peeked_into_held_angle", "dry_peek_with_utility", "overpeek_in_advantage", "won_duel_seen_first", "died_without_seeing"]
+through_smoke = ["slow_reaction", "poor_crosshair_placement", "spray_control", "spray_while_moving", "peeked_into_held_angle", "dry_peek_with_utility", "overpeek_in_advantage", "won_duel_seen_first", "died_without_seeing", "saw_but_no_shot"]
 first_seen_through_smoke = ["spray_control", "spray_while_moving", "won_duel_seen_first"]
-wallbang = ["peeked_into_held_angle", "dry_peek_with_utility", "overpeek_in_advantage", "died_without_seeing"]
-player_blinded_in_fight = ["slow_reaction", "poor_crosshair_placement", "spray_control", "spray_while_moving", "shot_while_moving", "deagle_moving_shot", "peeked_into_held_angle", "dry_peek_with_utility"]
+wallbang = ["peeked_into_held_angle", "dry_peek_with_utility", "overpeek_in_advantage", "died_without_seeing", "saw_but_no_shot"]
+player_blinded_in_fight = ["slow_reaction", "poor_crosshair_placement", "spray_control", "spray_while_moving", "shot_while_moving", "deagle_moving_shot", "peeked_into_held_angle", "dry_peek_with_utility", "saw_but_no_shot"]
 opponent_blinded_by_own_side = ["peeked_into_held_angle", "overpeek_in_advantage"]
-killed_by_utility = ["died_without_seeing", "peeked_into_held_angle", "died_while_reloading"]
+killed_by_utility = ["died_without_seeing", "peeked_into_held_angle", "died_while_reloading", "saw_but_no_shot"]
 fired_before_seen = ["slow_reaction", "poor_crosshair_placement"]
 airborne_near_seen = ["poor_crosshair_placement"]
 turned_into_view = ["poor_crosshair_placement"]

@@ -33,6 +33,7 @@
 |---|---|---|
 | `shots_fired` / `shots_hit` / `first_shot_hit` | 这次交火中瞄准对手的开枪数、同一 tick 对对手造成伤害的开枪数、第一枪是否命中 | 命中准确；开枪数依赖目标判断（近似） |
 | `first_seen_shot_stopped` / `first_seen_shot_hit` | 交火中开枪前一 tick 已看见对手的第一发子弹是否停稳、命中；没有这样的子弹时为空。与整次交火的 `first_shot_*` 分开记录 | 视野受烟雾等动态遮挡影响 |
+| `seen_to_death_s` | 仅死亡瞬间且 `player_first_seen_tick` 有值时，阵亡 tick 减首次看见 tick，除以 tick 率，保留三位小数 | 依赖地图几何视野 |
 | `damage_dealt` / `damage_taken` | 这次交火中双方实际扣掉的血量（不是武器原始伤害） | 准确（与记分板总伤害相差约 1%，原因未查明，见下） |
 | `first_shot_lead_s` | 对手第一枪的 tick 减去自己第一枪的 tick（秒）；正数表示自己先开枪 | 近似（依赖目标判断） |
 | 急停 `shots[].stopped` | 开枪时水平速度 < 武器最高速度 × `accurate_speed_ratio`（34%，Leetify 口径）；开镜按开镜速度，开镜状态取开枪前一 tick | 速度准确（坐标差分）；各武器最高速度已用样本核对；开镜状态见 fields.md 陷阱 23 |
@@ -78,6 +79,7 @@
 - `thrown_grenades`：目标玩家在本回合、阵亡 tick 之前已经投出的道具规范名，来自 `shots.is_grenade`，按时间顺序且保留重复；不含接管 bot 时的投掷。
 - `blinded`：死亡时仍处于致盲中，且这次致盲时长 ≥ `min_blind_seconds`；附剩余时长、投掷者、是否队友闪的。
 - `reloading_at_death`：阵亡 tick − 1 或阵亡 tick 的 `is_in_reload` 为真。向前最多回看 5 秒连续换弹的首 tick，`reload_started_s` 为首 tick 到阵亡的秒数；`ammo_before_reload` 取首 tick 前一 tick 的 `active_weapon_ammo`，缺失时为 None。弹匣未打空（默认至少剩 1 发）且非道具击杀才判 `died_while_reloading`。
+- `shots_last_2s`：阵亡 tick 前 `no_shot_recent_seconds`（默认 2 秒）至阵亡 tick（两端包含）内，本人朝任意目标的枪械开枪次数；不含投掷物及接管 bot 时的开枪。
 
 ### 交火中的闪光 `engagement.player_blind` / `opponent_blind`
 

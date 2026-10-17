@@ -60,6 +60,7 @@ _SPECS = [
     ("dry_peek_with_utility", "身上有道具却直接拉出", "duel", ["death"], "medium"),
     ("overpeek_in_advantage", "人数优势时冒进", "duel", ["death"], "medium"),
     ("died_without_seeing", "没看见对手就被打死", "duel", ["death"], "low"),
+    ("saw_but_no_shot", "看见对手却没开枪", "duel", ["death"], "medium"),
     ("turned_into_flash", "被对手闪中后被击杀", "duel", ["death"], "medium"),
     ("died_while_reloading", "换弹时被打死", "duel", ["death"], "high"),
     ("missed_trade", "漏补枪", "utility_team", ["round"], "medium"),
@@ -86,7 +87,7 @@ PROBLEMS: dict[str, ProblemSpec] = {pid: ProblemSpec(id=pid, label=label, catego
 DETECTED_PROBLEMS = (
     "slow_reaction", "poor_crosshair_placement", "shot_while_moving",
     "peeked_into_held_angle", "dry_peek_with_utility", "overpeek_in_advantage",
-    "died_without_seeing", "turned_into_flash", "died_while_reloading", "missed_trade", "post_plant_utility_unused",
+    "died_without_seeing", "saw_but_no_shot", "turned_into_flash", "died_while_reloading", "missed_trade", "post_plant_utility_unused",
     "weapon_not_ready", "awp_unscoped_shot", "deagle_moving_shot", "glock_long_range",
     "spray_control", "spray_while_moving", "good_trade", "flash_assist", "won_duel_seen_first",
 )
@@ -271,6 +272,14 @@ def detect_problems(mm: MatchMoments, baseline: dict | None, cfg: dict) -> Probl
                                     "max_distance_m": p["spray_max_distance_m"], "limits_source": "config"})
 
         if m.kind == "death":
+            # 死时还在被闪白，开不了枪，不算犹豫（039 审查补充）
+            if (e is not None and d is not None and d.blinded is not True and not e.shots and e.visibility_note is None
+                    and e.seen_to_death_s is not None and e.seen_to_death_s >= p["no_shot_min_seen_seconds"]
+                    and d.shots_last_2s == 0):
+                hit("saw_but_no_shot", {"seen_to_death_s": e.seen_to_death_s,
+                    "opponent_ttd_ms": (e.opponent_time_to_damage_s * 1000
+                                        if _finite(e.opponent_time_to_damage_s) else None)},
+                    {"min_seen_seconds": p["no_shot_min_seen_seconds"], "source": "config"})
             if e is not None:
                 if e.shots and (e.first_seen_shot_stopped is None or e.first_seen_shot_hit is None):
                     missing("shot_while_moving")

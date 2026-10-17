@@ -84,6 +84,7 @@ class _Params:
         self.airborne_lookback = round(cfg["problems"]["crosshair_airborne_lookback_seconds"] * self.rate)
         self.crosshair_turn_lookback = int(cfg["problems"]["crosshair_turn_lookback_ticks"])
         self.other_fight_window = round(cfg["problems"]["missed_trade_other_fight_seconds"] * self.rate)
+        self.no_shot_recent = round(cfg["problems"]["no_shot_recent_seconds"] * self.rate)
         self.key_assist_damage = int(mc["key_assist_min_damage"])
         self.min_blind = float(mc["min_blind_seconds"])
         self.blind_min_remaining = float(cfg["visibility"]["blind_min_remaining_seconds"])
@@ -315,6 +316,8 @@ def add_visibility(match: MatchData, p: _Params, sid: int, opponent: int, tick: 
         "last_seen_before_s": last_seen_before_s,
         "opponent_off_screen": opponent_off_screen,
     }
+    if kind == "death" and me.tick is not None:
+        upd["seen_to_death_s"] = p.secs(tick - me.tick)
     if usable_me and valid(opp) and not me_blind and not opp_blind:
         upd["seen_first_lead_s"] = p.secs(opp.tick - me.tick)
     seen_ticks = ([me.tick] if usable_me else []) + ([opp.tick] if valid(opp) else [])
@@ -522,6 +525,8 @@ def death_state(match: MatchData, p: _Params, sid: int, tick: int, row: pd.Serie
     grenades = row.get("victim_prev_grenades")
     ready = weapon_readiness(p, sid, tick)
     s = p.shots
+    recent_shots = s[(s["steamid"] == sid).fillna(False) & s["tick"].between(tick - p.no_shot_recent, tick)
+                     & s["is_gun"] & ~s["controlling_bot"]]
     thrown = s[(s["steamid"] == sid).fillna(False) & (s["round"] == int(row["round"]))
                & (s["tick"] < tick) & s["is_grenade"] & ~s["controlling_bot"]]
     # 死亡 tick 可能已清空玩家状态；优先从前一 tick 回溯连续的换弹状态。
@@ -544,6 +549,7 @@ def death_state(match: MatchData, p: _Params, sid: int, tick: int, row: pd.Serie
     return DeathState(
         **ready,
         unused_grenades=list(grenades) if isinstance(grenades, list) else [],
+        shots_last_2s=len(recent_shots),
         thrown_grenades=thrown.sort_values("tick", kind="stable")["weapon"].tolist(),
         blinded=best is not None, blind_remaining_s=round(best[0], 2) if best else None,
         blinded_by=blinded_by, blinded_by_teammate=by_mate,
