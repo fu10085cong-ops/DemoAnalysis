@@ -378,23 +378,30 @@ incomplete_visibility_notes = ["not_seen", "lost_sight", "first_hit_unseen", "sm
 [radar]
 default_tier = "amateur_tmp"
 strength_min_percentile = 65
+verdict_min_axes = 4  # 至少有这些可用维度才判断雷达上的整体强弱
+verdict_weak_percentile = 40  # 最低的维度低于这个百分位，结论才说"最弱的是……"
 max_strengths = 3
 max_problems = 5
 max_examples = 5
 # 高光回合最多列几条：残局（对手越多越前）> 多杀（越多越前）> 首杀并赢下 > 闪光助攻，同类按比赛和 tick
 max_highlights = 6
 best_player_rule = "kills_minus_deaths"
-problem_bad_ratio = 1.5
 # 红色还要求比目标分段至少多出这么多次：只多一两次多半是偶然，不当作最该练的问题
 problem_min_excess = 3
 
+[radar.min_samples]
+rounds = 10
+deaths = 5
+flashes = 5
+tier_values = 30
+
 [[radar.axes]]
 id = "ttd"
-name = "出枪速度"
+name = "命中速度"
 metrics = ["time_to_damage_ms"]
 [[radar.axes]]
 id = "crosshair"
-name = "准星位置"
+name = "预瞄"
 metrics = ["crosshair_placement_deg"]
 [[radar.axes]]
 id = "strafe"
@@ -407,11 +414,11 @@ metrics = ["spray_accuracy_pct"]
 [[radar.axes]]
 id = "trade"
 name = "补枪配合"
-metrics = ["trade_kills_per_round", "traded_death_pct"]
+metrics = ["trade_kill_events_per_round", "traded_death_pct"]
 [[radar.axes]]
 id = "utility"
 name = "道具使用"
-metrics = ["utility_damage_per_round", "enemies_flashed_per_flash", "wasted_utility_avg"]
+metrics = ["utility_damage_per_round", "enemies_flashed_per_flash"]
 
 [review]
 # CS2 的 game/csgo 目录；也可用 CS2COACH_CSGO_DIR 或 install --csgo 指定

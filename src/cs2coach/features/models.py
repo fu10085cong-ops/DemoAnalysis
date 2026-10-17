@@ -260,6 +260,8 @@ class LobbyLine(BaseModel):
     opening_kills: int
     opening_deaths: int
     trade_kills: int
+    trade_kill_events: int = 0  # 一次补枪击杀只算一次，不按补回的队友人数累加
+    flashes_thrown: int = 0
     flash_assists: int
     utility_damage: int
     rounds_played: int = 0

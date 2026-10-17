@@ -29,38 +29,37 @@ def frequency(you, hits=3):
 
 
 def sample():
-    data = tier(trade_kills_per_round=[0, .1, .2], traded_death_pct=[0, 20, 40])
-    data["problem_rates"] = {"slow_reaction": {"per_10_rounds": 2}}
+    data = tier(trade_kill_events_per_round=[0, .1, .2], traded_death_pct=[0, 20, 40])
+    data["problem_rates"] = {"slow_reaction": {"per_10_rounds": 2, "hits": 20, "rounds": 100}}
     return {data["id"]: data}
 
 
-# 10 回合、分段每 10 回合 2 次 → 应有 2 次。红色要倍数 ≥ 1.5 且多出 ≥ 3 次；没有多出的问题不列。
-@pytest.mark.parametrize("hits,severity", [(2, None), (3, "warn"), (4, "warn"), (5, "bad")])
+# 10 回合期望 2 次；实际 5 次的泊松尾概率仍大于 5%，6 次才判 bad。
+@pytest.mark.parametrize("hits,severity", [(2, None), (3, "warn"), (4, "warn"), (5, "warn"), (6, "bad")])
 def test_severity_and_problem_template(hits, severity):
     mm = make_mm([make_moment()], lobby=[line()], rounds=10)
     page = build_match_page(mm, report(), frequency(hits, hits), load_config(), sample())
     if severity is None:
-        assert page.problems == []
+        assert page.tiers[0].problems == []
         return
-    problem, = page.problems
+    problem, = page.tiers[0].problems
     assert problem.severity == severity and problem.target == 2 and problem.count == hits and problem.expected == 2
     assert "。" == problem.text[-1] and problem.text.count("。") == 1
     assert len(problem.examples) == 1
     assert problem.examples[0].match_label == "本场"
     assert problem.examples[0].situation == "T 方，2v2，未下包"
     if severity == "bad":
-        assert page.verdict == "最该练的是出枪慢：这场出现 5 次，按业余（临时）的频率约 2 次。"
+        assert page.tiers[0].verdict.startswith("最该练的是出枪慢：这场出现 6 次，按业余（临时）的频率约 2 次。")
     else:
-        assert page.verdict == "这场没有明显落后于业余（临时）的问题，最强的是补枪配合。"
+        assert page.tiers[0].verdict == "这场没有检出明显多于业余（临时）的问题。可用的指标不够多，暂不判断整体强弱。"
 
 
 def test_missing_tier_and_empty_samples(tmp_path, monkeypatch):
     monkeypatch.setattr("cs2coach.report.page_data.TIER_DIR", tmp_path)
     assert load_tiers(load_config()) == {}
     page = build_match_page(make_mm(), report(), frequency(3), load_config(), {})
-    assert page.problems[0].target is None and page.problems[0].severity == "warn"
-    assert not page.strengths and not page.tiers
-    assert "尚未构建" in page.verdict
+    assert page.tiers == []
+    assert "verdict" not in page.model_dump()
     data = sample()
     (tmp_path / "amateur_tmp.json").write_text(json.dumps(data["amateur_tmp"]), encoding="utf-8")
     assert load_tiers(load_config()) == data
@@ -76,8 +75,8 @@ def test_best_player_and_average_include_target(lines, expected):
     avg, best, target = page.tiers[0].comparisons
     assert best.name == f"本场最佳（{expected}）"
     assert avg.id == "match_avg" and target.values == [50]*6
-    expected_average = sum(axis_values(player_metrics(item), sample()["amateur_tmp"],
-                                      load_config()["radar"]["axes"])[4] for item in lines) / len(lines)
+    expected_average = sum(axis_values(player_metrics(item, load_config()), sample()["amateur_tmp"],
+                                      load_config()["radar"]["axes"], load_config())[4] for item in lines) / len(lines)
     assert avg.values[4] == expected_average
 
 
@@ -86,7 +85,7 @@ def test_commands_follow_review_pack_templates():
     cfg["review"].update(demo_subdir="review/custom", playdemo_template="playdemo {subdir}/{demo_stem}",
                          jump_template="demo_gototick {tick}; demo_pause")
     mm = make_mm([make_moment()], demo="example.dem", lobby=[line()])
-    command = build_match_page(mm, report(), frequency(3), cfg, sample()).problems[0].examples[0].command
+    command = build_match_page(mm, report(), frequency(3), cfg, sample()).tiers[0].problems[0].examples[0].command
     assert command.playdemo == cfg["review"]["playdemo_template"].format(subdir="review/custom", demo_stem="example")
     assert command.jump == cfg["review"]["jump_template"].format(tick=1)
 
@@ -103,7 +102,7 @@ def test_anonymous_baseline_uses_pro_thresholds(monkeypatch):
     for private in (str(A), "目标玩家", "alice", "synthetic.dem", "private.dem", "steamid", "players", "dirs"):
         assert private not in serialized
     assert data["source"] == "1 份 demo、1 人次"
-    assert data["metrics"]["trade_kills_per_round"] == {"median": .2, "n": 1, "values": [.2]}
+    assert data["metrics"]["trade_kill_events_per_round"] == {"median": .2, "n": 1, "values": [.2]}
 
 
 def test_recursive_demo_discovery_all_formats_and_extraction_cache(tmp_path, monkeypatch):
@@ -124,7 +123,7 @@ def test_summary_median_of_percentile_axes_and_highlights():
     games = []
     for number, trades in enumerate([0, 1, 2]):
         mm = make_mm([make_moment("kill", tags=["opening_kill"])],
-                     lobby=[line(trade_kills=trades)], rounds=10)
+                     lobby=[line(trade_kill_events=trades)], rounds=10)
         mm.highlights = find_highlights(mm, [make_round()])
         ref = DemoRef(path="test.dem", member=None, match_id=f"a{number}", map_name="de_dust2", player_name="目标玩家")
         games.append((ref, mm, report(), (6, 4)))
@@ -145,25 +144,17 @@ def test_strength_examples_pick_best_then_sort_by_tick():
     cfg["radar"]["max_examples"] = 2
     baseline = tier(time_to_damage_ms=[200, 300, 400])
     page = build_match_page(mm, report(), [], cfg, {baseline["id"]: baseline})
-    row, = page.strengths
+    row, = page.tiers[0].strengths
     assert row.id == "time_to_damage_ms" and row.target == 300
     assert [e.tick for e in row.examples] == [90, 290]
     assert len(row.examples) == 2
 
 
-@pytest.mark.parametrize("metric,eligible", [
-    ("counter_strafing_pct", True), ("spray_accuracy_pct", True),
-    ("trade_kills_per_round", True), ("traded_death_pct", True),
-    ("utility_damage_per_round", False), ("enemies_flashed_per_flash", False), ("wasted_utility_avg", False),
-])
-def test_other_strength_example_sources(metric, eligible):
+@pytest.mark.parametrize("metric", ["utility_damage_per_round", "wasted_utility_avg"])
+def test_utility_damage_does_not_borrow_flash_examples(metric):
     from cs2coach.report.page_data import _strength_moments
-    kill = make_moment("kill", tags=["trade_kill"], engagement={"shots": [make_shot(tick=t) for t in (80, 88, 96)]})
-    mm = make_mm([kill])
-    assert bool(_strength_moments(mm, metric, 5, load_config())) is eligible
-    if not eligible:
-        mm.moments.append(make_moment("assist", tags=["flash_assist"]))
-        assert _strength_moments(mm, metric, 5, load_config()) == [mm.moments[-1]]
+    mm = make_mm([make_moment("assist", tags=["flash_assist"])])
+    assert _strength_moments(mm, metric, 5, load_config()) == []
 
 
 def test_single_shot_with_high_recoil_is_not_spray_example():
@@ -206,7 +197,7 @@ def test_build_tier_command_coverage_failures_and_pro_manifest(tmp_path, monkeyp
     assert builder.main(["--all"]) == 0
     data = json.loads((tmp_path / "output/pro.json").read_text(encoding="utf-8"))
     assert seen == [(3, pro)] and data["source"] == "1 份 demo、3 人次"
-    assert data["metrics"]["trade_kills_per_round"]["values"] == [.2, .2, .2]
+    assert data["metrics"]["trade_kill_events_per_round"]["values"] == [.2, .2, .2]
     assert str(A) not in json.dumps(data)
 
 
@@ -233,40 +224,163 @@ def test_verdict_names_weakest_axis_when_nothing_is_bad():
     data["amateur_tmp"]["metrics"]["utility_damage_per_round"] = {"median": 30, "n": 3, "values": [20, 30, 40]}
     mm = make_mm([make_moment()], lobby=[line()])
     page = build_match_page(mm, report(), frequency(1), load_config(), data)
-    assert page.verdict.startswith("这场没有明显落后于业余（临时）的问题，最强的是")
-    assert "，最弱的是" in page.verdict
+    assert "可用的指标不够多" in page.tiers[0].verdict
+    assert "最弱的是" not in page.tiers[0].verdict
 
 
 def test_axis_listed_as_problem_is_not_a_strength_and_units_are_per_10_rounds():
     """审查 044（另一名业余玩家）：准星中位数排 71%，规则又命中偏多，两边同时出现；按回合的次数换成每 10 回合。"""
     from tests.test_summary import stats
     mm = make_mm([make_moment("kill", tags=["trade_kill"])], lobby=[line(aim=stats(100))], rounds=10)
-    baseline = tier(time_to_damage_ms=[200, 300, 400], trade_kills_per_round=[0, .05, .1])
-    baseline["problem_rates"] = {"slow_reaction": {"per_10_rounds": 2}}
+    baseline = tier(time_to_damage_ms=[200, 300, 400], trade_kill_events_per_round=[0, .05, .1])
+    baseline["problem_rates"] = {"slow_reaction": {"per_10_rounds": 2, "hits": 20, "rounds": 100}}
     tiers = {baseline["id"]: baseline}
     # 出枪慢没有命中偏多：出枪速度可以算优点
     page = build_match_page(mm, report(), frequency(1, 1), load_config(), tiers)
-    assert {row.id for row in page.strengths} == {"time_to_damage_ms", "trade_kills_per_round"}
-    trade = next(row for row in page.strengths if row.id == "trade_kills_per_round")
+    assert {row.id for row in page.tiers[0].strengths} == {"time_to_damage_ms", "trade_kill_events_per_round"}
+    trade = next(row for row in page.tiers[0].strengths if row.id == "trade_kill_events_per_round")
     assert trade.you == 2 and trade.target == .5 and trade.unit == "次" and "每 10 回合" in trade.measure
     # 出枪慢命中偏多（warn）：出枪速度维度不再列为优点
     page = build_match_page(mm, report(), frequency(3, 3), load_config(), tiers)
-    assert {row.id for row in page.strengths} == {"trade_kills_per_round"}
-    assert page.problems[0].measure == "每 10 回合出现的次数" and page.problems[0].unit == "次"
+    assert {row.id for row in page.tiers[0].strengths} == {"trade_kill_events_per_round"}
+    assert page.tiers[0].problems[0].measure == "每 10 回合出现的次数" and page.tiers[0].problems[0].unit == "次"
 
 
 def test_verdict_picks_largest_excess_not_largest_ratio():
     """产品负责人 2026-10-18（另一名业余玩家）：压枪差 7 次、倍数 1.59 排到了准星 34 次、倍数 1.48 前面。"""
     data = sample()
-    data["amateur_tmp"]["problem_rates"] = {"spray_control": {"per_10_rounds": 0.26},
-                                            "poor_crosshair_placement": {"per_10_rounds": 1.36}}
+    data["amateur_tmp"]["problem_rates"] = {"spray_control": {"per_10_rounds": 0.26, "hits": 26, "rounds": 1000},
+                                            "poor_crosshair_placement": {"per_10_rounds": 1.36, "hits": 136, "rounds": 1000}}
     rows = [FrequencyRow(problem="spray_control", label="压枪差", hits=7, per_10_rounds=0.414,
                          pro_per_10_rounds=0.07, ratio=5.97, prominent=True),
             FrequencyRow(problem="poor_crosshair_placement", label="准星没提前放好", hits=34, per_10_rounds=2.012,
                          pro_per_10_rounds=0.67, ratio=3.01, prominent=True)]
     mm = make_mm([make_moment()], lobby=[line()], rounds=169)
     page = build_match_page(mm, report(), rows, load_config(), data)
-    assert [p.id for p in page.problems] == ["poor_crosshair_placement", "spray_control"]
-    assert page.verdict == "最该练的是准星没提前放好：这场出现 34 次，按业余（临时）的频率约 23 次。"
+    assert [p.id for p in page.tiers[0].problems] == ["poor_crosshair_placement", "spray_control"]
+    assert page.tiers[0].verdict.startswith("最该练的是准星没提前放好：这场出现 34 次，按业余（临时）的频率约 23 次。")
     # 压枪差倍数够高，但只多出约 2.6 次：黄色，不是红色
-    assert [p.severity for p in page.problems] == ["warn", "warn"]
+    assert [p.severity for p in page.tiers[0].problems] == ["bad", "warn"]
+
+
+def test_tier_switch_reselects_all_sections():
+    from tests.test_summary import stats
+    high = tier(time_to_damage_ms=[200, 300, 400])
+    low = tier(time_to_damage_ms=[10, 20, 30])
+    high.update(id="high", name="分段甲", problem_rates={"slow_reaction": {"hits": 5, "rounds": 10, "per_10_rounds": 5}})
+    low.update(id="low", name="分段乙", problem_rates={"slow_reaction": {"hits": 1, "rounds": 10, "per_10_rounds": 1}})
+    mm = make_mm([make_moment()], lobby=[line(aim=stats(100))], rounds=10)
+    page = build_match_page(mm, report(), frequency(4, 4), load_config(), {"high": high, "low": low})
+    a, b = page.tiers
+    assert not a.problems and a.strengths[0].percentile == 100
+    assert b.problems[0].count == 4 and b.problems[0].severity == "bad" and not b.strengths
+    assert "最该练" not in a.verdict and "最该练的是出枪慢" in b.verdict
+    assert "分段乙" in b.verdict and "整体强弱" in a.verdict
+    assert not {"verdict", "strengths", "problems", "problem_bad_ratio"}.intersection(page.model_dump())
+    assert "problem_targets" not in b.model_dump()
+
+
+def test_summary_strength_uses_median_of_percentiles():
+    from tests.test_summary import stats
+    cfg = load_config()
+    games = []
+    for index, ttd in enumerate([100, 300]):
+        mm = make_mm(lobby=[line(aim=stats(ttd))], rounds=10)
+        ref = DemoRef(path="test.dem", member=None, match_id=f"a{index}", map_name="de_test", player_name="目标玩家")
+        games.append((ref, mm, ProblemReport(hits=[], disabled=[], skipped={}, baseline_source=None), (5, 5)))
+    data = tier(time_to_damage_ms=[201, 250, 299])
+    summary = aggregate_matches(A, games, None, cfg)
+    page = build_summary_page(summary, cfg, {data["id"]: data})
+    view, = page.tiers
+    assert view.you[0] == 50 and not view.strengths
+    cfg["radar"]["strength_min_percentile"] = 50
+    row, = build_summary_page(summary, cfg, {data["id"]: data}).tiers[0].strengths
+    assert row.you == 200 and row.percentile == 50 and row.samples == 10
+    assert row.measure.endswith("（典型单场）")
+    assert row.text == "在业余（临时）里排在第 50 百分位。"
+
+
+def test_missed_trade_examples_match_exact_hit_evidence():
+    from cs2coach.features.models import MissedTrade
+    hit = MissedTrade(round=1, tick=100, teammate=B, killer=C, distance=10, killer_traded_by_other=False)
+    excluded = hit.model_copy(update={"tick": 200, "teammate": A, "killer_traded_by_other": True})
+    # tick 相同时仍必须核对队友和击杀者。
+    other = hit.model_copy(update={"teammate": C, "killer": B, "side": "CT"})
+    mm = make_mm(missed_trades=[excluded, other, hit], rounds=10)
+    detected = ProblemReport(hits=[ProblemHit(problem="missed_trade", target="R1", weapon=None,
+                                             evidence=hit.model_dump(), thresholds={})],
+                             disabled=[], skipped={}, baseline_source=None)
+    data = sample()
+    data["amateur_tmp"]["problem_rates"] = {"missed_trade": {"hits": 1, "rounds": 100}}
+    rows = [FrequencyRow(problem="missed_trade", label="漏补枪", hits=3, per_10_rounds=3,
+                         pro_per_10_rounds=None, ratio=None, prominent=False)]
+    row, = build_match_page(mm, detected, rows, load_config(), data).tiers[0].problems
+    assert [example.tick for example in row.examples] == [100]
+    assert "CT" not in row.examples[0].situation
+    assert row.evidence_ticks == {"本场": [100]}
+
+
+@pytest.mark.parametrize("hits,total,rounds,count,expected,severity", [
+    (6, 10, 10, 9, 6, "warn"),
+    (17, 4930, 1000, 9, 1000 * 17 / 4930, "bad"),
+    (0, 10, 10, 1, .5, "warn"),
+])
+def test_expected_precision_and_poisson_severity(hits, total, rounds, count, expected, severity):
+    data = sample()
+    data["amateur_tmp"]["problem_rates"] = {"slow_reaction": {
+        "hits": hits, "rounds": total, "per_10_rounds": round(10 * hits / total, 2)}}
+    row, = build_match_page(make_mm(rounds=rounds), report(), frequency(10 * count / rounds, count),
+                            load_config(), data).tiers[0].problems
+    assert row.expected == pytest.approx(expected) and row.severity == severity
+
+
+def test_only_one_death_is_not_a_strength():
+    data = tier(traded_death_pct=[0, 20, 40])
+    mm = make_mm(lobby=[line(deaths=1, traded_deaths=1)])
+    view, = build_match_page(mm, report(), [], load_config(), {data["id"]: data}).tiers
+    assert not view.strengths and view.you[4] is None
+
+
+def test_verdict_weakest_requires_four_axes_even_when_bad():
+    from tests.test_summary import stats
+    aim = stats(100).model_copy(update={"crosshair_placement_deg": 10, "crosshair_placement_samples": 5,
+                                      "counter_strafing_pct": 50, "counter_strafing_shots": 5})
+    data = tier(time_to_damage_ms=[200, 300, 400], crosshair_placement_deg=[0, 5, 10],
+                counter_strafing_pct=[0, 50, 100], utility_damage_per_round=[0, 10, 20])
+    data["problem_rates"] = sample()["amateur_tmp"]["problem_rates"]
+    view, = build_match_page(make_mm(lobby=[line(aim=aim)], rounds=10), report(), frequency(6, 6),
+                             load_config(), {data["id"]: data}).tiers
+    assert "最该练" in view.verdict and "雷达上最弱的是预瞄（第 17 百分位）" in view.verdict
+    assert "最强的是" not in view.verdict
+
+
+def test_strength_examples_only_use_matching_events():
+    from cs2coach.report.page_data import _strength_moments
+    from tests.test_summary import stats
+    aim = stats(100).model_copy(update={"spray_accuracy_pct": 50, "spray_shots": 10})
+    def spray(hits, **changes):
+        return make_moment("kill", engagement={"shots": [make_shot(tick=80 + i * 8, hit=hit)
+                                                         for i, hit in enumerate(hits)]}, **changes)
+    good = spray([True, True, False])
+    poor = spray([True, False, False], tick=200)
+    death = make_moment("death", tags=["traded"])
+    trade = make_moment("kill", tags=["trade_kill"])
+    flash = make_moment("assist", tags=["flash_assist"])
+    mm = make_mm([poor, good, death, trade, flash], lobby=[line(aim=aim)])
+    cfg = load_config()
+    assert _strength_moments(mm, "spray_accuracy_pct", 5, cfg) == [good]
+    assert _strength_moments(mm, "traded_death_pct", 5, cfg) == [death]
+    assert _strength_moments(mm, "trade_kill_events_per_round", 5, cfg) == [trade]
+    assert _strength_moments(mm, "enemies_flashed_per_flash", 5, cfg) == [flash]
+    assert _strength_moments(mm, "utility_damage_per_round", 5, cfg) == []
+
+
+def test_verdict_does_not_call_an_above_threshold_axis_weakest():
+    """审查 045：汇总里最低的维度是第 51 百分位，结论却写"最弱的是预瞄"。"""
+    from cs2coach.report.page_data import _verdict
+    cfg = load_config()
+    axes = cfg["radar"]["axes"]
+    text = _verdict("summary", [], "业余（临时）", [], axes, [51, 60, 70, 80, 90, 66], cfg)
+    assert "最弱" not in text and "都在第 40 百分位以上" in text
+    text = _verdict("summary", [], "业余（临时）", [], axes, [17.4, 60, 70, 80, 90, 66], cfg)
+    assert "雷达上最弱的是命中速度（第 17 百分位）" in text

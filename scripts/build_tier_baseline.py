@@ -30,7 +30,7 @@ TIER_DIR = ROOT / "src/cs2coach/baselines/tiers"
 def build_tier_baseline(tier: dict, mms: list, demo_count: int,
                         pro_baseline: dict, cfg: dict) -> dict:
     """仅输出数值分布与总数，身份、文件路径、原清单均不进入结果。"""
-    samples = [player_metrics(line) for mm in mms for line in mm.lobby if line.steamid == mm.player]
+    samples = [player_metrics(line, cfg) for mm in mms for line in mm.lobby if line.steamid == mm.player]
     metrics = {}
     for metric in RADAR_METRICS:
         values = sorted(sample[metric] for sample in samples
@@ -116,7 +116,7 @@ def main(argv: list[str] | None = None) -> int:
         TIER_DIR.mkdir(parents=True, exist_ok=True)
         output = TIER_DIR / f"{tier['id']}.json"
         temp = output.with_suffix(".json.part")
-        temp.write_text(json.dumps(data, ensure_ascii=False, indent=2, allow_nan=False) + "\n", encoding="utf-8")
+        temp.write_text(json.dumps(data, ensure_ascii=False, indent=2, allow_nan=False) + "\n", encoding="utf-8", newline="\n")
         temp.replace(output)
         print(f"source: {data['source']}", flush=True)
         for metric, stats in data["metrics"].items():

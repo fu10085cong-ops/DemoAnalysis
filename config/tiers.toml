@@ -2,7 +2,7 @@
 id = "amateur_tmp"
 name = "业余（临时）"
 dirs = ["data/demos/5e_demo", "data/demos/perfectworld_demo"]
-note = "现有 24 场业余 demo，正式分段收集齐之前临时使用"
+note = "现有 23 场业余 demo，正式分段收集齐之前临时使用"
 
 [[tier]]
 id = "pro"

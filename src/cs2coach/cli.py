@@ -31,6 +31,17 @@ def _output_folder(root: Path, demo: Path, name: str, steamid: int) -> Path:
     return player_dir / demo.stem
 
 
+def _check_report_page(page, cfg: dict) -> None:
+    """输出一致性问题，保留报告供进一步审查。"""
+    from cs2coach.report.page_check import check_page
+
+    issues = check_page(page, cfg)
+    if issues:
+        print(f"报告页一致性检查：{len(issues)} 处")
+        for issue in issues:
+            print(f"  {issue}")
+
+
 def _archive_reports(folder: Path, names: tuple[str, ...] = ("report.md", "submission.json", "report_data.json", "report.html")) -> None:
     """重跑前保存指定文件；同一分钟内重跑也不覆盖历史版本。"""
     for name in names:
@@ -154,7 +165,8 @@ def _summary(args: argparse.Namespace) -> int:
     from cs2coach.report.page_html import render_page
 
     page = build_summary_page(result, cfg, _page_tiers(cfg, args))
-    (folder / "report_data.json").write_text(page.model_dump_json(indent=2) + "\n", encoding="utf-8")
+    (folder / "report_data.json").write_text(page.model_dump_json(indent=2) + "\n", encoding="utf-8", newline="\n")
+    _check_report_page(page, cfg)
     (folder / "report.html").write_text(render_page(page), encoding="utf-8", newline="\n")
     print(f"汇总完成：{len(result.matches)} 场，在场 {result.rounds_played_total} 回合，"
           f"跳过 {len(result.skipped)} 场")
@@ -318,7 +330,8 @@ def _analyze(args: argparse.Namespace) -> int:
     from cs2coach.report.page_html import render_page
 
     page = build_match_page(moments, detected, frequencies, cfg, _page_tiers(cfg, args))
-    (folder / "report_data.json").write_text(page.model_dump_json(indent=2) + "\n", encoding="utf-8")
+    (folder / "report_data.json").write_text(page.model_dump_json(indent=2) + "\n", encoding="utf-8", newline="\n")
+    _check_report_page(page, cfg)
     (folder / "report.html").write_text(render_page(page), encoding="utf-8", newline="\n")
     if not args.ai:
         print("加上 --ai 生成 AI 复盘报告")

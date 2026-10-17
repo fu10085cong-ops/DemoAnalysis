@@ -8,40 +8,62 @@ from cs2coach.features.models import LobbyLine
 RADAR_METRICS: dict[str, bool] = {
     "time_to_damage_ms": True, "crosshair_placement_deg": True,
     "counter_strafing_pct": False, "spray_accuracy_pct": False,
-    "trade_kills_per_round": False, "traded_death_pct": False,
+    "trade_kill_events_per_round": False, "traded_death_pct": False,
     "utility_damage_per_round": False, "enemies_flashed_per_flash": False,
-    "wasted_utility_avg": True,
 }
 
 
-def player_metrics(line: LobbyLine) -> dict[str, float | None]:
+def sample_count(line: LobbyLine, metric: str) -> int:
+    """指标真正参与统计的样本数，不用代表例子的数量代替。"""
+    fields = {"time_to_damage_ms": "time_to_damage_samples",
+              "crosshair_placement_deg": "crosshair_placement_samples",
+              "counter_strafing_pct": "counter_strafing_shots", "spray_accuracy_pct": "spray_shots"}
+    if metric in fields:
+        return getattr(line.aim, fields[metric]) if line.aim else 0
+    if metric == "traded_death_pct":
+        return line.deaths
+    if metric == "enemies_flashed_per_flash":
+        return line.flashes_thrown
+    return line.rounds_played
+
+
+def minimum_samples(metric: str, cfg: dict) -> int:
+    """枪法沿用原门槛，其他指标按自己的分母设门槛。"""
+    if metric in tuple(RADAR_METRICS)[:4]:
+        return cfg["aim_stats"]["min_samples"]
+    key = {"traded_death_pct": "deaths", "enemies_flashed_per_flash": "flashes"}.get(metric, "rounds")
+    return cfg["radar"]["min_samples"][key]
+
+
+def player_metrics(line: LobbyLine, cfg: dict) -> dict[str, float | None]:
     """分母为零或原指标样本不足时保留空值。"""
-    return {
+    values = {
         **{key: getattr(line.aim, key) if line.aim else None
            for key in ("time_to_damage_ms", "crosshair_placement_deg", "counter_strafing_pct", "spray_accuracy_pct")},
-        "trade_kills_per_round": line.trade_kills / line.rounds_played if line.rounds_played else None,
+        "trade_kill_events_per_round": line.trade_kill_events / line.rounds_played if line.rounds_played else None,
         "traded_death_pct": 100 * line.traded_deaths / line.deaths if line.deaths else None,
         "utility_damage_per_round": line.utility_damage / line.rounds_played if line.rounds_played else None,
         "enemies_flashed_per_flash": line.enemies_flashed_per_flash,
-        "wasted_utility_avg": line.wasted_utility_avg,
     }
+    return {key: value if sample_count(line, key) >= minimum_samples(key, cfg) else None
+            for key, value in values.items()}
 
 
-def percentile(metric: str, value: float | None, tier: dict) -> float | None:
+def percentile(metric: str, value: float | None, tier: dict, cfg: dict) -> float | None:
     """沿用 baseline.compare 的严格比较、相等算半个样本和整数舍入。"""
     values = tier.get("metrics", {}).get(metric, {}).get("values", [])
-    if value is None or not values:
+    if value is None or not values or len(values) < cfg["radar"]["min_samples"]["tier_values"]:
         return None
     better = sum(value < x if RADAR_METRICS[metric] else value > x for x in values)
     better += 0.5 * sum(value == x for x in values)
     return round(100 * better / len(values))
 
 
-def axis_values(metrics: dict[str, float | None], tier: dict, axes: list[dict]) -> list[float | None]:
+def axis_values(metrics: dict[str, float | None], tier: dict, axes: list[dict], cfg: dict) -> list[float | None]:
     """维度内指标等权平均，跳过缺失值。"""
     result = []
     for axis in axes:
-        values = [percentile(key, metrics.get(key), tier) for key in axis["metrics"]]
+        values = [percentile(key, metrics.get(key), tier, cfg) for key in axis["metrics"]]
         valid = [x for x in values if x is not None]
         result.append(mean(valid) if valid else None)
     return result

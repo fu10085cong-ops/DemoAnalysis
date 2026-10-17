@@ -121,7 +121,7 @@ th, td { overflow-wrap: anywhere }
       <canvas class="radar" id="radar" width="920" height="840" role="img" aria-label="能力雷达图"></canvas>
       <div class="legend">
         <div class="key"><span class="sw"></span>你</div>
-        <div class="key"><span class="sw cmp"></span><span id="cmp-name">目标分段中位</span></div>
+        <div class="key"><span class="sw cmp"></span><span id="cmp-name">参考中线（50）</span></div>
         <div>
           <label for="cmp">虚线对比</label>
           <select id="cmp"></select>
@@ -131,20 +131,20 @@ th, td { overflow-wrap: anywhere }
           <select id="tier"></select>
         </div>
         <div class="axes-list" id="axes-list"></div>
-        <div class="sub">数值是在目标分段里排到百分之几，越往外越好；50 = 该分段中位。</div>
+        <div class="sub">数值是在目标分段里排到百分之几，越往外越好；50 = 分段里排在正中间的水平。</div>
       </div>
     </div>
   </section>
 
   <section class="panel">
     <h2>做得好的方向</h2>
-    <div class="sub" style="margin-bottom:8px">领先默认目标分段最多的几项。竖线：默认目标分段中位。点开看具体回合。</div>
+    <div class="sub" style="margin-bottom:8px">在所选分段里百分位最高的几项。竖线：分段指标中位数。点开看具体回合。</div>
     <div class="probs" id="goods"></div>
   </section>
 
   <section class="panel">
     <h2>问题汇总</h2>
-    <div class="sub" style="margin-bottom:8px">按差距和出现次数排序。条形：你每 10 回合出现几次；竖线：目标分段中位。点开看具体回合。</div>
+    <div class="sub" style="margin-bottom:8px">按多出的次数排序。条形：你每 10 回合出现几次；竖线：目标分段的问题频率。点开看具体回合。</div>
     <div class="probs" id="probs"></div>
   </section>
 
@@ -223,12 +223,6 @@ function examplesTable(examples) {
   wrapper.append(table);
   return wrapper;
 }
-// 与 page_data 一致：红色要求倍数够高且多出的次数够多；切换分段时按该分段重算
-function problemSeverity(item, target) {
-  if (target == null) return "warn";
-  const excess = item.count - target * page.rounds_played / 10;
-  return item.you >= page.problem_bad_ratio * target && excess >= page.problem_min_excess ? "bad" : excess > 0 ? "warn" : "ok";
-}
 function drawList(id, list, problems) {
   const box = $(id);
   box.replaceChildren();
@@ -236,8 +230,8 @@ function drawList(id, list, problems) {
     box.append(node("p", problems ? "暂未发现需要列出的问题" : "暂无可列出的优势方向", "sub"));
   }
   list.forEach((item, index) => {
-    const target = problems ? (tier?.problem_targets[item.id] ?? null) : item.target;
-    const severity = problems ? problemSeverity(item, target) : item.severity;
+    const target = item.target;
+    const severity = item.severity;
     const row = node("div", null, "row");
     row.tabIndex = 0;
     row.setAttribute("role", "button");
@@ -335,9 +329,11 @@ function selectTier() {
   options($("cmp"), tier.comparisons, previous);
   $("cmp").disabled = !tier.comparisons.length;
   drawRadar();
-  drawList("probs", page.problems, true);
+  $("verdict").textContent = tier.verdict;
+  drawList("probs", tier.problems, true);
+  drawList("goods", tier.strengths, false);
 }
-["title", "subtitle", "verdict"].forEach(key => { $(key).textContent = page[key]; });
+["title", "subtitle"].forEach(key => { $(key).textContent = page[key]; });
 document.title = page.title;
 $("no-tiers").hidden = !!tier;
 $("radar-box").hidden = !tier;
@@ -345,9 +341,9 @@ if (tier) {
   options($("tier"), page.tiers, tier.id);
   selectTier();
 } else {
-  drawList("probs", page.problems, true);
+  drawList("probs", [], true);
+  drawList("goods", [], false);
 }
-drawList("goods", page.strengths, false);
 $("hl").replaceChildren();
 if (!page.highlights.length) $("hl").append(node("p", "这段时间没有挑出高光回合", "sub"));
 page.highlights.forEach(highlight => {

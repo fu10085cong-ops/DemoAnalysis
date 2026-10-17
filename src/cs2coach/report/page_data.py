@@ -7,15 +7,15 @@ from pathlib import Path
 from statistics import mean, median
 from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 import pandas as pd
 
 from cs2coach.features.highlights import round_time
 from cs2coach.features.labels import weapon_label
 from cs2coach.features.models import MatchMoments, Moment
-from cs2coach.features.problems import ProblemReport
-from cs2coach.features.radar import RADAR_METRICS, axis_values, median_axes, percentile, player_metrics
-from cs2coach.report.basic import choose_problems, problem_texts
+from cs2coach.features.problems import ProblemReport, _poisson_tail
+from cs2coach.features.radar import RADAR_METRICS, axis_values, median_axes, percentile, player_metrics, sample_count
+from cs2coach.report.basic import problem_texts
 from cs2coach.report.evidence import evidence_sentence
 from cs2coach.summary.aggregate import PlayerSummary
 from cs2coach.tools.slots import situation_text
@@ -23,22 +23,21 @@ from cs2coach.tools.slots import situation_text
 TIER_DIR = Path(__file__).resolve().parents[1] / "baselines/tiers"
 # 名称、这个数是什么（页面上直接显示）、单位、换算倍数。按回合算的次数换成"每 10 回合"，与问题汇总一致（审查 044）
 METRIC_TEXT = {
-    "time_to_damage_ms": ("出枪速度", "从看见对手到打中他的时间（中位数）", "毫秒", 1),
-    "crosshair_placement_deg": ("准星位置", "看见对手时准星偏离他的角度（中位数）", "°", 1),
-    "counter_strafing_pct": ("急停", "开枪时已经停稳的比例", "%", 1),
-    "spray_accuracy_pct": ("压枪", "连发子弹打中对手的比例", "%", 1),
-    "trade_kills_per_round": ("补枪", "每 10 回合补枪击杀的次数", "次", 10),
-    "traded_death_pct": ("被队友补回", "阵亡后被队友补枪的比例", "%", 1),
+    "time_to_damage_ms": ("首次命中用时", "从看见对手到第一次打中他的时间（典型单场的中位数，1 秒以上的不算）", "毫秒", 1),
+    "crosshair_placement_deg": ("看见到命中的转角", "从看见对手到第一次打中，准星转过的角度（越小说明预瞄越到位）", "°", 1),
+    "counter_strafing_pct": ("急停", "用步枪、看见敌人时开枪，已经停稳的比例", "%", 1),
+    "spray_accuracy_pct": ("压枪", "用步枪连发 3 发以上时，子弹打中敌人的比例", "%", 1),
+    "trade_kill_events_per_round": ("补枪", "每 10 回合补枪击杀的次数（一次击杀算一次）", "次", 10),
+    "traded_death_pct": ("被队友补回", "自己阵亡后被队友补枪的比例", "%", 1),
     "utility_damage_per_round": ("道具伤害", "每 10 回合手雷和火造成的伤害", "点", 10),
     "enemies_flashed_per_flash": ("闪光效果", "每颗闪光平均闪到的敌人数", "人", 1),
-    "wasted_utility_avg": ("道具用完再死", "阵亡时身上没用掉的道具价值（平均）", "$", 1),
 }
 PROBLEM_MEASURE = "每 10 回合出现的次数"
 PROBLEM_METRICS = {
     "slow_reaction": "time_to_damage_ms", "poor_crosshair_placement": "crosshair_placement_deg",
     "shot_while_moving": "counter_strafing_pct", "spray_while_moving": "counter_strafing_pct",
-    "spray_control": "spray_accuracy_pct", "missed_trade": "trade_kills_per_round",
-    "post_plant_utility_unused": "wasted_utility_avg", "dry_peek_with_utility": "wasted_utility_avg",
+    "spray_control": "spray_accuracy_pct", "missed_trade": "trade_kill_events_per_round",
+    "post_plant_utility_unused": "utility_damage_per_round", "dry_peek_with_utility": "utility_damage_per_round",
 }
 
 
@@ -66,6 +65,9 @@ class Row(BaseModel):
     unit: str
     measure: str = ""  # 这个数是什么，页面上显示在名称下面
     expected: float | None = None  # 问题：按目标分段的频率，这些回合里应有的次数
+    percentile: float | None = None
+    samples: int = 0
+    evidence_ticks: dict[str, list[int]] = Field(default_factory=dict)  # 漏补命中的原始 tick，按比赛分开核查
     count: int
     severity: Literal["bad", "warn", "ok"]
     text: str
@@ -95,22 +97,19 @@ class TierView(BaseModel):
     source: str
     you: list[float | None]
     comparisons: list[Comparison]
-    problem_targets: dict[str, float]
+    verdict: str
+    strengths: list[Row]
+    problems: list[Row]
 
 
 class ReportPage(BaseModel):
     kind: Literal["match", "summary"]
     title: str
     subtitle: str
-    verdict: str
     axes: list[dict]
     default_tier: str
-    problem_bad_ratio: float
-    problem_min_excess: float = 3
     rounds_played: int = 0
     tiers: list[TierView]
-    strengths: list[Row]
-    problems: list[Row]
     highlights: list[Highlight]
 
 
@@ -132,9 +131,9 @@ def commands(mm: MatchMoments, tick: int, cfg: dict) -> Command:
         jump=review["jump_template"].format(tick=tick))
 
 
-def _metrics(mm):
+def _metrics(mm, cfg):
     line = next((line for line in mm.lobby if line.steamid == mm.player), None)
-    return player_metrics(line) if line else dict.fromkeys(RADAR_METRICS)
+    return player_metrics(line, cfg) if line else dict.fromkeys(RADAR_METRICS)
 
 
 def _axis(metric, axes):
@@ -169,14 +168,33 @@ def _strength_moments(mm, metric, limit, cfg):
         return [m for m in kills if m.engagement and m.engagement.first_shot_stopped is True]
     if metric == "spray_accuracy_pct":
         from cs2coach.features.aim_stats import _spray_shots
+        from cs2coach.parsing.weapons import RIFLES
 
-        return [m for m in kills if m.engagement and m.engagement.shots and not _spray_shots(
-            pd.DataFrame([{"tick": s.tick, "weapon": s.weapon}
-                          for s in sorted(m.engagement.shots, key=lambda s: s.tick)]),
-            mm.tick_rate, cfg["aim_stats"]).empty]
-    if metric in ("trade_kills_per_round", "traded_death_pct"):
+        own = _metrics(mm, cfg)[metric]
+        if own is None:
+            return []
+        valid = []
+        for m in kills:
+            if not m.engagement or not m.engagement.shots:
+                continue
+            shots = pd.DataFrame([s.model_dump() for s in sorted(m.engagement.shots, key=lambda s: s.tick)])
+            # 每段连发单独比较；不能让另一段高命中率掩盖这段的失误。
+            gap = cfg["aim_stats"]["spray_max_gap_seconds"] * mm.tick_rate
+            runs = ((shots.tick.diff() > gap) | (shots.weapon != shots.weapon.shift())).cumsum()
+            for _, run in shots.groupby(runs):
+                spray = _spray_shots(run, mm.tick_rate, cfg["aim_stats"])
+                spray = spray[(spray.seen_opponent == True) & spray.weapon.isin(RIFLES)]
+                if not spray.empty and 100 * spray.hit.mean() >= own:
+                    valid.append(m)
+                    break
+        return valid
+    if metric == "trade_kill_events_per_round":
         return [m for m in kills if "trade_kill" in m.tags]
-    return [m for m in mm.moments if m.kind == "assist" and "flash_assist" in m.tags]
+    if metric == "traded_death_pct":
+        return [m for m in mm.moments if m.kind == "death" and "traded" in m.tags]
+    if metric == "enemies_flashed_per_flash":
+        return [m for m in mm.moments if "flash_assist" in m.tags]
+    return []
 
 
 def _rows(games, frequency, cfg, tier):
@@ -185,69 +203,99 @@ def _rows(games, frequency, cfg, tier):
     texts = problem_texts()
     problems = []
     rounds = sum(mm.rounds_played for mm, _, _ in games)
-    rates = tier.get("problem_rates", {}) if tier else {}
+    rates = tier.get("problem_rates", {})
 
     def expected(row):
-        target = rates.get(row.problem, {}).get("per_10_rounds")
-        return None if target is None else target * rounds / 10
+        rate = rates.get(row.problem, {})
+        hits, total = rate.get("hits"), rate.get("rounds")
+        if hits is None or hits < 0 or total is None or total <= 0:
+            return None
+        return rounds * (hits if hits else 0.5) / total
 
-    # 按"比目标分段多出来的次数"排序（产品负责人 2026-10-18：7 次的压枪差因倍数高被排到 34 次的准星前面）。
-    # 有分段时只列多出次数为正的问题；没有分段时退回职业对比的选题。
-    if tier:
-        candidates = sorted((r for r in frequency if r.hits > 0 and (e := expected(r)) is not None and r.hits > e),
-                            key=lambda r: (-(r.hits - expected(r)), -r.hits, r.problem))[:radar["max_problems"]]
-    else:
-        candidates = choose_problems(frequency, radar["max_problems"])
+    candidates = sorted((r for r in frequency if r.hits > 0 and
+                         (e := expected(r)) is not None and r.hits > e),
+                        key=lambda r: (-(r.hits - expected(r)), -r.hits, r.problem))[:radar["max_problems"]]
     for row in candidates:
-        target = rates.get(row.problem, {}).get("per_10_rounds") if tier else None
-        excess = None if target is None else row.hits - expected(row)
-        severity = ("warn" if target is None else
-                    "bad" if row.per_10_rounds >= radar["problem_bad_ratio"] * target and excess >= radar["problem_min_excess"]
-                    else "warn" if excess > 0 else "ok")
-        examples = []
+        exp = expected(row)
+        rate = rates[row.problem]
+        target = rate.get("per_10_rounds", 10 * rate["hits"] / rate["rounds"])
+        excess = row.hits - exp
+        severity = ("bad" if _poisson_tail(row.hits, exp) < cfg["problems"]["frequency_max_chance"]
+                    and excess >= radar["problem_min_excess"] else "warn" if excess > 0 else "ok")
+        examples, evidence_ticks = [], {}
         for mm, report, label in games:
             moments = {m.id: m for m in mm.moments}
             for hit in report.hits:
                 if hit.problem != row.problem:
                     continue
-                if hit.target in moments:
-                    examples.append(_example(mm, label, moments[hit.target], evidence_sentence(hit), cfg))
-                elif hit.target.startswith("R") and hit.target[1:].isdigit():
+                if row.problem == "missed_trade":
+                    evidence = hit.evidence
+                    if evidence.get("tick") is not None:
+                        evidence_ticks.setdefault(label, []).append(evidence["tick"])
                     for trade in mm.missed_trades:
-                        if trade.round == int(hit.target[1:]):
+                        if (hit.target == f"R{trade.round}" and all(
+                                getattr(trade, field) == evidence.get(field) for field in ("tick", "teammate", "killer"))):
                             examples.append(_example(mm, label, trade, evidence_sentence(hit), cfg))
-        # 比赛沿用汇总顺序，单场内按 tick 排序；同一回合漏补只列一条。
+                elif hit.target in moments:
+                    examples.append(_example(mm, label, moments[hit.target], evidence_sentence(hit), cfg))
         examples.sort(key=lambda e: (next(i for i, g in enumerate(games) if g[2] == e.match_label), e.tick))
         unique = {(e.match_label, e.round, e.tick): e for e in examples}
         why = texts.get(row.problem, {}).get("why", "")
         problems.append(Row(id=row.problem, name=row.label, axis=_axis(PROBLEM_METRICS.get(row.problem), axes),
             you=row.per_10_rounds, target=target, unit="次", measure=PROBLEM_MEASURE, count=row.hits,
-            expected=None if excess is None else row.hits - excess, severity=severity,
+            expected=exp, severity=severity, evidence_ticks=evidence_ticks,
             text=why.split("。", 1)[0] + ("。" if why else ""), examples=list(unique.values())[:limit]))
     strengths = []
-    if tier:
-        samples = [_metrics(mm) for mm, _, _ in games]
-        metrics = {key: median(valid) if (valid := [s[key] for s in samples if s[key] is not None]) else None
+    values = [_metrics(mm, cfg) for mm, _, _ in games]
+    metrics = {key: median(valid) if (valid := [s[key] for s in values if s[key] is not None]) else None
+               for key in RADAR_METRICS}
+    # 多场统一先算每场百分位，再取中位数；展示的原始值仍是典型单场。
+    percentiles = {key: median(valid) if (valid := [p for s in values
+                    if (p := percentile(key, s[key], tier, cfg)) is not None]) else None
                    for key in RADAR_METRICS}
-        # 同一维度已经列为问题（黄或红）时不再算作优点：整场中位数好、规则又命中偏多时，两边同时出现会让人糊涂
-        flagged = {row.axis for row in problems if row.severity != "ok" and row.axis}
-        ranked = [(key, p) for key in RADAR_METRICS if _axis(key, axes) not in flagged
-                  and (p := percentile(key, metrics[key], tier)) is not None and p >= radar["strength_min_percentile"]]
-        for key, p in sorted(ranked, key=lambda pair: -pair[1])[:radar["max_strengths"]]:
-            selected = [(mm, label, m) for mm, _, label in games for m in _strength_moments(mm, key, limit, cfg)]
-            count = len(selected)
-            if key in ("time_to_damage_ms", "crosshair_placement_deg"):
-                field = "time_to_damage_s" if key == "time_to_damage_ms" else key
-                selected.sort(key=lambda item: (getattr(item[2].engagement, field), item[2].tick))
-            selected = selected[:limit]
-            selected.sort(key=lambda item: (next(i for i, g in enumerate(games) if g[2] == item[1]), item[2].tick))
-            name, measure, unit, scale = METRIC_TEXT[key]
-            median_value = tier.get("metrics", {}).get(key, {}).get("median")
-            strengths.append(Row(id=key, name=name, axis=_axis(key, axes), you=metrics[key] * scale,
-                target=None if median_value is None else median_value * scale, unit=unit, measure=measure, count=count,
-                severity="ok", text=f"{name}优于{tier['name']}样本中 {p:g}% 的人次。",
-                examples=[_example(mm, label, m, _moment_what(mm, m), cfg) for mm, label, m in selected]))
+    flagged = {row.axis for row in problems if row.severity != "ok" and row.axis}
+    ranked = [(key, p) for key, p in percentiles.items() if _axis(key, axes) not in flagged
+              and p is not None and p >= radar["strength_min_percentile"]]
+    for key, p in sorted(ranked, key=lambda pair: -pair[1])[:radar["max_strengths"]]:
+        selected = [(mm, label, m) for mm, _, label in games for m in _strength_moments(mm, key, limit, cfg)]
+        count = len(selected)
+        samples = sum(sample_count(line, key) for (mm, _, _), values_for_match in zip(games, values)
+                      for line in mm.lobby if line.steamid == mm.player and values_for_match[key] is not None)
+        if key in ("time_to_damage_ms", "crosshair_placement_deg"):
+            field = "time_to_damage_s" if key == "time_to_damage_ms" else key
+            selected.sort(key=lambda item: (getattr(item[2].engagement, field), item[2].tick))
+        selected = selected[:limit]
+        selected.sort(key=lambda item: (next(i for i, g in enumerate(games) if g[2] == item[1]), item[2].tick))
+        name, measure, unit, scale = METRIC_TEXT[key]
+        if len(games) > 1:
+            measure += "（典型单场）"
+        median_value = tier.get("metrics", {}).get(key, {}).get("median")
+        strengths.append(Row(id=key, name=name, axis=_axis(key, axes), you=metrics[key] * scale,
+            target=None if median_value is None else median_value * scale, unit=unit, measure=measure, count=count,
+            percentile=p, samples=samples, severity="ok", text=f"在{tier['name']}里排在第 {p:g} 百分位。",
+            examples=[_example(mm, label, m, _moment_what(mm, m), cfg) for mm, label, m in selected]))
     return strengths, problems
+
+
+def _verdict(kind, games, tier_name, problems, axes, values, cfg):
+    bad = [row for row in problems if row.severity == "bad"]
+    if bad:
+        top = max(bad, key=lambda row: row.count - row.expected)
+        scope = "这场" if kind == "match" else f"{len(games)} 场里"
+        verdict = f"最该练的是{top.name}：{scope}出现 {top.count} 次，按{tier_name}的频率约 {round(top.expected)} 次。"
+    else:
+        period = "这场" if kind == "match" else "这段时间"
+        verdict = f"{period}没有检出明显多于{tier_name}的问题。"
+    valid = [(axis["name"], value) for axis, value in zip(axes, values) if value is not None]
+    if len(valid) >= cfg["radar"]["verdict_min_axes"]:
+        name, p = min(valid, key=lambda pair: pair[1])
+        weak = cfg["radar"]["verdict_weak_percentile"]
+        # 最低的维度也在门槛以上时不叫"最弱"（审查 045：第 51 百分位被说成最弱，读起来像短板）
+        verdict += (f"雷达上最弱的是{name}（第 {round(p)} 百分位）。" if p < weak else
+                    f"雷达上没有明显偏弱的维度，都在第 {weak:g} 百分位以上。")
+    else:
+        verdict += "可用的指标不够多，暂不判断整体强弱。"
+    return verdict
 
 
 def _build_page(kind, games, frequency, cfg, tiers, title, subtitle):
@@ -255,50 +303,32 @@ def _build_page(kind, games, frequency, cfg, tiers, title, subtitle):
     axes = radar["axes"]
     views = []
     for ident, tier in tiers.items():
-        values = [axis_values(_metrics(mm), tier, axes) for mm, _, _ in games]
+        values = [axis_values(_metrics(mm, cfg), tier, axes, cfg) for mm, _, _ in games]
         comparisons = []
         if kind == "match":
             lobby = games[0][0].lobby
-            all_values = [axis_values(player_metrics(line), tier, axes) for line in lobby]
+            all_values = [axis_values(player_metrics(line, cfg), tier, axes, cfg) for line in lobby]
             average = [mean(valid) if (valid := [v[i] for v in all_values if v[i] is not None]) else None
                        for i in range(len(axes))]
             comparisons.append(Comparison(id="match_avg", name="本场平均", values=average))
             if lobby:
                 best = min(lobby, key=lambda line: (-(line.kills - line.deaths), -line.kills, line.steamid))
                 comparisons.append(Comparison(id="match_best", name=f"本场最佳（{best.name}，{best.kills}/{best.deaths}）",
-                    values=axis_values(player_metrics(best), tier, axes)))
-        comparisons.append(Comparison(id="tier_median", name="分段中位数", values=[50] * len(axes)))
+                    values=axis_values(player_metrics(best, cfg), tier, axes, cfg)))
+        comparisons.append(Comparison(id="tier_median", name="参考中线（50）", values=[50] * len(axes)))
+        strengths, problems = _rows(games, frequency, cfg, tier)
+        you = median_axes(values, len(axes))
         views.append(TierView(id=ident, name=tier["name"], source=tier["source"],
-            you=median_axes(values, len(axes)), comparisons=comparisons,
-            problem_targets={pid: rate["per_10_rounds"] for pid, rate in tier.get("problem_rates", {}).items()}))
-    tier = tiers.get(radar["default_tier"])
-    strengths, problems = _rows(games, frequency, cfg, tier)
-    top = next((row for row in problems if row.expected is not None
-                and row.count - row.expected >= radar["problem_min_excess"]), None)
-    if top:
-        scope = "这场" if kind == "match" else f"{len(games)} 场里"
-        verdict = f"最该练的是{top.name}：{scope}出现 {top.count} 次，按{tier['name']}的频率约 {round(top.expected)} 次。"
-    elif tier:
-        view = next(view for view in views if view.id == radar["default_tier"])
-        valid = [(axis["name"], value) for axis, value in zip(axes, view.you) if value is not None]
-        period = "这场" if kind == "match" else "这段时间"
-        # 没有严重问题时也点出最弱的维度，避免雷达上明显的短板在结论里被说成"没有落后"
-        best, worst = max(valid, key=lambda pair: pair[1]) if valid else None, min(valid, key=lambda pair: pair[1]) if valid else None
-        verdict = ("当前指标样本不足，暂无法判断最强的方向。" if not valid else
-                   f"{period}没有明显落后于{tier['name']}的问题，最强的是{best[0]}。" if len(valid) < 2 else
-                   f"{period}没有明显落后于{tier['name']}的问题，最强的是{best[0]}，最弱的是{worst[0]}。")
-    else:
-        verdict = "目标分段基准尚未构建，暂无法给出分段对比结论。"
+            you=you, comparisons=comparisons, strengths=strengths, problems=problems,
+            verdict=_verdict(kind, games, tier["name"], problems, axes, you, cfg)))
     order = {"clutch": 0, "multikill": 1, "opening_win": 2, "flash_assist": 3}
     ranked = sorted((((order.get(h.kind, 9), -h.size, index, h.tick), mm, label, h)
                      for index, (mm, _, label) in enumerate(games) for h in mm.highlights), key=lambda item: item[0])
     highlights = [Highlight(**h.model_dump(exclude={"size"}), match_label=label, command=commands(mm, h.tick, cfg))
                   for _, mm, label, h in ranked[:radar["max_highlights"]]]
-    return ReportPage(kind=kind, title=title, subtitle=subtitle, verdict=verdict,
+    return ReportPage(kind=kind, title=title, subtitle=subtitle,
         axes=[{"id": a["id"], "name": a["name"]} for a in axes], default_tier=radar["default_tier"],
-        problem_bad_ratio=radar["problem_bad_ratio"], problem_min_excess=radar["problem_min_excess"],
-        rounds_played=sum(mm.rounds_played for mm, _, _ in games), tiers=views,
-        strengths=strengths, problems=problems, highlights=highlights)
+        rounds_played=sum(mm.rounds_played for mm, _, _ in games), tiers=views, highlights=highlights)
 
 
 def build_match_page(mm: MatchMoments, report: ProblemReport, frequency, cfg, tiers: dict[str, dict]) -> ReportPage:
