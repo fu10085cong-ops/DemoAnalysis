@@ -288,6 +288,69 @@ spray_moving_min_shots = 4
 # 移动扫射中未停稳子弹的比例阈值（待用数据校准）
 spray_moving_ratio = 0.5
 
+[audit]
+# 接近接触速度、首枪停稳阈值的相对范围
+borderline_ratio = 0.15
+# 这些检测需要可信的几何视野起点
+visibility_problems = ["slow_reaction", "poor_crosshair_placement", "peeked_into_held_angle", "dry_peek_with_utility", "overpeek_in_advantage", "died_without_seeing", "spray_control", "spray_while_moving", "won_duel_seen_first"]
+# 这些说明表示视野起点可能不完整；持续可见类说明不计入
+incomplete_visibility_notes = ["not_seen", "lost_sight", "first_hit_unseen", "smoke", "blind", "no_map_data"]
+
+[[audit.rules]]
+id = "fired_before_seen"
+problems = ["slow_reaction", "poor_crosshair_placement"]
+condition = "shots_before_seen_positive"
+description = "看见前已经开枪，视野起点可能不准"
+
+[[audit.rules]]
+id = "negative_segment"
+problems = ["slow_reaction"]
+condition = "negative_seen_to_shot"
+description = "看见到第一枪的分段为负"
+
+[[audit.rules]]
+id = "blind_at_seen"
+problems = ["slow_reaction", "poor_crosshair_placement", "peeked_into_held_angle", "dry_peek_with_utility", "overpeek_in_advantage", "died_without_seeing", "spray_control", "spray_while_moving", "won_duel_seen_first"]
+condition = "blind_at_seen"
+description = "首次几何可见时本人被闪白"
+
+[[audit.rules]]
+id = "visibility_note_set"
+problems = ["slow_reaction", "poor_crosshair_placement", "peeked_into_held_angle", "dry_peek_with_utility", "overpeek_in_advantage", "spray_control", "spray_while_moving", "won_duel_seen_first"]
+condition = "visibility_note_set"
+description = "视野数据带有不完整说明"
+
+[[audit.rules]]
+id = "through_smoke"
+problems = ["slow_reaction", "poor_crosshair_placement", "peeked_into_held_angle", "dry_peek_with_utility", "overpeek_in_advantage", "died_without_seeing", "spray_control", "spray_while_moving", "won_duel_seen_first"]
+condition = "through_smoke"
+description = "击杀或死亡记录穿烟，几何视野可能把隔烟射击算作看见"
+
+[[audit.rules]]
+id = "contact_speed_borderline"
+problems = ["peeked_into_held_angle", "dry_peek_with_utility", "overpeek_in_advantage"]
+condition = "contact_speed_borderline"
+description = "接触速度贴近静止或移动阈值"
+
+[[audit.rules]]
+id = "stop_borderline"
+problems = ["shot_while_moving"]
+condition = "stop_borderline"
+description = "第一枪速度比贴近停稳阈值"
+
+[[audit.rules]]
+id = "spray_mostly_unseen"
+problems = ["spray_control"]
+condition = "spray_mostly_unseen"
+description = "排除的未见目标子弹不少于参与评价的子弹"
+
+[[audit.rules]]
+id = "crosshair_extreme"
+problems = ["poor_crosshair_placement"]
+condition = "crosshair_extreme"
+description = "准星角度超过 90 度"
+angle_deg = 90.0
+
 [checker]
 # 一份提交的问题结论数量上限
 max_findings = 6

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
 
 import numpy as np
 import pandas as pd
@@ -80,3 +81,13 @@ class WallChecker:
             return True  # 两点在墙的同一侧
         y = ay + (by - ay) * (self.wall_x - ax) / (bx - ax)
         return y >= self.wall_y_max
+
+
+def make_audit_engagement(**changes):
+    """S01 审计规则的合成交火，只填扫描器需要的字段。"""
+    values = {"shots_before_seen": 0, "seen_to_first_shot_s": 0.2,
+              "player_seen_while_blind": False, "visibility_note": None,
+              "player_speed_at_contact": 90.0, "opponent_speed_at_contact": 90.0,
+              "shots": [SimpleNamespace(tick=100, speed_ratio=0.5)]}
+    values.update(changes)
+    return SimpleNamespace(**values)

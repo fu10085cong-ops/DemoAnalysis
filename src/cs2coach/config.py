@@ -23,7 +23,45 @@ def load_config(path: Path | None = None) -> dict[str, Any]:
     _validate_training(cfg["training"])
     _validate_visibility(cfg["visibility"])
     _validate_report_card(cfg["report"]["card"])
+    _validate_audit(cfg["audit"])
     return cfg
+
+
+def _validate_audit(cfg: dict[str, Any]) -> None:
+    from cs2coach.features.problems import DETECTED_PROBLEMS
+
+    known = set(DETECTED_PROBLEMS)
+    ratio = cfg["borderline_ratio"]
+    if type(ratio) not in (int, float) or not math.isfinite(ratio) or not 0 < ratio < 1:
+        raise ConfigError("配置项 audit.borderline_ratio 应在 (0, 1) 内")
+    visibility = cfg["visibility_problems"]
+    if not isinstance(visibility, list) or not visibility or len(set(visibility)) != len(visibility) or any(p not in known for p in visibility):
+        raise ConfigError("配置项 audit.visibility_problems 应为不重复的已实现问题编号")
+    notes = cfg["incomplete_visibility_notes"]
+    if (not isinstance(notes, list) or not notes or len(set(notes)) != len(notes)
+            or any(not isinstance(note, str) or not note for note in notes)):
+        raise ConfigError("配置项 audit.incomplete_visibility_notes 应为不重复的非空说明")
+    conditions = {"shots_before_seen_positive", "negative_seen_to_shot", "blind_at_seen",
+                  "visibility_note_set", "contact_speed_borderline", "stop_borderline",
+                  "spray_mostly_unseen", "crosshair_extreme", "through_smoke"}
+    rules = cfg["rules"]
+    if not isinstance(rules, list) or len(rules) != len(conditions) or {r.get("condition") for r in rules if isinstance(r, dict)} != conditions:
+        raise ConfigError("配置项 audit.rules 应包含九种不同条件")
+    ids = set()
+    for rule in rules:
+        if (not isinstance(rule.get("id"), str) or not rule["id"] or rule["id"] in ids
+                or not isinstance(rule.get("description"), str) or not rule["description"]
+                or not isinstance(rule.get("problems"), list) or not rule["problems"]
+                or any(p not in known for p in rule["problems"])):
+            raise ConfigError("配置项 audit.rules 的编号、说明或问题清单无效")
+        ids.add(rule["id"])
+        if rule["condition"] in {"blind_at_seen", "through_smoke"} and rule["problems"] != visibility:
+            raise ConfigError("视野审计规则的问题清单必须等于 audit.visibility_problems")
+        if rule["condition"] == "visibility_note_set" and rule["problems"] != [p for p in visibility if p != "died_without_seeing"]:
+            raise ConfigError("visibility_note_set 不适用于 died_without_seeing")
+        if rule["condition"] == "crosshair_extreme" and (type(rule.get("angle_deg")) not in (int, float)
+                or not math.isfinite(rule["angle_deg"]) or rule["angle_deg"] <= 0):
+            raise ConfigError("配置项 audit.rules.crosshair_extreme.angle_deg 应为正数")
 
 
 def _validate_report_card(card: dict[str, Any]) -> None:

@@ -1,6 +1,6 @@
 # S01 检测规则审计：抽样核对准确率、全部 demo 的可疑组合扫描
 
-状态：待做（结构性任务，说明见 `docs/tasks/README.md` 的"三类任务"）
+状态：完成（工具部分；判定由 Claude 与产品负责人进行）（结构性任务，说明见 `docs/tasks/README.md` 的"三类任务"）
 
 ## 目标
 
@@ -110,8 +110,126 @@
 ## 完成报告（GPT 填写）
 
 - 改动的文件及原因：
-- 测试结果：
-- 真实 demo 验证（如有）：
-- 遗留问题 / 需要确认的地方：
+  - `src/cs2coach/audit.py`、`scripts/audit_report.py`：随机组只抽不可疑命中；准确率按可疑层和不可疑层统计，并按 `hits.jsonl` 中的层占比加权合并。
+  - `config/default.toml`、`src/cs2coach/config.py`：配置并校验不完整视野说明清单、九条可疑规则及其适用问题。
+  - `tests/test_audit.py`：增加视野说明、穿烟、分层加权、置信区间及缺层判定的合成测试。其余 S01 工具和原有测试保留。
+- 测试结果：`.venv/bin/python -m pytest -q`：705 passed、3 skipped；`git diff --check` 通过。未调用模型 API，未新增依赖。
+- 审查意见逐条回应：
+  1. `precision.md` 现在每类问题显示可疑层、不可疑层、加权整体三行；两层使用 Wilson 95% 区间，整体使用 `Σ W² p(1-p)/n` 的正态近似区间。非空层没有 `correct`/`wrong` 判定时，整体显示“不足”。报告开头解释分层原因和权重。随机组只取不可疑命中；合成测试验证权重使用全部命中，且 `unsure` 不计入准确率。
+  2. `visibility_note_set` 只识别配置中的六种不完整说明，排除三种持续可见说明；适用清单排除了 `died_without_seeing`。真实数据中这条扫描从上轮 380 条降至 125 条，`died_without_seeing` 不再触发。
+  3. 新增 `through_smoke`，只检查视野依赖规则的击杀和死亡瞬间。真实数据各问题命中数见下表，其中 `spray_control` 为 41 条。
+  4. 已重新运行收集、抽样与统计报告。旧 `labels.toml` 的 353 条判定经检查全为空后，按审查意见重新生成；新文件仍无人工判定。
 
+| 问题 | 穿烟可疑命中 |
+|---|---:|
+| `slow_reaction` | 44 |
+| `poor_crosshair_placement` | 33 |
+| `peeked_into_held_angle` | 16 |
+| `dry_peek_with_utility` | 7 |
+| `overpeek_in_advantage` | 2 |
+| `died_without_seeing` | 0 |
+| `spray_control` | 41 |
+| `spray_while_moving` | 2 |
+| `won_duel_seen_first` | 15 |
+
+- 真实 demo 验证：
+  - 扫描 `data/demos/5e_demo/*.zip` 的 15 场和 `data/demos/perfectworld_demo/*.zip` 的 9 场；成功 24/24 场、240 人次、6669 条命中，总耗时 232.6 秒，无失败。
+  - 抽样 353 条（随机 268、可疑优先 85），生成 19 份核对清单；九条可疑规则的汇总在 `data/audit/2026-10-17/suspicious.md`。`spray_mostly_unseen` 为 0。数据都在被 Git 忽略的 `data/audit/2026-10-17/`。
+
+  每类问题的命中及抽样条数：
+
+| 问题 | 当前状态 | 命中 | 抽样 |
+|---|---|---:|---:|
+| `slow_reaction` | 启用 | 1481 | 20 |
+| `poor_crosshair_placement` | 启用 | 1171 | 20 |
+| `shot_while_moving` | 启用 | 635 | 20 |
+| `peeked_into_held_angle` | 启用 | 365 | 20 |
+| `dry_peek_with_utility` | 启用 | 144 | 20 |
+| `overpeek_in_advantage` | 启用 | 69 | 20 |
+| `died_without_seeing` | 停用 | 223 | 20 |
+| `turned_into_flash` | 停用 | 159 | 20 |
+| `missed_trade` | 启用 | 683 | 20 |
+| `post_plant_utility_unused` | 启用 | 24 | 20 |
+| `weapon_not_ready` | 停用 | 165 | 20 |
+| `awp_unscoped_shot` | 停用 | 0 | 0 |
+| `deagle_moving_shot` | 启用 | 20 | 18 |
+| `glock_long_range` | 启用 | 33 | 20 |
+| `spray_control` | 启用 | 219 | 20 |
+| `spray_while_moving` | 停用 | 15 | 15 |
+| `good_trade` | 启用 | 664 | 20 |
+| `flash_assist` | 启用 | 115 | 20 |
+| `won_duel_seen_first` | 启用 | 484 | 20 |
+
+  `suspicious.md` 汇总表：
+
+| 规则 | 问题 | 可疑 / 全部 | 比例 |
+|---|---|---:|---:|
+| fired_before_seen | slow_reaction | 78 / 1481 | 5.3% |
+| fired_before_seen | poor_crosshair_placement | 49 / 1171 | 4.2% |
+| negative_segment | slow_reaction | 0 / 1481 | 0.0% |
+| blind_at_seen | slow_reaction | 0 / 1481 | 0.0% |
+| blind_at_seen | poor_crosshair_placement | 0 / 1171 | 0.0% |
+| blind_at_seen | peeked_into_held_angle | 9 / 365 | 2.5% |
+| blind_at_seen | dry_peek_with_utility | 8 / 144 | 5.6% |
+| blind_at_seen | overpeek_in_advantage | 0 / 69 | 0.0% |
+| blind_at_seen | died_without_seeing | 0 / 223 | 0.0% |
+| blind_at_seen | spray_control | 8 / 219 | 3.7% |
+| blind_at_seen | spray_while_moving | 0 / 15 | 0.0% |
+| blind_at_seen | won_duel_seen_first | 0 / 484 | 0.0% |
+| visibility_note_set | slow_reaction | 0 / 1481 | 0.0% |
+| visibility_note_set | poor_crosshair_placement | 0 / 1171 | 0.0% |
+| visibility_note_set | peeked_into_held_angle | 54 / 365 | 14.8% |
+| visibility_note_set | dry_peek_with_utility | 24 / 144 | 16.7% |
+| visibility_note_set | overpeek_in_advantage | 8 / 69 | 11.6% |
+| visibility_note_set | spray_control | 35 / 219 | 16.0% |
+| visibility_note_set | spray_while_moving | 4 / 15 | 26.7% |
+| visibility_note_set | won_duel_seen_first | 0 / 484 | 0.0% |
+| through_smoke | slow_reaction | 44 / 1481 | 3.0% |
+| through_smoke | poor_crosshair_placement | 33 / 1171 | 2.8% |
+| through_smoke | peeked_into_held_angle | 16 / 365 | 4.4% |
+| through_smoke | dry_peek_with_utility | 7 / 144 | 4.9% |
+| through_smoke | overpeek_in_advantage | 2 / 69 | 2.9% |
+| through_smoke | died_without_seeing | 0 / 223 | 0.0% |
+| through_smoke | spray_control | 41 / 219 | 18.7% |
+| through_smoke | spray_while_moving | 2 / 15 | 13.3% |
+| through_smoke | won_duel_seen_first | 15 / 484 | 3.1% |
+| contact_speed_borderline | peeked_into_held_angle | 72 / 365 | 19.7% |
+| contact_speed_borderline | dry_peek_with_utility | 26 / 144 | 18.1% |
+| contact_speed_borderline | overpeek_in_advantage | 10 / 69 | 14.5% |
+| stop_borderline | shot_while_moving | 98 / 635 | 15.4% |
+| spray_mostly_unseen | spray_control | 0 / 219 | 0.0% |
+| crosshair_extreme | poor_crosshair_placement | 7 / 1171 | 0.6% |
+
+- 遗留问题 / 需要确认的地方：
+  - 人工判定仍为空，`precision.md` 中的整体准确率均显示“不足”；待 Claude 和产品负责人核对后可再次运行 `audit_report.py`。
+  - `awp_unscoped_shot` 在这批 demo 中零命中，无法抽样。
 ## 审查意见（Claude 填写）
+
+**需修改（2026-10-17）。** 工具整体可用：24 场、240 人次、6669 条命中，耗时 4 分钟；核对清单的格式便于判断；690 个测试通过。完成报告提出的两个问题都是任务单的缺陷，一并在这里改。
+
+1. **统计口径改为分层加权**（对应完成报告最后一条）：
+   - 随机部分是在"可疑优先"之外的剩余命中里抽的，所以它只代表**不可疑**的命中。
+   - `precision.md` 每类问题列三组数：可疑层、不可疑层，以及按两层在**全部命中**中所占比例加权合并的整体准确率。
+   - 两层分别给 Wilson 区间；整体用分层方差 `Σ W² p(1-p)/n` 的正态近似给区间。某一层还没有判定时，整体显示"不足"。
+   - 在报告开头写一句：分层的原因，以及整体数是加权得到的。
+2. **`visibility_note_set` 误报太多**：
+   - 只标记表示**视野不完整**的说明：`not_seen`、`lost_sight`、`first_hit_unseen`、`smoke`、`blind`、`no_map_data`。这个清单放进配置。
+   - `seen_before_window`、`seen_since_previous_kill`、`seen_since_round_start` 表示一直看得见，是正常情况，不标记。
+   - 对 `died_without_seeing` 不适用：它本来就靠 `not_seen` 判定，从这条规则的适用清单中去掉。
+3. **新增可疑规则 `through_smoke`**：
+   - 适用于"依赖视野的全部规则"；
+   - 条件是这次击杀或死亡记录了穿烟（`Moment.through_smoke` 为真）。
+   - 原因：`Shot.seen_opponent` 和视野判定都只看地图几何、不算烟，隔着烟扫射会被当成"看见时的压枪"。清单里 `spray_control` 的第一条样本就是这种情况：穿烟击杀，14 枪中 1。
+4. **改完后重新运行 `audit_collect.py` 和 `audit_sample.py`**：
+   - 现在的判定都还空着，可以覆盖 `data/audit/2026-10-17/` 下的旧结果；
+   - 在完成报告里更新命中数、可疑汇总表、抽样条数；
+   - 写明 `through_smoke` 在各问题中各命中多少条。
+
+**复审通过（2026-10-17）。** 四条意见都已落实：
+- 分层加权：Claude 在副本中填了 20 条判定验证，两层都是 70% 时整体为 70%，分层方差区间为 47.9%–92.1%，和手算一致；
+- `visibility_note_set` 只标记视野不完整的说明，误报从 380 条降到 125 条；
+- 新增 `through_smoke` 规则，在 `spray_control` 中标出 41/219 条（19%）；
+- 已重新收集和抽样，705 个测试通过。
+
+**后续**：Claude 填写 `data/audit/2026-10-17/labels.toml` 中的判定；涉及视野的条目，挑一部分请产品负责人进游戏确认。判定完成后运行 `audit_report.py`，根据准确率决定改哪些规则、停用哪些规则。
+
