@@ -1762,6 +1762,12 @@
         "p90": 678.4,
         "n": 207
       },
+      "seen_to_first_shot_ms": {
+        "p50": 281.0,
+        "p75": 359.0,
+        "p90": 469.0,
+        "n": 207
+      },
       "crosshair_placement_deg": {
         "p50": 5.96,
         "p75": 13.53,
@@ -1791,6 +1797,12 @@
         "p50": 359.0,
         "p75": 516.0,
         "p90": 734.0,
+        "n": 96
+      },
+      "seen_to_first_shot_ms": {
+        "p50": 344.0,
+        "p75": 410.0,
+        "p90": 523.5,
         "n": 96
       },
       "crosshair_placement_deg": {
@@ -1824,6 +1836,12 @@
         "p90": 703.0,
         "n": 1262
       },
+      "seen_to_first_shot_ms": {
+        "p50": 312.0,
+        "p75": 391.0,
+        "p90": 500.0,
+        "n": 1262
+      },
       "crosshair_placement_deg": {
         "p50": 4.26,
         "p75": 9.78,
@@ -1853,6 +1871,12 @@
         "p50": 375.0,
         "p75": 500.0,
         "p90": 645.5,
+        "n": 198
+      },
+      "seen_to_first_shot_ms": {
+        "p50": 297.0,
+        "p75": 359.0,
+        "p90": 469.0,
         "n": 198
       },
       "crosshair_placement_deg": {
@@ -1886,6 +1910,12 @@
         "p90": 766.0,
         "n": 150
       },
+      "seen_to_first_shot_ms": {
+        "p50": 312.0,
+        "p75": 402.25,
+        "p90": 517.5,
+        "n": 150
+      },
       "crosshair_placement_deg": {
         "p50": 3.86,
         "p75": 9.31,
@@ -1915,6 +1945,12 @@
         "p50": 391.0,
         "p75": 500.0,
         "p90": 672.0,
+        "n": 364
+      },
+      "seen_to_first_shot_ms": {
+        "p50": 312.0,
+        "p75": 391.0,
+        "p90": 479.5,
         "n": 364
       },
       "crosshair_placement_deg": {
@@ -1948,6 +1984,12 @@
         "p90": 756.2,
         "n": 30
       },
+      "seen_to_first_shot_ms": {
+        "p50": 312.0,
+        "p75": 344.0,
+        "p90": 434.5,
+        "n": 30
+      },
       "crosshair_placement_deg": {
         "p50": 5.36,
         "p75": 10.34,
@@ -1979,6 +2021,12 @@
         "p90": 812.4,
         "n": 53
       },
+      "seen_to_first_shot_ms": {
+        "p50": 312.0,
+        "p75": 406.0,
+        "p90": 506.6,
+        "n": 53
+      },
       "crosshair_placement_deg": {
         "p50": 5.81,
         "p75": 13.9,
@@ -2005,6 +2053,12 @@
     "awp": {
       "engagements": 663,
       "time_to_damage_ms": {
+        "p50": 328.0,
+        "p75": 406.0,
+        "p90": 547.0,
+        "n": 331
+      },
+      "seen_to_first_shot_ms": {
         "p50": 328.0,
         "p75": 406.0,
         "p90": 547.0,
@@ -2041,6 +2095,12 @@
         "p90": 734.6,
         "n": 49
       },
+      "seen_to_first_shot_ms": {
+        "p50": 328.0,
+        "p75": 406.0,
+        "p90": 537.2,
+        "n": 49
+      },
       "crosshair_placement_deg": {
         "p50": 6.34,
         "p75": 13.4,
@@ -2070,6 +2130,12 @@
         "p50": 375.0,
         "p75": 550.75,
         "p90": 657.6,
+        "n": 100
+      },
+      "seen_to_first_shot_ms": {
+        "p50": 297.0,
+        "p75": 398.75,
+        "p90": 562.0,
         "n": 100
       },
       "crosshair_placement_deg": {
@@ -2103,6 +2169,12 @@
         "p90": 688.0,
         "n": 536
       },
+      "seen_to_first_shot_ms": {
+        "p50": 312.0,
+        "p75": 375.0,
+        "p90": 500.0,
+        "n": 536
+      },
       "crosshair_placement_deg": {
         "p50": 3.89,
         "p75": 8.22,
@@ -2132,6 +2204,12 @@
         "p50": 383.0,
         "p75": 543.0,
         "p90": 700.2,
+        "n": 58
+      },
+      "seen_to_first_shot_ms": {
+        "p50": 273.5,
+        "p75": 328.0,
+        "p90": 406.0,
         "n": 58
       },
       "crosshair_placement_deg": {
@@ -2165,6 +2243,12 @@
         "p90": 543.6,
         "n": 19
       },
+      "seen_to_first_shot_ms": {
+        "p50": 234.0,
+        "p75": 289.0,
+        "p90": 331.2,
+        "n": 19
+      },
       "crosshair_placement_deg": {
         "p50": 4.57,
         "p75": 11.9,
@@ -2194,6 +2278,12 @@
         "p50": 398.5,
         "p75": 484.0,
         "p90": 603.3,
+        "n": 58
+      },
+      "seen_to_first_shot_ms": {
+        "p50": 297.0,
+        "p75": 375.0,
+        "p90": 422.0,
         "n": 58
       },
       "crosshair_placement_deg": {
@@ -2227,6 +2317,12 @@
         "p90": 593.5,
         "n": 66
       },
+      "seen_to_first_shot_ms": {
+        "p50": 312.0,
+        "p75": 359.0,
+        "p90": 430.0,
+        "n": 66
+      },
       "crosshair_placement_deg": {
         "p50": 3.58,
         "p75": 9.49,
@@ -2253,6 +2349,12 @@
     "ssg08": {
       "engagements": 31,
       "time_to_damage_ms": {
+        "p50": 312.0,
+        "p75": 453.0,
+        "p90": 453.0,
+        "n": 12
+      },
+      "seen_to_first_shot_ms": {
         "p50": 312.0,
         "p75": 453.0,
         "p90": 453.0,
@@ -2622,10 +2724,10 @@
   ],
   "problem_rates": {
     "slow_reaction": {
-      "hits": 676,
+      "hits": 677,
       "rounds": 5620,
       "per_10_rounds": 1.2,
-      "player_share_pct": 89.6
+      "player_share_pct": 90.4
     },
     "poor_crosshair_placement": {
       "hits": 694,
@@ -2646,16 +2748,16 @@
       "player_share_pct": 54.2
     },
     "dry_peek_with_utility": {
-      "hits": 76,
+      "hits": 53,
       "rounds": 5620,
-      "per_10_rounds": 0.14,
-      "player_share_pct": 25.8
+      "per_10_rounds": 0.09,
+      "player_share_pct": 18.8
     },
     "overpeek_in_advantage": {
-      "hits": 47,
+      "hits": 37,
       "rounds": 5620,
-      "per_10_rounds": 0.08,
-      "player_share_pct": 15.4
+      "per_10_rounds": 0.07,
+      "player_share_pct": 11.9
     },
     "died_without_seeing": {
       "hits": 189,
@@ -2676,10 +2778,10 @@
       "player_share_pct": 60.8
     },
     "post_plant_utility_unused": {
-      "hits": 10,
+      "hits": 6,
       "rounds": 5620,
-      "per_10_rounds": 0.02,
-      "player_share_pct": 3.8
+      "per_10_rounds": 0.01,
+      "player_share_pct": 2.3
     },
     "weapon_not_ready": {
       "hits": 177,
@@ -2700,10 +2802,10 @@
       "player_share_pct": 1.9
     },
     "glock_long_range": {
-      "hits": 30,
+      "hits": 14,
       "rounds": 5620,
-      "per_10_rounds": 0.05,
-      "player_share_pct": 11.2
+      "per_10_rounds": 0.02,
+      "player_share_pct": 5.4
     },
     "spray_control": {
       "hits": 39,
