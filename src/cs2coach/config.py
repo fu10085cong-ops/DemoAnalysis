@@ -62,7 +62,8 @@ def _validate_problems(cfg: dict[str, Any]) -> None:
     from cs2coach.features.problems import PROBLEMS
 
     conditions = {"through_smoke", "first_seen_through_smoke", "wallbang", "player_blinded_in_fight",
-                  "opponent_blinded_by_own_side", "killed_by_utility", "fired_before_seen", "airborne_near_seen"}
+                  "opponent_blinded_by_own_side", "killed_by_utility", "fired_before_seen", "airborne_near_seen",
+                  "turned_into_view"}
     exclusions = cfg["exclusions"]
     if (not isinstance(exclusions, dict) or set(exclusions) != conditions or any(
             not isinstance(ids, list) or
@@ -72,6 +73,9 @@ def _validate_problems(cfg: dict[str, Any]) -> None:
         raise ConfigError("配置项 problems.exclusions 的条件名或问题编号无效")
     if type(cfg["max_shots_before_seen"]) is not int or cfg["max_shots_before_seen"] < 1:
         raise ConfigError("配置项 problems.max_shots_before_seen 应为正整数")
+    for key in ("crosshair_turn_lookback_ticks", "crosshair_turn_min_ticks"):
+        if type(cfg[key]) is not int or cfg[key] < 1:
+            raise ConfigError(f"配置项 problems.{key} 应为正整数")
     if type(cfg["reload_min_ammo_left"]) is not int or cfg["reload_min_ammo_left"] < 1:
         raise ConfigError("配置项 problems.reload_min_ammo_left 应为正整数")
     thresholds = cfg["moving_shot_thresholds"]

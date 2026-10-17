@@ -100,6 +100,7 @@ class Engagement(BaseModel):
     crosshair_initial_offset_m: float | None = None
     crosshair_initial_yaw_deg: float | None = None
     crosshair_initial_pitch_deg: float | None = None
+    opponent_in_sight_before_view_ticks: int | None = None  # 首次进入屏幕前连续有几何视线的 tick 数
     airborne_near_seen: bool | None = None
     # 视野指标为空的原因：no_map_data / first_hit_unseen（首次打中时没看见，之后看见）/
     # lost_sight（之前看见、锚点时视线中断）/ not_seen（时间窗口内没看见）/

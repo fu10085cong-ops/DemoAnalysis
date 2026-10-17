@@ -53,6 +53,7 @@
 | `crosshair_initial_deg` / `crosshair_initial_offset_m` | 首次看见时视角与本人眼睛到对手眼睛的夹角；眼睛按下蹲量调整，偏差米数为眼睛间距离 × sin(min(夹角, 90°)) | 头部位置按眼睛近似 |
 | `crosshair_initial_yaw_deg` / `crosshair_initial_pitch_deg` | 初始偏差的水平绝对角和垂直有符号角；pitch 正数表示准星在头下方 | 同上 |
 | `airborne_near_seen` | 首次看见前 0.25 秒到首次造成伤害，任一 tick 在空中 | 逐 tick 状态 |
+| `opponent_in_sight_before_view_ticks` | 首次看见前连续有几何视线、但对手尚未进入屏幕的 tick 数，最多回看 `crosshair_turn_lookback_ticks`（默认 64）；仅初始偏差可计算时有值 | 逐 tick 地图几何视线 |
 | `shots_before_seen` | 看见对手之前就朝他开的枪数（预瞄穿点、隔着掩体扫射、上一次露头时的射击）；`seen_to_first_shot_s` 只从看见后的第一枪算，前两段相加等于 Time to Damage | 同上 |
 | `contact_tick` / `player_speed_at_contact` / `opponent_speed_at_contact` / `contact_type` | 接触时刻（双方中较早看见对方的 tick）前 0.25 秒内双方的平均速度；低于 40 u/s 算几乎静止，不低于 120 算在移动，中间（减速、急停中）不下结论。`peek` 自己移动、对手静止（主动拉出，对手架点）；`held` 反过来；`unclear` 有一方处在过渡状态。用来支撑"干拉""架点"这类判断 | 速度准确；阈值依据 3 个 demo、878 个样本的速度分布（两个峰 0–10 和 200–220） |
 | `visibility_note` | 上述指标为空的原因：`first_hit_unseen`（首次造成伤害时看不到对手，之后看见了）、`lost_sight`（锚点前的回溯窗口看见过，之后视线中断）、`not_seen`（窗口内确实没看见）、`seen_before_window`（回溯 3 秒内一直可见，起点未知）、`smoke`、`blind`、`no_map_data` 等；`lost_sight` 记录 `last_seen_before_s`，`not_seen` 记录 `opponent_off_screen`（锚点附近有几何视线但对手在屏幕外） | — |
@@ -63,7 +64,7 @@
 
 **出枪慢判定口径（032）**：`slow_reaction` 比较 `seen_to_first_shot_s` 与职业同武器 `seen_to_first_shot_ms` 的 p75，不再比较 Time to Damage。TTD 慢在"开枪 → 命中"这一段时，是开枪没打中，属于枪法问题，不是反应慢。基准的 `seen_to_first_shot_ms` 与 `time_to_damage_ms` 用同一批交火（TTD < 1 秒，排除烟雾、被闪白）。
 
-**准星判定口径（031）**：`crosshair_placement_deg` 保留 Leetify 的看见到命中转角，用于显示；问题检测改用首次看见时准星到对手头部的偏差米数。转角会把跟随移动目标的转动算进去，且相同角度在不同距离代表不同偏差；偏差米数在职业样本的各距离段更稳定。首次看见前 0.25 秒至首次命中间在空中的交火不判断准星摆放。只有原 Leetify 指标可计算时才计算初始偏差。
+**准星判定口径（031、036）**：`crosshair_placement_deg` 保留 Leetify 的看见到命中转角，用于显示；问题检测改用首次看见时准星到对手头部的偏差米数。转角会把跟随移动目标的转动算进去，且相同角度在不同距离代表不同偏差；偏差米数在职业样本的各距离段更稳定。首次看见前 0.25 秒至首次命中间在空中的交火不判断准星摆放；首次看见前连续至少 `crosshair_turn_min_ticks`（默认 8）tick 有几何视线、玩家转身才让对手进入屏幕的交火也不判断。只有原 Leetify 指标可计算时才计算初始偏差。
 
 **核对**：旧 6 点算法在 6 个 demo、736 次击杀中测得雷达 spotted 比几何“第一次看见”晚 0.23–0.28 秒（中位数），85%–88% 在 0–0.55 秒之间；这些延迟尚未按新算法重测。旧算法的 5E、完美击杀者 TTD 中位数分别为 469、516 ms，也尚未重测。新版职业整场 TTD 中位数见下方 v2 基准。
 
@@ -130,7 +131,7 @@
 
 - `metrics` 保留每人每份 demo 的整场枪法分布，原 `compare()` 接口兼容。
 - `weapons` 按交火第一枪的武器归组；没开枪时从手持显示名反查规范名，查不到则跳过。只含击杀、死亡且有交火的数据，不含回合结束后、误杀、bot 和世界伤害；交火少于 `baseline.min_engagements`（默认 30）的武器不输出。
-- 每把武器记录交火数，TTD、准星移动、初始偏差米数、距离的 p50/p75/p90 和 n；分位数使用线性插值。TTD 排除 ≥ 1 秒以及烟雾、被闪白的样本，准星排除烟雾和被闪白，初始偏差另外排除空中交火；首枪停稳率、命中率分别排除 None，并各自记录分母 `first_shot_stopped_n` / `first_shot_hit_n`。
+- 每把武器记录交火数，TTD、准星移动、初始偏差米数、距离的 p50/p75/p90 和 n；分位数使用线性插值。TTD 排除 ≥ 1 秒以及烟雾、被闪白的样本，准星排除烟雾和被闪白，初始偏差另外排除空中交火和转身才将对手转进屏幕的交火；首枪停稳率、命中率分别排除 None，并各自记录分母 `first_shot_stopped_n` / `first_shot_hit_n`。
 - `spray` 只取上述交火中开枪前一 tick 看见这次交火对手的子弹，按每发实际使用的自动武器归组；视野不可用或没看见对手的子弹不计入。`recoil_index` 从 0 开始，分段起点来自配置，默认 0、1、3、6、10、15，最后一段不封顶。每段记录 from/to、shots、hit_pct，空段命中率为 None，缺失连射序号的子弹不计入。
 - `weapon_threshold()` 和 `spray_segments()` 提供读取接口，旧基准、缺失武器或指标返回 None / 空列表。
 - `problem_rates` 使用同一次生成的新武器/压枪阈值，对每名职业选手逐图运行问题检测；仅统计实际已实现规则，包含默认停用项及亮点供后续校准，不含待开发项和 `other`。只计 target 不是 `match` 的命中，回合数为全部人次的在场回合数（`rounds_played`）之和，每十回合频率保留两位小数；至少命中一次的人次占比保留一位小数。

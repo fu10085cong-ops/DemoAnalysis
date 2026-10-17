@@ -82,6 +82,7 @@ class _Params:
         self.trade = round(mc["trade_window_seconds"] * self.rate)
         self.missed_trade_distance = float(mc["missed_trade_max_distance"])
         self.airborne_lookback = round(cfg["problems"]["crosshair_airborne_lookback_seconds"] * self.rate)
+        self.crosshair_turn_lookback = int(cfg["problems"]["crosshair_turn_lookback_ticks"])
         self.other_fight_window = round(cfg["problems"]["missed_trade_other_fight_seconds"] * self.rate)
         self.key_assist_damage = int(mc["key_assist_min_damage"])
         self.min_blind = float(mc["min_blind_seconds"])
@@ -343,6 +344,16 @@ def add_visibility(match: MatchData, p: _Params, sid: int, opponent: int, tick: 
                             distance / 39.37 * math.sin(math.radians(min(initial, 90))), 3)
                         upd["crosshair_initial_yaw_deg"] = round(abs((mine.yaw - target_yaw + 180) % 360 - 180), 2)
                         upd["crosshair_initial_pitch_deg"] = round(mine.pitch - target_pitch, 2)
+                        start = me.tick - p.crosshair_turn_lookback
+                        mine_before = sight.states(sid, start, me.tick - 1)
+                        target_before = sight.states(opponent, start, me.tick - 1)
+                        count = 0
+                        for prior_tick in range(me.tick - 1, start - 1, -1):
+                            if not sight.sees(mine_before.get(prior_tick), target_before.get(prior_tick),
+                                              need_view=False):
+                                break
+                            count += 1
+                        upd["opponent_in_sight_before_view_ticks"] = count
             airborne = match.player_ticks(sid, me.tick - p.airborne_lookback, my_dmg)["is_airborne"]
             upd["airborne_near_seen"] = bool(airborne.any())
     if valid(opp) and not opp_blind and opp_dmg is not None:

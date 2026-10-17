@@ -72,6 +72,15 @@ def test_ttd_filter_and_blind_smoke_exclusions():
     assert w["crosshair_placement_deg"]["n"] == 4
 
 
+def test_crosshair_initial_baseline_excludes_turn_into_view():
+    cfg = config()
+    ms = [make_moment(engagement={"crosshair_initial_offset_m": offset,
+                                  "opponent_in_sight_before_view_ticks": prior})
+          for offset, prior in [(1.0, 0), (2.0, 7), (10.0, 8)]]
+    dist = weapon_stats([make_mm(ms)], cfg)["ak47"]["crosshair_initial_offset_m"]
+    assert dist == {"p50": 1.5, "p75": 1.75, "p90": 1.9, "n": 2}
+
+
 @pytest.mark.parametrize("tag", ["after_round_end", "teamkill", "victim_is_bot", "world_damage"])
 def test_baseline_excludes_flagged_moments(tag):
     mm = make_mm([make_moment(tags=[tag])])

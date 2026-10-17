@@ -1775,10 +1775,10 @@
         "n": 220
       },
       "crosshair_initial_offset_m": {
-        "p50": 0.85,
-        "p75": 1.84,
-        "p90": 4.25,
-        "n": 200
+        "p50": 0.81,
+        "p75": 1.56,
+        "p90": 3.19,
+        "n": 191
       },
       "first_shot_stopped_pct": 47.22,
       "first_shot_stopped_n": 288,
@@ -1812,10 +1812,10 @@
         "n": 105
       },
       "crosshair_initial_offset_m": {
-        "p50": 0.79,
-        "p75": 1.33,
-        "p90": 2.07,
-        "n": 103
+        "p50": 0.78,
+        "p75": 1.28,
+        "p90": 1.89,
+        "n": 101
       },
       "first_shot_stopped_pct": 89.38,
       "first_shot_stopped_n": 160,
@@ -1849,10 +1849,10 @@
         "n": 1319
       },
       "crosshair_initial_offset_m": {
-        "p50": 0.9,
-        "p75": 1.85,
-        "p90": 4.54,
-        "n": 1273
+        "p50": 0.88,
+        "p75": 1.63,
+        "p90": 3.46,
+        "n": 1224
       },
       "first_shot_stopped_pct": 69.49,
       "first_shot_stopped_n": 1665,
@@ -1887,9 +1887,9 @@
       },
       "crosshair_initial_offset_m": {
         "p50": 0.78,
-        "p75": 1.53,
-        "p90": 3.36,
-        "n": 192
+        "p75": 1.38,
+        "p90": 2.84,
+        "n": 184
       },
       "first_shot_stopped_pct": 62.85,
       "first_shot_stopped_n": 253,
@@ -1924,9 +1924,9 @@
       },
       "crosshair_initial_offset_m": {
         "p50": 0.77,
-        "p75": 1.43,
-        "p90": 2.62,
-        "n": 153
+        "p75": 1.4,
+        "p90": 2.54,
+        "n": 152
       },
       "first_shot_stopped_pct": 58.37,
       "first_shot_stopped_n": 221,
@@ -1960,10 +1960,10 @@
         "n": 378
       },
       "crosshair_initial_offset_m": {
-        "p50": 1.01,
-        "p75": 1.99,
-        "p90": 4.78,
-        "n": 362
+        "p50": 0.96,
+        "p75": 1.81,
+        "p90": 3.97,
+        "n": 347
       },
       "first_shot_stopped_pct": 65.06,
       "first_shot_stopped_n": 478,
@@ -1997,10 +1997,10 @@
         "n": 33
       },
       "crosshair_initial_offset_m": {
-        "p50": 0.71,
-        "p75": 1.05,
-        "p90": 2.42,
-        "n": 31
+        "p50": 0.67,
+        "p75": 0.97,
+        "p90": 2.12,
+        "n": 30
       },
       "first_shot_stopped_pct": 55.81,
       "first_shot_stopped_n": 43,
@@ -2034,10 +2034,10 @@
         "n": 55
       },
       "crosshair_initial_offset_m": {
-        "p50": 0.91,
-        "p75": 1.57,
-        "p90": 7.51,
-        "n": 53
+        "p50": 0.9,
+        "p75": 1.49,
+        "p90": 3.66,
+        "n": 51
       },
       "first_shot_stopped_pct": 55.95,
       "first_shot_stopped_n": 84,
@@ -2072,9 +2072,9 @@
       },
       "crosshair_initial_offset_m": {
         "p50": 0.84,
-        "p75": 1.18,
-        "p90": 1.99,
-        "n": 335
+        "p75": 1.17,
+        "p90": 1.94,
+        "n": 331
       },
       "first_shot_stopped_pct": 96.88,
       "first_shot_stopped_n": 385,
@@ -2108,10 +2108,10 @@
         "n": 53
       },
       "crosshair_initial_offset_m": {
-        "p50": 0.94,
-        "p75": 2.68,
-        "p90": 6.24,
-        "n": 52
+        "p50": 0.91,
+        "p75": 2.5,
+        "p90": 5.15,
+        "n": 49
       },
       "first_shot_stopped_pct": 51.19,
       "first_shot_stopped_n": 84,
@@ -2145,10 +2145,10 @@
         "n": 104
       },
       "crosshair_initial_offset_m": {
-        "p50": 0.87,
-        "p75": 2.14,
-        "p90": 3.63,
-        "n": 95
+        "p50": 0.84,
+        "p75": 1.9,
+        "p90": 3.22,
+        "n": 91
       },
       "first_shot_stopped_pct": 55.0,
       "first_shot_stopped_n": 120,
@@ -2182,10 +2182,10 @@
         "n": 549
       },
       "crosshair_initial_offset_m": {
-        "p50": 0.93,
-        "p75": 1.74,
-        "p90": 3.78,
-        "n": 527
+        "p50": 0.91,
+        "p75": 1.56,
+        "p90": 3.08,
+        "n": 509
       },
       "first_shot_stopped_pct": 69.01,
       "first_shot_stopped_n": 655,
@@ -2219,10 +2219,10 @@
         "n": 61
       },
       "crosshair_initial_offset_m": {
-        "p50": 1.09,
-        "p75": 2.56,
-        "p90": 5.41,
-        "n": 59
+        "p50": 0.98,
+        "p75": 2.09,
+        "p90": 3.49,
+        "n": 54
       },
       "first_shot_stopped_pct": 39.58,
       "first_shot_stopped_n": 96,
@@ -2294,9 +2294,9 @@
       },
       "crosshair_initial_offset_m": {
         "p50": 0.97,
-        "p75": 1.83,
+        "p75": 1.72,
         "p90": 3.02,
-        "n": 49
+        "n": 48
       },
       "first_shot_stopped_pct": 34.25,
       "first_shot_stopped_n": 73,
@@ -2331,9 +2331,9 @@
       },
       "crosshair_initial_offset_m": {
         "p50": 0.89,
-        "p75": 1.57,
-        "p90": 3.07,
-        "n": 65
+        "p75": 1.5,
+        "p90": 2.88,
+        "n": 64
       },
       "first_shot_stopped_pct": 63.41,
       "first_shot_stopped_n": 82,
@@ -2724,16 +2724,16 @@
   ],
   "problem_rates": {
     "slow_reaction": {
-      "hits": 677,
+      "hits": 192,
       "rounds": 5620,
-      "per_10_rounds": 1.2,
-      "player_share_pct": 90.4
+      "per_10_rounds": 0.34,
+      "player_share_pct": 51.9
     },
     "poor_crosshair_placement": {
-      "hits": 694,
+      "hits": 557,
       "rounds": 5620,
-      "per_10_rounds": 1.23,
-      "player_share_pct": 90.8
+      "per_10_rounds": 0.99,
+      "player_share_pct": 85.4
     },
     "shot_while_moving": {
       "hits": 225,
@@ -2754,10 +2754,10 @@
       "player_share_pct": 18.8
     },
     "overpeek_in_advantage": {
-      "hits": 37,
+      "hits": 36,
       "rounds": 5620,
-      "per_10_rounds": 0.07,
-      "player_share_pct": 11.9
+      "per_10_rounds": 0.06,
+      "player_share_pct": 11.5
     },
     "died_without_seeing": {
       "hits": 189,
@@ -2778,10 +2778,10 @@
       "player_share_pct": 3.5
     },
     "missed_trade": {
-      "hits": 249,
+      "hits": 163,
       "rounds": 5620,
-      "per_10_rounds": 0.44,
-      "player_share_pct": 60.8
+      "per_10_rounds": 0.29,
+      "player_share_pct": 45.4
     },
     "post_plant_utility_unused": {
       "hits": 6,

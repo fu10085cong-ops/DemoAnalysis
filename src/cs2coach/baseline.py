@@ -133,7 +133,10 @@ def weapon_stats(mms: list[MatchMoments], cfg: dict) -> dict:
             "seen_to_first_shot_ms": _distribution(seen_shot),
             "crosshair_placement_deg": _distribution([e.crosshair_placement_deg for e in reliable]),
             "crosshair_initial_offset_m": _distribution([
-                e.crosshair_initial_offset_m for e in reliable if e.airborne_near_seen is not True]),
+                e.crosshair_initial_offset_m for e in reliable
+                if e.airborne_near_seen is not True and
+                (e.opponent_in_sight_before_view_ticks is None or
+                 e.opponent_in_sight_before_view_ticks < cfg["problems"]["crosshair_turn_min_ticks"])]),
             "first_shot_stopped_pct": round(100 * sum(stopped) / len(stopped), 2) if stopped else None,
             "first_shot_stopped_n": len(stopped),
             "first_shot_hit_pct": round(100 * sum(hit) / len(hit), 2) if hit else None,

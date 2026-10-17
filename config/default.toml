@@ -308,6 +308,10 @@ slow_reaction_margin_ratio = 0.10
 crosshair_margin_ratio = 0.25
 # 准星：交火距离小于此值（米）时不判（035：第三轮审计，4 米内的近身拐角遭遇不值得提醒）
 crosshair_min_distance_m = 5.0
+# 准星：首次进入屏幕前，最多回看多少 tick 的连续几何视线（036）
+crosshair_turn_lookback_ticks = 64
+# 准星：此前连续有几何视线至少多少 tick，视为转身才把对手转进屏幕（036；8 tick 约 0.125 秒）
+crosshair_turn_min_ticks = 8
 # 人数优势冒进：T 方未下包时，开局不到这么多秒的拉出是正常进点，不判（035：第三轮审计 2026-10-17）；CT 不受影响
 overpeek_t_min_round_time_s = 25.0
 # 准星：首次看见前多少秒到首次命中之间有一刻在空中，就不判（031；游戏内确认的 2 条准星错判都是跳跃中看见）
@@ -353,6 +357,7 @@ opponent_blinded_by_own_side = ["peeked_into_held_angle", "overpeek_in_advantage
 killed_by_utility = ["died_without_seeing", "peeked_into_held_angle", "died_while_reloading"]
 fired_before_seen = ["slow_reaction", "poor_crosshair_placement"]
 airborne_near_seen = ["poor_crosshair_placement"]
+turned_into_view = ["poor_crosshair_placement"]
 
 [audit]
 # 接近接触速度、首枪停稳阈值的相对范围
