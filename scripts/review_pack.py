@@ -114,6 +114,19 @@ def _demo_stems(rows: list[dict]) -> dict[tuple[str, str | None], str]:
     return stems
 
 
+def _scene(card: str) -> list[str]:
+    """从事实卡取出看 demo 时需要的场景：时间与局面、双方位置与距离、双方武器、谁击杀谁；漏补取队友与击杀者。"""
+    lines = card.splitlines()
+    out = []
+    if lines and lines[0].startswith("#"):
+        head = re.sub(r"^#+\s*〔[^〕]*〕", "", lines[0]).strip()
+        if head:
+            out.append(f"时间与局面：{head}")
+    keep = ("你在 ", "你手持 ", "对手用 ", "你用 ", "队友 ", "第 ")
+    out += [line[2:] for line in lines if line.startswith("- ") and line[2:].startswith(keep)]
+    return out
+
+
 def build(args: argparse.Namespace, root: Path, cfg: dict) -> Path:
     audit, rows, labels = _selected(args, root)
     name = _name(args.name or (Path(args.keys).stem if args.keys else audit))
@@ -123,10 +136,12 @@ def build(args: argparse.Namespace, root: Path, cfg: dict) -> Path:
     stems = _demo_stems(rows)
     review = cfg["review"]
     md = ["# 游戏内复盘清单", "", "先把 review.toml 的 result 填成‘对’、‘不对’或‘看不出’，可在 comment 写备注。",
-          "在 CS2 控制台先输入 `exec cs2coach_review` 一次；每条再输入下面两条命令。", ""]
+          "在 CS2 控制台先输入 `exec cs2coach_review` 一次；每条先输入 `p1` 等加载 demo，等加载完成后再输入 `r1` 等跳转。",
+          "result 记的是“这条检测对不对”：问题只是帮你判断；如果认为这条不该算作问题（例如当时在换弹、在跳跃），"
+          "填‘不对’并写明原因。", ""]
     toml = [f"audit = {_string(audit)}", f"demo_subdir = {_string(review['demo_subdir'])}",
             f"playdemo_template = {_string(review['playdemo_template'])}", ""]
-    aliases = ["// 游戏内复盘包：先 exec cs2coach_review，再按清单加载 demo、输入 r1 等短命令。"]
+    aliases = ["// 游戏内复盘包：先 exec cs2coach_review，再按清单输入 p1 加载 demo、r1 跳转。"]
     for index, row in enumerate(rows, 1):
         ident = f"r{index}"
         command = row.get("jump_command") or ""
@@ -140,19 +155,22 @@ def build(args: argparse.Namespace, root: Path, cfg: dict) -> Path:
         follow = review["follow_template"].format(steamid=row["steamid"])
         if any(char in play + jump + follow for char in ('"', '\n', '\r')):
             raise ValueError("CS2 命令不能包含引号或换行")
+        aliases.append(f'alias p{index} "{play}"')
         aliases.append(f'alias {ident} "{jump}{"; " + follow if follow else ""}"')
         label = labels[row["hit_key"]]
         question = review["questions"].get(row["problem"], review["questions"]["generic"])
         md += [f"## {ident} · {row['map']}", "", f"- Demo：`{stem}.dem`（来源：`{Path(row['demo']).name}`）",
-               f"- 目标玩家：{row['player_name']}；回合：{row['evidence'].get('round', row['target'])}",
+               f"- 看谁的视角：{row['player_name']}；回合：{row['evidence'].get('round', row['target'])}",
+               *[f"- {line}" for line in _scene(row.get("fact_card", ""))],
                f"- 要确认：{question}", f"- Claude 原判：{label.get('verdict') or '未判'}",
-               f"- 原备注：{label.get('note') or '无'}", f"- 加载：`{play}`", f"- 跳转：`{ident}`（{jump}）", ""]
+               f"- 原备注：{label.get('note') or '无'}", f"- 加载：`p{index}`（{play}）", f"- 跳转：`{ident}`（{jump}）", ""]
         toml += ["[[items]]", f"id = {_string(ident)}", f"hit_key = {_string(row['hit_key'])}",
                  'result = ""', 'comment = ""', ""]
     output.mkdir(parents=True, exist_ok=True)
-    (output / "checklist.md").write_text("\n".join(md), encoding="utf-8")
-    (output / "review.toml").write_text("\n".join(toml), encoding="utf-8")
-    (output / "cs2coach_review.cfg").write_text("\n".join(aliases) + "\n", encoding="utf-8")
+    # 复盘包放在两台电脑共享的目录里：一律写 LF，避免 Windows 默认的 CRLF 让文件来回改换行符
+    (output / "checklist.md").write_text("\n".join(md), encoding="utf-8", newline="\n")
+    (output / "review.toml").write_text("\n".join(toml), encoding="utf-8", newline="\n")
+    (output / "cs2coach_review.cfg").write_text("\n".join(aliases) + "\n", encoding="utf-8", newline="\n")
     print(f"生成 {len(rows)} 条：{output}")
     return output
 

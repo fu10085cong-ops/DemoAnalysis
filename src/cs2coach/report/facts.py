@@ -243,10 +243,13 @@ def missed_trade_facts(mt: MissedTrade, names: Mapping[int, str]) -> list[str]:
     """漏补只描述窗口内的击杀结果，不评价距离或机会。"""
     who = _named("队友", mt.teammate, names)
     who = who + " " if who != "队友" else who  # 多场汇总没有队友名字：写"队友阵亡时"，不留空格
+    killer = names.get(mt.killer)
+    # 写明击杀者，游戏内复盘时才知道要找谁（产品负责人 2026-10-17 反馈）；多场汇总没有名字时不写
+    by = f"被对手 {killer} 击杀，" if killer else ""
     other = "；对手随后被其他队友击杀" if mt.killer_traded_by_other else ""
     context = missed_trade_context(mt.model_dump())
     lines = ([context] if context else []) + [
-        f"{who}阵亡时离你 {mt.distance:.0f} 单位，你在补枪时间窗口内没有击杀击杀他的对手{other}。"]
+        f"{who}{by}阵亡时离你 {mt.distance:.0f} 单位，你在补枪时间窗口内没有击杀击杀他的对手{other}。"]
     view = _view_line(mt.killer_in_view_s, mt.killer_first_in_view_s)
     return lines + ([view] if view else [])
 

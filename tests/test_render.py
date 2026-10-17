@@ -52,7 +52,7 @@ def test_render_has_all_sections_program_facts_evidence_and_unique_jumps():
     assert "| 问题 | 本场次数 | 按职业频率预期 | 多出的次数 | 偶然概率 | 倍数 |" in text
     assert "| **出枪慢** |" in text
     assert "你在 Mid" in text and "812 毫秒" in text and "高于职业同武器 75 分位 484 毫秒" in text
-    assert "队友 bob 阵亡时离你 200 单位" in text
+    assert "队友 bob 被对手" in text and "阵亡时离你 200 单位" in text  # 漏补写明击杀者
     assert "涉及：〔R1-death〕、〔R2-kill1〕" in text
     assert "程序检测依据" in text and "**分析**" in text and "**怎么练**" in text
     assert text.count("`demo_gototick 222`") == 1 and text.count("`demo_gototick 1`") == 1
