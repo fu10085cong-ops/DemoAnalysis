@@ -39,6 +39,9 @@ def make_moment(kind="death", weapon="ak47", **overrides):
             data[key] = data[key] | value
         else:
             data[key] = value
+    # 032：出枪慢比较"看见 → 开枪"；没指定时视为整段 TTD 都花在开枪前，旧样本含义不变
+    if data["engagement"] is not None:
+        data["engagement"].setdefault("seen_to_first_shot_s", data["engagement"].get("time_to_damage_s"))
     if isinstance(overrides.get("engagement"), dict):
         changes = overrides["engagement"]
         if "shots" not in changes and ("first_shot_stopped" in changes or "first_shot_hit" in changes):

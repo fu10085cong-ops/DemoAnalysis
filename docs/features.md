@@ -61,6 +61,8 @@
 
 **被闪白**：几何首次可见时，观察者正在经历总时长 ≥ `moments.min_blind_seconds`、剩余时长 ≥ `visibility.blind_min_remaining_seconds` 的致盲，则这一方的“看见”不可靠。首次可见 tick 保留用于核对，`player_seen_while_blind` / `opponent_seen_while_blind` 标记是否被闪白；没有首次可见 tick 时为 None。本人被闪白时 `visibility_note=blind`，烟雾原因优先，TTD、看见到开枪、开枪到命中及准星移动均留空；对手被闪白时对手 TTD 留空。任一方被闪白都不计算谁先看见谁。整场遭遇的 TTD 和准星使用相同过滤；其他枪法统计不变。剩余阈值暂定 1 秒，考虑闪光末段逐渐消退，待数据校准。Leetify 未公开是否采用这样的致盲过滤，这是我们的额外处理。
 
+**出枪慢判定口径（032）**：`slow_reaction` 比较 `seen_to_first_shot_s` 与职业同武器 `seen_to_first_shot_ms` 的 p75，不再比较 Time to Damage。TTD 慢在"开枪 → 命中"这一段时，是开枪没打中，属于枪法问题，不是反应慢。基准的 `seen_to_first_shot_ms` 与 `time_to_damage_ms` 用同一批交火（TTD < 1 秒，排除烟雾、被闪白）。
+
 **准星判定口径（031）**：`crosshair_placement_deg` 保留 Leetify 的看见到命中转角，用于显示；问题检测改用首次看见时准星到对手头部的偏差米数。转角会把跟随移动目标的转动算进去，且相同角度在不同距离代表不同偏差；偏差米数在职业样本的各距离段更稳定。首次看见前 0.25 秒至首次命中间在空中的交火不判断准星摆放。只有原 Leetify 指标可计算时才计算初始偏差。
 
 **核对**：旧 6 点算法在 6 个 demo、736 次击杀中测得雷达 spotted 比几何“第一次看见”晚 0.23–0.28 秒（中位数），85%–88% 在 0–0.55 秒之间；这些延迟尚未按新算法重测。旧算法的 5E、完美击杀者 TTD 中位数分别为 469、516 ms，也尚未重测。新版职业整场 TTD 中位数见下方 v2 基准。

@@ -49,7 +49,7 @@ def test_summary_ai_fact_card_snapshot():
                          provider="fake", model="test")
     report = render_summary_diagnosis(d, summary, baseline, cfg)
     assert hashlib.sha256(report.encode("utf-8")).hexdigest() == (
-        "69d6120546e13ef308d60b9b392a4d64c71ee05cf762683b091d80dd6e3990bf")
+        "69eb17f7a6f7e8bd0d0b5ba85a0bf5040c8bbed03890c99f068975325543c3bc")
 
 
 def submission(target="M1:R1-death", analysis="这次交火的准备值得复盘。", overview="这些比赛合计值得复盘。"):

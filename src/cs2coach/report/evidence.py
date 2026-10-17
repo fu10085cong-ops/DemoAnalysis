@@ -41,11 +41,19 @@ def evidence_sentence(hit: ProblemHit) -> str:
     """只复述命中记录里的数值、布尔值和阈值，不补充新的判断。"""
     e, t, pid = hit.evidence, hit.thresholds, hit.problem
     if pid == "slow_reaction":
-        text = f"TTD {_number(e.get('ttd_ms'))} 毫秒，高于职业同武器 75 分位 {_number(t.get('ttd_ms'))} 毫秒"
+        if "seen_to_first_shot_ms" in e:  # 032 起比较"看见 → 开枪"
+            text = (f"看见对手到开枪 {_number(e.get('seen_to_first_shot_ms'))} 毫秒，高于职业同武器 75 分位 "
+                    f"{_number(t.get('seen_to_first_shot_ms'))} 毫秒（TTD {_number(e.get('ttd_ms'))} 毫秒）")
+        else:
+            text = f"TTD {_number(e.get('ttd_ms'))} 毫秒，高于职业同武器 75 分位 {_number(t.get('ttd_ms'))} 毫秒"
         if e.get("kind") == "death":
             text += f"；对手 TTD 为 {_number(e.get('opponent_ttd_ms'))} 毫秒，比自己短"
         return text + "。"
     if pid == "poor_crosshair_placement":
+        if "crosshair_initial_offset_m" in e:  # 031 起比较首次看见时准星离对手头部的距离
+            return (f"刚看见对手时准星离他头部 {e['crosshair_initial_offset_m']:.1f} 米"
+                    f"（{_number(e.get('crosshair_initial_deg'))}°），高于职业同武器 75 分位 "
+                    f"{t.get('crosshair_initial_offset_m', 0):.1f} 米乘以 {1 + t.get('margin_ratio', 0):.2f}。")
         return (f"准星从看见到首次命中转过 {_number(e.get('crosshair_placement_deg'))}°，"
                 f"高于职业同武器 75 分位 {_number(t.get('crosshair_placement_deg'))}° "
                 f"乘以 {1 + t.get('margin_ratio', 0):.2f}。")
@@ -70,7 +78,8 @@ def evidence_sentence(hit: ProblemHit) -> str:
                 + f"离阵亡队友 {_number(e.get('distance'))} 单位；"
                 + ("其他队友随后补上。" if e.get("killer_traded_by_other") else "窗口内未由其他队友补上。"))
     if pid == "post_plant_utility_unused":
-        return f"T 方已下包，死亡时还携带：{_grenades(e.get('unused_grenades'))}。"
+        since = f"下包后 {_number(e['seconds_since_plant'])} 秒阵亡，" if e.get("seconds_since_plant") is not None else ""
+        return f"T 方已下包，{since}死亡时还携带：{_grenades(e.get('unused_grenades'))}。"
     if pid == "weapon_not_ready":
         return "有阵亡时武器还不能开枪的检测标签。"
     if pid == "awp_unscoped_shot":

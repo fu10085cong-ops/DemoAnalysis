@@ -23,8 +23,8 @@ def sample():
         tags=["trade_kill"], engagement={"time_to_damage_s": .812}, jump_command="demo_gototick 222")], rounds=2,
         missed_trades=[MissedTrade(round=1, tick=90, teammate=B, killer=C, distance=200, killer_traded_by_other=False)])
     baseline = {"source": "手工样本", "weapons": {
-        "ak47": {"time_to_damage_ms": {"p75": 250}},
-        "m4a1_silencer": {"time_to_damage_ms": {"p75": 484}}},
+        "ak47": {"time_to_damage_ms": {"p75": 250}, "seen_to_first_shot_ms": {"p75": 250}},
+        "m4a1_silencer": {"time_to_damage_ms": {"p75": 484}, "seen_to_first_shot_ms": {"p75": 484}}},
         "problem_rates": {"slow_reaction": {"hits": 5, "rounds": 100}}}
     cfg = load_config()
     cfg["problems"]["frequency_min_excess"] = 1
@@ -70,7 +70,7 @@ def test_render_lists_selected_drills_before_training_text():
 def test_digest_contains_prominence_and_human_evidence_before_moments():
     d, mm, _ = sample()
     text = build_digest(scenario(), mm, None, d.problems, d.frequency)
-    assert "**出枪慢**" in text and "R2-kill1：TTD 812 毫秒" in text
+    assert "**出枪慢**" in text and "R2-kill1：看见对手到开枪 812 毫秒" in text
     assert "偶然概率低于 5%" in text and "至少多 2 次" in text
     assert "多出次数大于 0 但不突出的情况需要更多比赛确认" in text
     assert "标为“不高于职业水平”的项目不是问题，不要作为问题提出" in text

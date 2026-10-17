@@ -36,13 +36,27 @@ COUNT_LABELS = {
     "unused_utility_deaths": "交火阵亡中身上还有未使用道具的次数",
 }
 PROBLEM_VALUES = {
-    "slow_reaction": ("ttd_ms", "ttd_ms", "ms"),
+    "slow_reaction": ("seen_to_first_shot_ms", "seen_to_first_shot_ms", "ms"),
     "poor_crosshair_placement": ("crosshair_initial_offset_m", "crosshair_initial_offset_m", "offset_m"),
     "spray_control": ("hit_pct", "expected_hit_pct", "pct"),
     "awp_unscoped_shot": ("distance_m", "distance_m", "m"),
     "glock_long_range": ("distance_m", "distance_m", "m"),
     "spray_while_moving": ("moving_ratio", "moving_ratio", "ratio"),
 }
+# 改口径前生成的命中（缓存、旧报告）证据里只有旧键：按旧键取值和阈值，保证两者同一口径
+LEGACY_PROBLEM_VALUES = {
+    "slow_reaction": ("ttd_ms", "ttd_ms", "ms"),  # 032 之前比较 TTD
+    "poor_crosshair_placement": ("crosshair_placement_deg", "crosshair_placement_deg", "deg"),  # 031 之前比较转角
+}
+
+
+def problem_values(problem: str | None, hit) -> tuple[str, str, str] | None:
+    """该问题用来填 value / threshold / gap 的证据键、阈值键和单位。"""
+    mapping = PROBLEM_VALUES.get(problem)
+    legacy = LEGACY_PROBLEM_VALUES.get(problem)
+    if mapping and legacy and hit is not None and mapping[0] not in hit.evidence and legacy[0] in hit.evidence:
+        return legacy
+    return mapping
 
 
 # 模型常写的同义字段（本地千问实测写过 location）
@@ -295,8 +309,8 @@ def make_slot_resolver(mm: MatchMoments | None = None, report: ProblemReport | N
             if field not in fields:
                 return SlotError("unknown_slot", slot, f"{obj} 可用字段：" + "、".join(fields))
             if field in ("value", "threshold", "gap"):
-                mapping = PROBLEM_VALUES.get(problem)
                 hit = next((h for h in report.hits if h.target == "match" and h.problem == problem), None) if report else None
+                mapping = problem_values(problem, hit)
                 if not mapping or not hit:
                     return _missing(slot, mm)
                 ev, th, unit = mapping
@@ -351,8 +365,8 @@ def make_slot_resolver(mm: MatchMoments | None = None, report: ProblemReport | N
                 if problem is None:
                     return SlotError("slot_unavailable", slot, "value/threshold/gap 只能用在问题条目的分析里"
                                      "（按该条问题取值）；训练计划、总览里请改用 pro.* 或直接删去。")
-                mapping = PROBLEM_VALUES.get(problem)
                 hit = next((h for h in local_report.hits if h.target == local and h.problem == problem), None)
+                mapping = problem_values(problem, hit)
                 if not mapping or not hit:
                     return _missing(slot, moment)
                 ev, th, unit = mapping

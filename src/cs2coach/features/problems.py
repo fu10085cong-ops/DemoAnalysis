@@ -192,16 +192,21 @@ def detect_problems(mm: MatchMoments, baseline: dict | None, cfg: dict) -> Probl
                 ttd, opp = e.time_to_damage_s, e.opponent_time_to_damage_s
                 cap = cfg["aim_stats"]["time_to_damage_max_seconds"]
                 if e.visibility_note not in ("smoke", "blind") and e.player_seen_while_blind is not True:
-                    if not _finite(ttd) or (m.kind == "death" and not _finite(opp)):
+                    # 032：只比较"看见 → 开枪"；慢在"开枪 → 命中"属于没打中，不算反应慢
+                    react = e.seen_to_first_shot_s
+                    if not _finite(ttd) or not _finite(react) or (m.kind == "death" and not _finite(opp)):
                         missing("slow_reaction")
                     elif ttd < cap:
-                        limit = threshold("slow_reaction", w, "time_to_damage_ms", "p75")
-                        if limit is not None and ttd * 1000 > limit and (m.kind == "kill" or opp < ttd):
-                            hit("slow_reaction", {"ttd_ms": ttd * 1000,
+                        limit = threshold("slow_reaction", w, "seen_to_first_shot_ms", "p75")
+                        if limit is not None and react * 1000 > limit and (m.kind == "kill" or opp < ttd):
+                            hit("slow_reaction", {"seen_to_first_shot_ms": react * 1000,
+                                "first_shot_to_damage_ms": (e.first_shot_to_damage_s * 1000
+                                                            if _finite(e.first_shot_to_damage_s) else None),
+                                "ttd_ms": ttd * 1000,
                                 "opponent_ttd_ms": opp * 1000 if _finite(opp) else None,
                                 "visibility_note": e.visibility_note,
                                 "player_seen_while_blind": e.player_seen_while_blind},
-                                {"ttd_ms": limit, "source": "pro_p75", "ttd_max_seconds": cap,
+                                {"seen_to_first_shot_ms": limit, "source": "pro_p75", "ttd_max_seconds": cap,
                                  "ttd_max_source": "config"})
                 cp = e.crosshair_initial_offset_m
                 if not _finite(cp):
@@ -269,10 +274,12 @@ def detect_problems(mm: MatchMoments, baseline: dict | None, cfg: dict) -> Probl
                         missing("dry_peek_with_utility")
                     if "man_advantage" in m.tags and (m.trade is None or m.trade.traded is None):
                         missing("overpeek_in_advantage")
-                    if d is not None and {"flashbang", "smokegrenade"}.intersection(d.unused_grenades) and e.opponent_blind is None:
+                    if d is not None and set(p["dry_peek_grenades"]).intersection(d.unused_grenades) and e.opponent_blind is None:
                         hit("dry_peek_with_utility", {"contact_type": e.contact_type,
                             "unused_grenades": _json(d.unused_grenades), "opponent_blind": None})
-                    if "man_advantage" in m.tags and m.trade is not None and m.trade.traded is False:
+                    # CT 已下包时必须去拆包，拉出是被迫的
+                    forced_retake = c.side == "CT" and c.bomb_planted
+                    if "man_advantage" in m.tags and m.trade is not None and m.trade.traded is False and not forced_retake:
                         hit("overpeek_in_advantage", {"man_advantage": True, "contact_type": e.contact_type, "traded": False})
                 if (shot_weapon == "deagle" and e.first_seen_shot_stopped is False and
                         first_seen is not None and _finite(first_seen.speed_ratio) and
@@ -323,9 +330,11 @@ def detect_problems(mm: MatchMoments, baseline: dict | None, cfg: dict) -> Probl
                     "blinded": d.blinded, "blinded_by_teammate": d.blinded_by_teammate})
             elif d is not None and d.blinded and d.blinded_by_teammate is None:
                 missing("turned_into_flash")
-            if d is not None and c.side == "T" and c.bomb_planted and {"molotov", "incgrenade"}.intersection(d.unused_grenades):
+            if (d is not None and c.side == "T" and c.bomb_planted and {"molotov", "incgrenade"}.intersection(d.unused_grenades)
+                    and _finite(c.seconds_since_plant) and c.seconds_since_plant >= p["post_plant_min_alive_seconds"]):
                 hit("post_plant_utility_unused", {"side": c.side, "bomb_planted": c.bomb_planted,
-                    "unused_grenades": _json(d.unused_grenades)})
+                    "unused_grenades": _json(d.unused_grenades), "seconds_since_plant": c.seconds_since_plant},
+                    {"min_alive_seconds": p["post_plant_min_alive_seconds"], "source": "config"})
             if "weapon_not_ready" in m.tags:
                 hit("weapon_not_ready", {"weapon_not_ready": True})
             if w == "glock":
@@ -333,7 +342,8 @@ def detect_problems(mm: MatchMoments, baseline: dict | None, cfg: dict) -> Probl
                     missing("glock_long_range")
                 else:
                     limit = threshold("glock_long_range", w, "distance_m", "p90")
-                    if limit is not None and c.distance > limit:
+                    # m.weapon 是击杀者的武器：Glock 对 Glock 远距离对枪是对称的，不算失误
+                    if limit is not None and c.distance > limit and m.weapon in p["glock_long_range_opponent_weapons"]:
                         hit("glock_long_range", {"distance_m": c.distance}, {"distance_m": limit, "source": "pro_p90"})
 
         if m.kind == "kill":

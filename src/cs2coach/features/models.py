@@ -119,6 +119,7 @@ class Context(BaseModel):
     alive_enemy: int
     round_time_s: float  # 冻结期结束后经过的秒数
     bomb_planted: bool
+    seconds_since_plant: float | None = None  # 本回合最后一次下包到这一瞬间的秒数；没下包时为空
     own_equip_value: int | None  # 购买时间结束时的装备价值
     opponent_equip_value: int | None
     own_weapon: str | None  # 手持武器（显示名）

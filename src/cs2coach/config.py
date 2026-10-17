@@ -82,10 +82,16 @@ def _validate_problems(cfg: dict[str, Any]) -> None:
     if type(distance) not in (int, float) or not math.isfinite(distance) or distance <= 0:
         raise ConfigError("配置项 problems.spray_max_distance_m 应为正有限数")
     for key in ("crosshair_margin_ratio", "highlight_min_lead_s", "crosshair_airborne_lookback_seconds",
-                "missed_trade_min_view_seconds", "missed_trade_min_react_seconds", "missed_trade_other_fight_seconds"):
+                "missed_trade_min_view_seconds", "missed_trade_min_react_seconds", "missed_trade_other_fight_seconds",
+                "post_plant_min_alive_seconds"):
         value = cfg[key]
         if type(value) not in (int, float) or not math.isfinite(value) or value < 0:
             raise ConfigError(f"配置项 problems.{key} 应为非负有限数")
+    from cs2coach.parsing.weapons import GRENADES, GUNS
+    for key, allowed in (("dry_peek_grenades", GRENADES), ("glock_long_range_opponent_weapons", GUNS)):
+        value = cfg[key]
+        if not isinstance(value, list) or not value or any(not isinstance(x, str) or x not in allowed for x in value):
+            raise ConfigError(f"配置项 problems.{key} 应为非空的武器名列表")
     if type(cfg["missed_trade_exclude_traded_by_other"]) is not bool:
         raise ConfigError("配置项 problems.missed_trade_exclude_traded_by_other 应为布尔值")
 

@@ -425,6 +425,7 @@ def context(match: MatchData, sid: int, opponent: int | None, tick: int, rnd: Ro
         alive_own=own, alive_enemy=enemy,
         round_time_s=round((tick - start) / match.meta.tick_rate, 2),
         bomb_planted=bomb_planted(match, rnd.number, tick),
+        seconds_since_plant=seconds_since_plant(match, rnd.number, tick),
         own_equip_value=_equip(match, rnd.number, sid), opponent_equip_value=_equip(match, rnd.number, opponent),
         own_weapon=_str(me["active_weapon_name"]) if me is not None else None,
         opponent_weapon=_str(opp["active_weapon_name"]) if opp is not None else None,
@@ -434,6 +435,17 @@ def context(match: MatchData, sid: int, opponent: int | None, tick: int, rnd: Ro
         place=_str(row.get(f"{me_role}_last_place_name")),
         opponent_place=_str(row.get(f"{opp_role}_last_place_name")),
     )
+
+
+def seconds_since_plant(match: MatchData, round_number: int, tick: int) -> float | None:
+    """本回合最后一次下包到 tick 的秒数；之前没下包，或最后一个炸弹事件不是下包时为 None。"""
+    b = match.bomb
+    if b.empty:
+        return None
+    b = b[(b["round"] == round_number) & (b["tick"] < tick)].sort_values("tick")
+    if b.empty or b["event"].iloc[-1] != "planted":
+        return None
+    return round((tick - int(b["tick"].iloc[-1])) / match.meta.tick_rate, 2)
 
 
 def bomb_planted(match: MatchData, round_number: int, tick: int) -> bool:
