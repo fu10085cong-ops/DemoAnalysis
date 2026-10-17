@@ -165,7 +165,7 @@ def test_build_summary_does_not_cache_match_without_visibility(tmp_path, monkeyp
     assert len(list((tmp_path / "c").glob("*.pkl.gz"))) == 1  # 重新计算成功后写入
 
 
-def test_summary_cli_writes_and_archives_files(tmp_path, monkeypatch):
+def test_summary_cli_writes_and_archives_files(tmp_path, monkeypatch, capsys):
     mm = make_mm(rounds=10)
     sample = aggregate_matches(A, [(ref("a"), mm, report("slow_reaction", 1), (6, 4))],
                                None, load_config())
@@ -183,6 +183,9 @@ def test_summary_cli_writes_and_archives_files(tmp_path, monkeypatch):
     assert len(list((folder / "历史版本").glob("basic_report_*.md"))) == 1
     assert len(list((folder / "历史版本").glob("*.json"))) == 2
     assert (folder / "report_data.json").is_file()
+    assert 'id="page-data"' in (folder / "report.html").read_text(encoding="utf-8")
+    assert len(list((folder / "历史版本").glob("report_*.html"))) == 1
+    assert capsys.readouterr().out.rstrip().endswith(f"报告页：{folder / 'report.html'}")
     data = json.loads((folder / "summary.json").read_text(encoding="utf-8"))
     assert data["steamid"] == A and data["matches"][0]["number"] == "M1"
     assert "## 每场概况" in render_summary_problems(sample)

@@ -1,6 +1,6 @@
 # 044 报告页 HTML（单场与多场汇总）
 
-状态：待做（**依赖 043**，043 合并后再开始）
+状态：完成
 难度：B（照草图把 043 的数据渲染成一个页面）
 执行：Codex（思考强度 medium）
 分支：`task/044-report-page-html`
@@ -42,14 +42,14 @@
 
 ## 验收标准
 
-- [ ] `tests/test_page_html.py`：
+- [x] `tests/test_page_html.py`：
   - 用构造的 `ReportPage`（单场和汇总各一个）渲染，断言输出里有 `id="page-data"`，且嵌入的 JSON 能解析回同样的内容；
   - 名字里含 `</script><b>` 时，输出中不出现未转义的 `</script><b>`；
   - 不含 `http://` 和 `https://`（证明没有外部资源）；
   - `tiers` 为空时，输出里包含 `build_tier_baseline.py --all` 的提示文字。
-- [ ] `cli` 测试：用现有的假数据流程断言 `report.html` 写出了，并且被归档。
-- [ ] 开发时只跑相关测试文件；完成前跑一次全部测试，报告只贴最后一行。
-- [ ] 真实 demo：用 043 验收时的同一条 `analyze` 和 `summary` 命令，打开生成的 `report.html`，截图贴进完成报告，单场和汇总各一张。如果截不了图，就写明在 Chrome 中检查过这几项：
+- [x] `cli` 测试：用现有的假数据流程断言 `report.html` 写出了，并且被归档。
+- [x] 开发时只跑相关测试文件；完成前跑一次全部测试，报告只贴最后一行。
+- [x] 真实 demo：用 043 验收时的同一条 `analyze` 和 `summary` 命令，打开生成的 `report.html`，截图贴进完成报告，单场和汇总各一张。如果截不了图，就写明在 Chrome 中检查过这几项：
   - 雷达能切换对比线和分段；
   - 问题行能展开；
   - 复制按钮可用。
@@ -65,8 +65,23 @@
 ## 完成报告（实现方填写，尽量简短）
 
 - 改动的文件及原因：
-- 测试结果（最后一行）：
+  - 新增 `report/page_html.py`、`report/page_template.html`：通过资源模板嵌入安全 JSON，内联 CSS/JS，系统字体、亮暗主题、Canvas 雷达、分段/对比切换、可展开的具体回合与复制按钮；手机宽度下表格改为纵向展示。
+  - `cli.py`：单场和汇总生成 LF 换行的 `report.html`，重跑归档旧页面，终端最后打印报告页路径。
+  - 新增 `tests/test_page_html.py`；更新 `test_cli_output.py`、`test_summary.py` 和 `test_facts.py` 的文件列表、HTML 归档及终端输出断言。无新增依赖，新文件均为 LF。
+  - 本任务单和任务索引：更新验收与待审查状态。
+- 测试结果（最后一行）：`955 passed, 3 skipped, 1 error in 45.73s`
 - 真实 demo 验证（如有）：
+  - 使用 043 相同的 `data/eval/eval_set.toml` 第一个 case，运行 `analyze <demo> --player <player>`；未加 `--ai`，单场退出码 0，HTML 已在本机 Chrome 打开并检查。
+  - 同一个 player 运行 `summary --player <player>`，退出码 0，汇总 21 场、跳过 0 场；汇总 HTML 已在 Chrome 打开并检查。两份 HTML 中的 JSON 均与旁边的 `report_data.json` 完全一致。
+  - Chrome 合成数据交互检查通过：对比线切换、目标分段切换、缺失轴显示“—”、使用 `problem_bad_ratio` 重算严重度、第一条问题默认展开、优势默认折叠、键鼠展开及复制失败提示。复制内容通过假剪贴板校验，未覆盖系统剪贴板。
+  - Chrome 调试协议指定 390px 视口并启用暗色主题，确认单场和汇总页面均无横向溢出。截图将玩家名及含名字的描述替换为“（已匿名）”，数值与布局保留；原始报告保存在本地 `data/task044/reports/`。
+  - 单场截图：![单场报告（已匿名）](../../../data/task044/match.png)
+  - 汇总截图：![汇总报告（已匿名）](../../../data/task044/summary.png)
+  - 手机暗色截图：[单场 390px](../../../data/task044/match-mobile-dark.png)、[汇总 390px](../../../data/task044/summary-mobile-dark.png)
 - 遗留问题 / 需要确认的地方：
+  - 全量测试唯一错误是已知的 `tests/test_platform_check.py` 收集失败（沙箱无法读取 `data/eval/platform` 局域网共享目录），未处理。测试临时目录、缓存改放在工作区，使用 `--continue-on-collection-errors` 让其余测试执行完毕。
+  - 无检测规则、指标口径、JSON 结构或现有 Markdown 报告改动。
 
 ## 审查意见（Claude 填写）
+
+（2026-10-18，Windows）**通过**。全部测试 958 通过。页面没有外部资源，也没有 `innerHTML` 和 `eval`；嵌入的 JSON 转义了 `</`。截图与草图结构一致。审查时 Claude 改了数字格式：雷达旁的百分位原来显示成 64.33，改为取整；其他数值 10 以上保留 1 位小数，以下保留 2 位。真实数据重新生成了单场、两份汇总共 3 个页面。
