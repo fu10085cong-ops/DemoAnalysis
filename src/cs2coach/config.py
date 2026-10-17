@@ -28,7 +28,13 @@ def load_config(path: Path | None = None) -> dict[str, Any]:
     _validate_problems(cfg["problems"])
     _validate_economy(cfg["economy"])
     _validate_radar(cfg["radar"])
+    _validate_tools(cfg["tools"])
     return cfg
+
+
+def _validate_tools(cfg: dict[str, Any]) -> None:
+    if type(cfg["jobs"]) is not int or cfg["jobs"] < 1:
+        raise ConfigError("配置项 tools.jobs 应为正整数")
 
 
 def _validate_radar(cfg: dict[str, Any]) -> None:

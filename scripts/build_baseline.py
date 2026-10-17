@@ -19,8 +19,34 @@ from cs2coach.features.moments import find_moments
 from cs2coach.features.visibility import Sight
 from cs2coach.parsing.loader import resolve_demo
 from cs2coach.parsing.match import parse_match
+from cs2coach.parallel import default_jobs, map_ordered
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def parse_one_demo(entry: dict, cfg: dict) -> tuple[list, dict, list[tuple]]:
+    """解析一场 demo 并计算全部合格选手的瞬间。返回 (瞬间列表, demo 元数据, 逐人事件)。
+
+    逐人事件按发生顺序为 ("skip", 名字, 覆盖率) 或 ("moments", 名字, sid, 瞬间数)，
+    供主进程按原来的内容和顺序打印；本子进程不打印。
+    """
+    match = parse_match(resolve_demo(ROOT / entry["archive"], member=entry["member"]), cfg)
+    sight = Sight(match, cfg)
+    if not sight.available:
+        raise ValueError(f"视野计算不可用：{sight.unavailable_reason}")
+    game, events = [], []
+    for sid, player in match.players.items():
+        if player.coverage < cfg["parsing"]["min_target_coverage"]:
+            events.append(("skip", player.name, player.coverage))
+            continue
+        mm = find_moments(match, sid, cfg, sight=sight)
+        game.append(mm)
+        events.append(("moments", player.name, sid, len(mm.moments)))
+    if not game:
+        raise ValueError("没有合格选手")
+    demo = {"event": entry["event"], "teams": entry["teams"], "map": match.meta.map_name,
+            "member": entry["member"] or match.demo_path.name}
+    return game, demo, events
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -32,6 +58,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--manifest", type=Path, default=DEMO_MANIFEST)
     ap.add_argument("--config", type=Path, default=None)
     ap.add_argument("--out", type=Path, default=BASELINE_FILE)
+    ap.add_argument("--jobs", type=int, default=None,
+                    help="并行进程数（默认取配置 tools.jobs 与 CPU 核数的较小值）")
     args = ap.parse_args(argv)
     if len(args.demo_member) > len(args.demos):
         ap.error("--demo-member 的数量不能多于 demo 路径")
@@ -43,32 +71,28 @@ def main(argv: list[str] | None = None) -> int:
         entries = tomllib.loads(args.manifest.read_text(encoding="utf-8"))["demos"]
 
     cfg = load_config(args.config)
+    jobs = args.jobs if args.jobs is not None else default_jobs(cfg)
+
+    def report_progress(index: int, outcome) -> None:
+        entry = entries[index]
+        print(f"[{index + 1}/{len(entries)}] 解析 {entry['member'] or entry['archive']}", flush=True)
+
+    outcomes = map_ordered(parse_one_demo, [(entry,) for entry in entries], jobs, args=(cfg,),
+                           on_done=report_progress)
     mms, demos, failed = [], [], []
-    for i, entry in enumerate(entries, 1):
-        label = entry["member"] or entry["archive"]
-        print(f"[{i}/{len(entries)}] 解析 {label}", flush=True)
-        try:
-            match = parse_match(resolve_demo(ROOT / entry["archive"], member=entry["member"]), cfg)
-            sight = Sight(match, cfg)
-            if not sight.available:
-                raise ValueError(f"视野计算不可用：{sight.unavailable_reason}")
-            game = []
-            for sid, player in match.players.items():
-                if player.coverage < cfg["parsing"]["min_target_coverage"]:
-                    print(f"  跳过 {player.name}：覆盖率 {player.coverage:.1%}", flush=True)
-                    continue
-                mm = find_moments(match, sid, cfg, sight=sight)
-                game.append(mm)
-                print(f"  {player.name}（{sid}）：{len(mm.moments)} 个瞬间", flush=True)
-            if not game:
-                raise ValueError("没有合格选手")
-        except Exception as exc:
-            failed.append({"member": label, "reason": f"{type(exc).__name__}: {exc}"})
-            print(f"  失败，跳过：{failed[-1]['reason']}", flush=True)
+    for entry, outcome in zip(entries, outcomes):
+        if outcome.error is not None:
+            failed.append({"member": entry["member"] or entry["archive"], "reason": outcome.error})
+            print(f"  失败，跳过：{outcome.error}", flush=True)
             continue
+        game, demo, events = outcome.value
+        for event in events:
+            if event[0] == "skip":
+                print(f"  跳过 {event[1]}：覆盖率 {event[2]:.1%}", flush=True)
+            else:
+                print(f"  {event[1]}（{event[2]}）：{event[3]} 个瞬间", flush=True)
         mms.extend(game)
-        demos.append({"event": entry["event"], "teams": entry["teams"], "map": match.meta.map_name,
-                      "member": entry["member"] or match.demo_path.name})
+        demos.append(demo)
         print(f"  成功：{len(game)} 人次", flush=True)
 
     print(f"汇总：成功 {len(demos)} 场，失败 {len(failed)} 场，合格选手 {len(mms)} 人次", flush=True)

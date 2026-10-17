@@ -179,7 +179,8 @@ def test_build_script_uses_fresh_thresholds_instead_of_existing_file(tmp_path, m
     monkeypatch.setattr(script, "Sight", lambda m, cfg: SimpleNamespace(available=True))
     monkeypatch.setattr(script, "find_moments", lambda *args, **kwargs: mm)
     monkeypatch.setattr("cs2coach.baseline.load_baseline", lambda *args: pytest.fail("不能读取旧基准"))
-    assert script.main([str(match.demo_path), "--config", str(cfg_file), "--out", str(out)]) == 0
+    assert script.main([str(match.demo_path), "--config", str(cfg_file), "--out", str(out),
+                        "--jobs", "1"]) == 0
     baseline = json.loads(out.read_text(encoding="utf-8"))
     assert baseline["weapons"]["ak47"]["time_to_damage_ms"]["p75"] == 650
     assert baseline["problem_rates"]["slow_reaction"] == {"hits": 1, "rounds": 10, "per_10_rounds": 1, "player_share_pct": 100}

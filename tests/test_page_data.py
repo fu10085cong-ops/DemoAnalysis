@@ -194,7 +194,7 @@ def test_build_tier_command_coverage_failures_and_pro_manifest(tmp_path, monkeyp
     monkeypatch.setattr(builder, "lobby_line", lambda match, sid, *args, **kwargs: line(steamid=sid))
     monkeypatch.setattr(builder, "problem_rates", lambda mms, baseline, cfg:
                         seen.append((len(mms), baseline)) or {})
-    assert builder.main(["--all"]) == 0
+    assert builder.main(["--all", "--jobs", "1"]) == 0
     data = json.loads((tmp_path / "output/pro.json").read_text(encoding="utf-8"))
     assert seen == [(3, pro)] and data["source"] == "1 份 demo、3 人次"
     assert data["metrics"]["trade_kill_events_per_round"]["values"] == [.2, .2, .2]

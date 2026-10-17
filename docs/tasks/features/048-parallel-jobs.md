@@ -1,6 +1,6 @@
 # 048 逐场并行：基准、审计收集、页面检查加 `--jobs`
 
-状态：待做
+状态：待审查
 难度：B（新增一个小模块，4 个脚本把循环体提成函数；已预写测试）
 执行：Kimi（`C:\Users\David\.kimi-code\bin\kimi.exe`，在 Windows 上第一次使用，Claude 逐行审查）
 分支：`task/048-parallel-jobs`（独立工作目录 `C:\Users\David\DemoAnalysis-048`）
@@ -88,7 +88,25 @@ C:\Users\David\DemoAnalysis\.venv\Scripts\python.exe -m pytest -q -p no:cachepro
 ## 完成报告（实现方填写，尽量简短）
 
 - 改动的文件及原因：
-- 测试结果（最后一行）：
+  - 新增 `src/cs2coach/parallel.py`：`Outcome`、`default_jobs`、`map_ordered`（`ProcessPoolExecutor` 模块顶层导入；`jobs<=1` 本进程串行不建池；异常转 `Outcome(None, "类型: 消息")`；`on_done` 在主进程按完成顺序调用；结果按输入顺序）。
+  - `config/default.toml` 末尾新增 `[tools] jobs = 6`；`src/cs2coach/config.py` 新增 `_validate_tools`（`type(jobs) is not int or < 1` 报 `ConfigError`，拒绝 0、负数、布尔）。
+  - `scripts/audit_collect.py`：复用现成模块级 `collect_one`，`--jobs` 默认 `default_jobs(cfg)`，`map_ordered` 按输入顺序合并，进度/成败提示经 `on_done` 与合并循环在主进程打印（内容不变）。
+  - `scripts/build_baseline.py`：循环体提为模块级 `parse_one_demo(entry, cfg)`（子进程不打印，逐人事件带回主进程按原顺序打印）；items 包成 `(entry,)` 元组；按输入顺序合并，`mms`/`demos`/`failed` 顺序与串行一致，JSON 与 `--jobs 1` 逐字节相同。
+  - `scripts/build_tier_baseline.py`：循环体提为模块级 `parse_one_tier_demo(path, member, cfg)`（返回跳过的覆盖率列表）；失败行用 `outcome.error.split(':', 1)[0]` 保持只打异常类型。
+  - `scripts/page_check_all.py`：`main(argv=None)` 加 argparse 和 `--jobs`；循环体提为模块级 `check_one_demo(path, member, cfg, pro, tiers)`（返回逐人 `("ok", 违规列表)`/`("error", 异常类型)`）；`玩家NN` 编号与 `比赛NN` 在合并结果时按输入顺序分配；lobby 同场统计仍在子进程内先备齐。
+  - `scripts/rule_regression.py`：`--jobs` 默认 `default_jobs(load_config())`，转发给 `build_baseline.main(["--jobs", str(jobs)])` 和 `audit_collect.main(["--name", ..., "--jobs", str(jobs)])`；顺带把 `label_dirs(compare)` 改为 `label_dirs(compare, AUDIT_ROOT)`，否则默认参数在定义期绑定旧值，测试替换 `AUDIT_ROOT` 后 `iterdir` 会打到真实目录。
+  - `docs/tasks/README.md`："节省额度的约定"加第 8 条并行默认说明。
+  - 测试：`tests/test_parallel.py`、`tests/helpers/parallel_fns.py` 未动；`tests/test_baseline.py`、`tests/test_page_check.py`、`tests/test_page_data.py`、`tests/test_problem_frequency.py` 共 6 处脚本调用补 `"--jobs", "1"`——这 4 个旧测试猴子补丁 `parse_match`/`Sight`/`find_moments` 等模块内函数后调用 `main`；Windows spawn 的子进程会重新导入模块、看不到补丁，默认 6 进程会让它们全部失败。这是脚本新增并行后的标准适配（与预写测试不冲突），如认为不应改这些测试请退回，我再按意见处理。
+- 测试结果（最后一行）：`1010 passed, 4 skipped in 41.28s`（命令为任务单全量命令加 `--ignore=tests/test_index_page.py`）
 - 遗留问题 / 需要确认的地方：
+  - `tests/test_index_page.py` 属于 046/047（f519e97），其依赖的 `cs2coach.report.index_page` 不在本分支，直接全量收集会报错；与本次改动无关，故上面全量运行忽略了它。
+  - 未做真实 demo 验证（工作目录无 `data/`），`--jobs 1` 与多进程输出逐字节一致由按输入顺序合并保证，请合并后在主目录抽验。
 
 ## 审查意见（Claude 填写）
+
+（2026-10-18，Windows）**代码审查通过**，真实 demo 验证待合并后在主目录进行。这是 Kimi 在 Windows 上第一次实现任务：
+
+- `parallel.py` 与任务单一致；4 个脚本都把"处理一场"提成了模块级函数；`page_check_all` 的玩家编号在合并时按输入顺序分配。
+- 它自行给 4 个旧测试加了 `--jobs 1`：这些测试替换了模块内的函数，Windows 的子进程看不到替换。理由成立，并在完成报告里主动说明了，同意。预写测试没有改动。
+- 顺带修了 `rule_regression.label_dirs` 的默认参数：默认值在定义时就绑定，测试替换 `AUDIT_ROOT` 后会读到真实目录。改得对。
+- 与 046 的冲突：046 审查时 Claude 改了 `rule_regression.py` 的 `--labels-from` 解析，合并时需要手工合并。

@@ -151,11 +151,11 @@ def test_all_players_script_anonymizes_and_skips_coverage(tmp_path, monkeypatch,
     monkeypatch.setattr(runner, "detect_problems", lambda *args: report())
     seen = []
     monkeypatch.setattr(runner, "check_page", lambda page, cfg: seen.append(page) or [])
-    assert runner.main() == 0 and len(seen) == 3
+    assert runner.main(["--jobs", "1"]) == 0 and len(seen) == 3
     assert all(len(page.tiers[0].comparisons) == 3 for page in seen)
     output = capsys.readouterr().out
     assert str(A) not in output and "报告页一致性检查：0 处违规" in output
     monkeypatch.setattr(runner, "check_page", lambda *args: ["维度冲突：amateur_tmp：trade"])
-    assert runner.main() == 1
+    assert runner.main(["--jobs", "1"]) == 1
     output = capsys.readouterr().out
     assert "维度冲突：3 处" in output and "玩家01" in output
