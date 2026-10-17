@@ -1,6 +1,6 @@
 # 047 报告目录页：所有报告集中到一个可点击的 index.html
 
-状态：待做
+状态：完成
 难度：B（新增一个模块，CLI 加一次调用；已预写测试）
 执行：MiMo（`C:\Users\David\bin\codex-mimo.ps1`，第一次试用，Claude 逐行审查）
 分支：`task/047-report-index`（在独立工作目录中执行，见下方"运行方式"）
@@ -79,8 +79,18 @@ C:\Users\David\DemoAnalysis\.venv\Scripts\python.exe -m pytest -q tests/test_ind
 
 ## 完成报告（实现方填写，尽量简短）
 
-- 改动的文件及原因：
-- 测试结果（最后一行）：
-- 遗留问题 / 需要确认的地方：
+- 改动的文件及原因：新增 `src/cs2coach/report/index_page.py`，负责扫描两层合法报告目录、排序并生成自包含 `index.html`；修改 `src/cs2coach/cli.py`，在 analyze 和 summary 写完报告页后刷新目录并打印路径。
+- 测试结果（最后一行）：`1004 passed, 4 skipped in 45.99s`
+- 遗留问题 / 需要确认的地方：全量测试的沙箱临时目录 `.pytest_tmp/` 因当前环境禁止删除命令而保留，未进入版本控制；源代码及任务单均为 LF。
 
 ## 审查意见（Claude 填写）
+
+（2026-10-18，Windows）**通过**。这是 MiMo 第一次实现任务，经 Codex 驱动，Claude 逐行审查：
+
+- 预写测试未改动，6 项全过；在工作目录中跑全部测试，1004 通过，并确认导入的是工作目录里的代码。
+- 实现符合任务单：只扫两层目录，`report_data.json` 损坏时跳过；文字用 `html.escape`，`href` 先 URL 编码再转义；没有外部资源；亮暗主题沿用报告页的配色变量。
+- CLI 改动只有 9 行，位置正确。
+
+小问题：MiMo 在沙箱里留下了 `.pytest_tmp/` 目录，权限不允许删除。它没有被 git 跟踪，不影响提交。
+
+结论：边界清楚、已预写测试的 B 类任务，可以继续交给 MiMo。
