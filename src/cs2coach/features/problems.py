@@ -11,6 +11,7 @@ from pydantic import BaseModel
 
 from cs2coach.baseline import EXCLUDED_TAGS, engagement_weapon, spray_segments, spray_stats, weapon_threshold
 from cs2coach.features.labels import weapon_label
+from cs2coach.parsing.weapons import is_gun
 from cs2coach.features.models import MatchMoments
 
 
@@ -273,7 +274,9 @@ def detect_problems(mm: MatchMoments, baseline: dict | None, cfg: dict) -> Probl
 
         if m.kind == "death":
             # 死时还在被闪白，开不了枪，不算犹豫（039 审查补充）
-            if (e is not None and d is not None and d.blinded is not True and not e.shots and e.visibility_note is None
+            # 死时手上不是枪（拿着道具、刀、C4）：是没切枪，不是犹豫（039 审计）
+            holding_gun = w is not None and is_gun(w)  # w：没开枪时由手持武器显示名反查
+            if (e is not None and d is not None and d.blinded is not True and holding_gun and not e.shots and e.visibility_note is None
                     and e.seen_to_death_s is not None and e.seen_to_death_s >= p["no_shot_min_seen_seconds"]
                     and d.shots_last_2s == 0):
                 hit("saw_but_no_shot", {"seen_to_death_s": e.seen_to_death_s,
