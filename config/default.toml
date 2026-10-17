@@ -324,6 +324,22 @@ visibility_problems = ["slow_reaction", "poor_crosshair_placement", "peeked_into
 # 这些说明表示视野起点可能不完整；持续可见类说明不计入
 incomplete_visibility_notes = ["not_seen", "lost_sight", "first_hit_unseen", "smoke", "blind", "no_map_data"]
 
+[review]
+# CS2 的 game/csgo 目录；也可用 CS2COACH_CSGO_DIR 或 install --csgo 指定
+csgo_dir = ""
+demo_subdir = "replays"
+playdemo_template = "playdemo {subdir}/{demo_stem}"
+jump_template = "demo_gototick {tick}"
+# 未经实机验证，默认不切换视角
+follow_template = ""
+
+[review.questions]
+died_without_seeing = "对手开枪打你的那一刻，他在不在你的屏幕里？在屏幕外填‘对’，在屏幕里填‘不对’。"
+poor_crosshair_placement = "刚看见对手时，准星离他远吗？远填‘对’，基本在他身上、只是在跟枪填‘不对’。"
+missed_trade = "队友死的那一刻，你能看到击杀者吗？能看到填‘对’，看不到填‘不对’。"
+slow_reaction = "刚看见对手后，你的第一枪是否明显慢？明显慢填‘对’，并不慢填‘不对’。"
+generic = "游戏内画面是否支持程序的原判？支持填‘对’，不支持填‘不对’；无法判断填‘看不出’。"
+
 [[audit.rules]]
 id = "fired_before_seen"
 problems = ["slow_reaction", "poor_crosshair_placement"]
