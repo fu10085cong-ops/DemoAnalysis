@@ -127,7 +127,10 @@ def main(argv: list[str] | None = None) -> int:
     if out.exists():
         ap.error(f"输出目录已存在：{out}")
     old = read_hits(old_path)
-    sources = args.labels_from or label_dirs(compare)
+    # 相对路径按审计目录解析：046 审查时传入目录名被当成相对当前目录，判定一条都没读到也没有报错
+    sources = [p if p.is_absolute() or p.exists() else AUDIT_ROOT / p for p in args.labels_from] or label_dirs(compare)
+    if args.labels_from and not any((p / "labels.toml").exists() for p in sources):
+        ap.error("--labels-from 指定的目录里都没有 labels.toml：" + "、".join(str(p) for p in sources))
     labels = read_labels(sources)
     out.mkdir(parents=True)
     old_rates = new_rates = None

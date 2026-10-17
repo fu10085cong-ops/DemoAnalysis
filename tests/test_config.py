@@ -7,6 +7,21 @@ def test_default_config_loads():
     cfg = load_config()
     assert 64 in cfg["parsing"]["supported_tick_rates"]
     assert 0 < cfg["parsing"]["min_target_coverage"] <= 1
+    assert cfg["baseline"]["min_metric_samples"] == 20
+
+
+@pytest.mark.parametrize("value", ["0", "-1", "1.5", "true", '"20"'])
+def test_baseline_min_metric_samples_requires_positive_integer(tmp_path, value):
+    path = tmp_path / "baseline.toml"
+    path.write_text(f"[baseline]\nmin_metric_samples = {value}\n", encoding="utf-8")
+    with pytest.raises(ConfigError, match="baseline.min_metric_samples"):
+        load_config(path)
+
+
+def test_baseline_min_metric_samples_override(tmp_path):
+    path = tmp_path / "baseline.toml"
+    path.write_text("[baseline]\nmin_metric_samples = 2\n", encoding="utf-8")
+    assert load_config(path)["baseline"]["min_metric_samples"] == 2
 
 
 @pytest.mark.parametrize("override", [

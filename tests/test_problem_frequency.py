@@ -167,7 +167,7 @@ def test_build_script_uses_fresh_thresholds_instead_of_existing_file(tmp_path, m
     from scripts import build_baseline as script
 
     cfg_file = tmp_path / "sample.toml"
-    cfg_file.write_text('[baseline]\nmin_engagements = 1\n', encoding="utf-8")
+    cfg_file.write_text('[baseline]\nmin_engagements = 1\nmin_metric_samples = 1\n', encoding="utf-8")
     out = tmp_path / "baseline.json"
     out.write_text(json.dumps({"weapons": {"ak47": {"time_to_damage_ms": {"p75": 9999}}}}), encoding="utf-8")
     match = SimpleNamespace(players={A: SimpleNamespace(name="alice", coverage=1.0)},
