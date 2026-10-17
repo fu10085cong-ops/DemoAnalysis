@@ -1,7 +1,22 @@
 # 当前进度与待办（交接用）
 
-> 最近更新：2026-10-18 在 Mac 上整理，准备换到 Windows 继续。**新会话、换机器后先读这一页**，再按 `CLAUDE.md` 工作。
+> 最近更新：2026-10-18 晚在 Windows 上整理。**新会话、换机器后先读这一页**，再按 `CLAUDE.md` 工作。
 > 这一页记录"现在做到哪、接下来做什么、有哪些约定"；产品方向的取舍以 `docs/product.md` 为准，评测数据以 `docs/eval_log.md` 为准。
+
+## 〇·〇、2026-10-18 晚：Windows 交接
+
+**状态**：`parsing-layer` 已推送，043–048 和死代码清理都已合并，1028 个测试通过。
+
+- **报告页**（043–045）：`analyze` 和 `summary` 都会生成 `report.html`，输出根目录还会生成 `index.html` 目录页（047）。分段基准有 `amateur_tmp`（23 场）和 `pro` 两个，`page_check_all.py` 一致性检查 0 处违规。
+- **046**：职业阈值按指标要求至少 20 个样本，MP7、SSG 08 的部分阈值因此关闭。规则回归在 `data/audit/2026-10-18-after046/`；扣掉 Windows 缺的那场后，实际只少了 28 条命中。
+- **048**：基准、审计收集、页面检查、规则回归默认 6 进程并行（`--jobs 1` 退回串行），结果与串行逐字节相同，快约 3 倍。
+- **Windows 上的三个实现方**：
+  - Codex：VS Code 插件自带的 `codex.exe`；
+  - MiMo：`C:\Users\David\bin\codex-mimo.ps1`，用 Codex 驱动；
+  - Kimi：`C:\Users\David\.kimi-code\bin\kimi.exe -p`，没有沙箱，只在 worktree 里运行。
+  - MiMo 做了 047、Kimi 做了 048，都一次通过审查。
+- **Windows 缺一场业余 demo**：`9220525551542050188_0.zip`。Mac 上有的话请拷过来，否则两边的审计样本不一致。
+- **残留**：Codex 和 MiMo 沙箱建的几个空目录（`data/tmp`、`data/task044`、`../DemoAnalysis-047`）只能用管理员权限删除，不影响使用。
 
 ## 〇·一、2026-10-18 报告页改版（Windows）
 
