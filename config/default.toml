@@ -666,7 +666,7 @@ pattern = '(?<!对手)(?<!敌人)(?<!对面)(?<!对手可能)(?<!敌人可能)(?
 require = "ct_retake"
 
 [ai]
-# 用哪个模型服务：deepseek / claude / local（各自的设置在下面对应的表里）
+# 用哪个模型服务：deepseek / mimo / claude / local（各自的设置在下面对应的表里）
 provider = "deepseek"
 # 一次诊断最多请求几轮（含工具调用和引用修正）
 max_turns = 10
@@ -682,6 +682,16 @@ model = "deepseek-flash"
 # 思考模式（DeepSeek 默认开启）；推理深度：low / high / max
 thinking = true
 reasoning_effort = "high"
+max_tokens = 32000
+reasoning_field = "reasoning_content"
+
+[ai.mimo]
+# 小米 MiMo，OpenAI 兼容接口。凭据：环境变量 MIMO_API_KEY
+# 2026-10-17 用 /v1/models 核对过可用模型：mimo-v2.6-flash、mimo-v2.6-pro、mimo-v2.6-pro-ultraspeed、mimo-v2.5、mimo-v2.5-pro；
+# 两个 v2.6 模型都支持工具调用，回复里带 reasoning_content（与 DeepSeek 相同，多轮时原样带回）
+base_url = "https://api.xiaomimimo.com/v1"
+api_key_env = "MIMO_API_KEY"
+model = "mimo-v2.6-flash"
 max_tokens = 32000
 reasoning_field = "reasoning_content"
 

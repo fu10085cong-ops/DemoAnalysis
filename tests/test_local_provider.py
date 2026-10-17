@@ -137,3 +137,16 @@ def test_model_flag_overrides_selected_provider_model(monkeypatch, tmp_path):
     assert seen["ai"]["local"]["model"] == load_config()["ai"]["local"]["model"]  # 其他服务不受影响
     assert cli._build_parser().parse_args(["analyze", "x.dem", "--player", str(A),
                                            "--model", "deepseek-flash"]).model == "deepseek-flash"
+
+
+def test_mimo_factory_and_missing_key(monkeypatch):
+    """038：小米 MiMo 走 OpenAI 兼容接口，不发 DeepSeek 的 thinking 参数；缺凭据时报出环境变量名。"""
+    cfg = load_config()
+    cfg["ai"]["provider"] = "mimo"
+    provider = make_provider(cfg, FakeOpenAI([]))
+    assert provider.name == "mimo" and provider.params["model"] == "mimo-v2.6-flash"
+    assert "extra_body" not in provider.params
+    assert cli._build_parser().parse_args(["summary", "--player", str(A), "--provider", "mimo"]).provider == "mimo"
+    monkeypatch.delenv("MIMO_API_KEY", raising=False)
+    with pytest.raises(ProviderError, match="MIMO_API_KEY"):
+        make_provider(cfg)
