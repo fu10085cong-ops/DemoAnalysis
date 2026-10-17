@@ -95,6 +95,12 @@ class Engagement(BaseModel):
     contact_type: Literal["peek", "held", "both_moving", "both_still", "unclear"] | None = None
     # Leetify 同名指标：从看见对手到第一次造成伤害，准星转过的角度（度）
     crosshair_placement_deg: float | None = None
+    # 首次看见时准星与对手眼睛的偏差；pitch 正数表示准星在头下方
+    crosshair_initial_deg: float | None = None
+    crosshair_initial_offset_m: float | None = None
+    crosshair_initial_yaw_deg: float | None = None
+    crosshair_initial_pitch_deg: float | None = None
+    airborne_near_seen: bool | None = None
     # 视野指标为空的原因：no_map_data / first_hit_unseen（首次打中时没看见，之后看见）/
     # lost_sight（之前看见、锚点时视线中断）/ not_seen（时间窗口内没看见）/
     # seen_before_window（回溯 3 秒内一直可见）/ seen_since_previous_kill / seen_since_round_start / smoke / blind
@@ -194,6 +200,10 @@ class MissedTrade(BaseModel):
     killer: int
     distance: float  # 目标玩家与阵亡队友的直线距离（游戏单位）
     killer_traded_by_other: bool  # 击杀者在窗口内被别的队友击杀
+    killer_in_view_s: float | None = None
+    killer_first_in_view_s: float | None = None
+    reloading_at_death: bool = False
+    other_fight_s: float | None = None
     side: Literal["T", "CT"] | None = None  # 队友阵亡时目标玩家阵营
     alive_own: int | None = None  # 队友阵亡后，含目标玩家
     alive_enemy: int | None = None

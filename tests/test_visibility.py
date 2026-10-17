@@ -5,6 +5,7 @@ tick 80 走到 (0, 0)（能看到 C）。A 朝 +X（yaw 0）。
 """
 
 import copy
+import math
 
 import pandas as pd
 import pytest
@@ -420,3 +421,41 @@ def test_blind_filter_uses_configured_remaining_threshold():
     cfg = copy.deepcopy(CFG)
     cfg["visibility"]["blind_min_remaining_seconds"] = 1.1
     assert duel(cfg, blinds=[flash()]).moments[0].engagement.player_seen_while_blind is False
+
+
+# ---------- 031：准星初始偏差、空中排除 ----------
+
+
+def _duel_with(extra):
+    m = make_match(ticks(a_yaw={80: 10.0}, extra=extra), rounds=[make_round(freeze_end=10, end=110, last=120)])
+    m.kills = build_kills(pd.DataFrame([death(100, A, C)]), m)
+    m.damages = build_damages(pd.DataFrame([hurt(95, A, C, 30, 70), hurt(100, A, C, 120, 0)]), m)
+    fires = [fire(90, A), fire(95, A), fire(100, A)]
+    m.shots = build_shots(pd.DataFrame(fires), pd.DataFrame([bullet(f["tick"], A) for f in fires]), m)
+    return find_moments(m, A, CFG, sight=Sight(m, CFG, checker=WallChecker(wall_x=500.0, wall_y_max=-50.0))).moments[0].engagement
+
+
+def test_crosshair_initial_offset_horizontal():
+    # 80 看见：A 在 (0,0) 朝 10°，C 在 1000 单位外正前方 → 水平偏 10°，偏差 = 25.4 米 × sin 10°
+    e = _duel_with({})
+    assert e.crosshair_initial_deg == pytest.approx(10.0, abs=0.01)
+    assert e.crosshair_initial_yaw_deg == pytest.approx(10.0, abs=0.01)
+    assert e.crosshair_initial_pitch_deg == pytest.approx(0.0, abs=0.01)
+    assert e.crosshair_initial_offset_m == pytest.approx(1000 / 39.37 * math.sin(math.radians(10)), abs=0.01)
+    assert e.airborne_near_seen is False
+
+
+def test_crosshair_initial_offset_vertical_sign():
+    # 准星低于头 5°（pitch 正数表示向下看）
+    e = _duel_with({(A, 80): {"Y": 0.0, "yaw": 0.0, "pitch": 5.0}})
+    assert e.crosshair_initial_yaw_deg == pytest.approx(0.0, abs=0.01)
+    assert e.crosshair_initial_pitch_deg == pytest.approx(5.0, abs=0.01)
+    assert e.crosshair_initial_offset_m == pytest.approx(1000 / 39.37 * math.sin(math.radians(5)), abs=0.01)
+
+
+@pytest.mark.parametrize("tick,expected", [(70, True), (95, True), (60, False), (96, False)])
+def test_airborne_near_seen_window(tick, expected):
+    # 区间 [80 − 0.25 秒（16 tick）, 95 第一次伤害]
+    y = -200.0 if tick < 80 else 0.0
+    e = _duel_with({(A, tick): {"Y": y, "yaw": 10.0 if tick == 80 else 0.0, "is_airborne": True}})
+    assert e.airborne_near_seen is expected

@@ -25,6 +25,7 @@ def cfg():
 @pytest.fixture
 def baseline():
     stats = {"time_to_damage_ms": {"p75": 500.0}, "crosshair_placement_deg": {"p75": 10.0},
+             "crosshair_initial_offset_m": {"p75": 2.0},
              "distance_m": {"p90": 30.0}}
     segments = [{"from": start, "to": end, "hit_pct": 65.0, "shots": 100}
                 for start, end in [(0, 0), (1, 2), (3, 5), (6, 9), (10, 14), (15, None)]]
@@ -46,7 +47,7 @@ def bullets(n=6, start=3, hit=False, stopped=True, weapon="ak47"):
 # 每个已实现的瞬间规则有一个命中与一个仅改变必要条件的不命中样本。
 CASES = [
     ("slow_reaction", dict(engagement={"time_to_damage_s": .6}), dict(engagement={"time_to_damage_s": .5})),
-    ("poor_crosshair_placement", dict(engagement={"crosshair_placement_deg": 11.5}), dict(engagement={"crosshair_placement_deg": 10.5})),
+    ("poor_crosshair_placement", dict(engagement={"crosshair_initial_offset_m": 2.3}), dict(engagement={"crosshair_initial_offset_m": 2.1})),
     ("shot_while_moving", dict(engagement={"first_shot_stopped": False}), dict(engagement={"first_shot_stopped": False, "first_shot_hit": True})),
     ("peeked_into_held_angle", dict(engagement={"contact_type": "peek"}), dict(engagement={"contact_type": "held"})),
     ("dry_peek_with_utility", dict(engagement={"contact_type": "peek"}, death={"unused_grenades": ["flashbang"]}),
@@ -87,7 +88,8 @@ def test_each_moment_rule_has_both_sides(pid, positive, negative, cfg, baseline)
 
 
 def test_missed_trade_records_are_preserved(cfg, baseline):
-    record = MissedTrade(round=5, tick=100, teammate=B, killer=C, distance=200, killer_traded_by_other=True)
+    record = MissedTrade(round=5, tick=100, teammate=B, killer=C, distance=200, killer_traded_by_other=True,
+                         killer_in_view_s=1.0, killer_first_in_view_s=0.5)
     mm = make_mm(missed_trades=[record, record])
     report = detect_problems(mm, baseline, cfg)
     assert mm.missed_trades == [record, record]
@@ -100,6 +102,35 @@ def test_missed_trade_records_are_preserved(cfg, baseline):
     assert report.hits[0].weapon is None
     assert report.hits[0].evidence == {"weapon": None, **record.model_dump()}
     assert not detect_problems(make_mm(), baseline, cfg).hits
+
+
+def _trade(**changes):
+    base = dict(round=5, tick=100, teammate=B, killer=C, distance=200, killer_traded_by_other=False,
+                killer_in_view_s=1.0, killer_first_in_view_s=0.5)
+    return MissedTrade(**(base | changes))
+
+
+@pytest.mark.parametrize("changes,skip", [
+    (dict(killer_in_view_s=0.2), "killer_in_view_s"),
+    (dict(killer_first_in_view_s=4.1), "killer_first_in_view_s"),
+    (dict(killer_first_in_view_s=None, killer_in_view_s=0.0), "killer_in_view_s"),
+    (dict(reloading_at_death=True), "reloading_at_death"),
+    (dict(other_fight_s=1.2), "other_fight_s"),
+])
+def test_missed_trade_new_conditions(cfg, baseline, changes, skip):
+    """031：每个条件只改一项，一个判、一个不判。"""
+    assert [h.problem for h in detect_problems(make_mm(missed_trades=[_trade()]), baseline, cfg).hits] == ["missed_trade"]
+    report = detect_problems(make_mm(missed_trades=[_trade(**changes)]), baseline, cfg)
+    assert report.hits == []
+    assert report.skipped[f"missed_trade/{skip}"] == 1
+
+
+def test_missed_trade_react_time_boundary_and_missing_visibility(cfg, baseline):
+    # 窗口 5 秒、反应时间 1 秒：4.0 秒内第一次看到才判
+    assert detect_problems(make_mm(missed_trades=[_trade(killer_first_in_view_s=3.9)]), baseline, cfg).hits
+    assert not detect_problems(make_mm(missed_trades=[_trade(killer_first_in_view_s=4.1)]), baseline, cfg).hits
+    report = detect_problems(make_mm(missed_trades=[_trade(killer_in_view_s=None, killer_first_in_view_s=None)]), baseline, cfg)
+    assert report.hits == [] and report.skipped["missed_trade"] == 1
 
 
 @pytest.mark.parametrize("condition,pid,positive", [
@@ -140,8 +171,12 @@ def test_first_seen_shot_and_threshold_margins(cfg, baseline):
     assert "shot_while_moving" not in problems([unseen, seen_slow.model_copy(update={"hit": True})])
     assert "deagle_moving_shot" not in {h.problem for h in detect_problems(make_mm([
         make_moment(weapon="deagle", engagement={"shots": [unseen]})]), baseline, cfg).hits}
-    assert "poor_crosshair_placement" not in problems([seen_slow], crosshair_placement_deg=10.5)
-    assert "poor_crosshair_placement" in problems([seen_slow], crosshair_placement_deg=11.5)
+    assert "poor_crosshair_placement" not in problems([seen_slow], crosshair_initial_offset_m=2.19)
+    assert "poor_crosshair_placement" in problems([seen_slow], crosshair_initial_offset_m=2.21)
+    # 031：旧口径的转角很大（跟枪）但初始偏差小，不判；空中看见不判
+    assert "poor_crosshair_placement" not in problems([seen_slow], crosshair_placement_deg=40.0, crosshair_initial_offset_m=0.5)
+    assert "poor_crosshair_placement" not in problems([seen_slow], crosshair_initial_offset_m=3.0, airborne_near_seen=True)
+    assert "poor_crosshair_placement" in problems([seen_slow], crosshair_initial_offset_m=3.0, airborne_near_seen=False)
 
 
 def test_smoke_does_not_exclude_moving_shot_rules(cfg, baseline):

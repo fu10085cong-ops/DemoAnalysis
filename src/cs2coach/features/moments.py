@@ -81,6 +81,8 @@ class _Params:
         self.max_len = round(mc["engagement_max_seconds"] * self.rate)
         self.trade = round(mc["trade_window_seconds"] * self.rate)
         self.missed_trade_distance = float(mc["missed_trade_max_distance"])
+        self.airborne_lookback = round(cfg["problems"]["crosshair_airborne_lookback_seconds"] * self.rate)
+        self.other_fight_window = round(cfg["problems"]["missed_trade_other_fight_seconds"] * self.rate)
         self.key_assist_damage = int(mc["key_assist_min_damage"])
         self.min_blind = float(mc["min_blind_seconds"])
         self.blind_min_remaining = float(cfg["visibility"]["blind_min_remaining_seconds"])
@@ -324,6 +326,25 @@ def add_visibility(match: MatchData, p: _Params, sid: int, opponent: int, tick: 
     if usable_me and not me_blind and my_dmg is not None:
         upd["time_to_damage_s"] = p.secs(my_dmg - me.tick)
         upd["crosshair_placement_deg"] = angle_between(sight.view_vector(sid, me.tick), sight.view_vector(sid, my_dmg))
+        if upd["crosshair_placement_deg"] is not None:
+            mine = sight.states_at(sid, [me.tick]).get(me.tick)
+            target = sight.states_at(opponent, [me.tick]).get(me.tick)
+            if mine is not None and target is not None:
+                eye, head = sight.eye(mine), sight.eye(target)
+                delta = head - eye
+                distance = float(math.sqrt(float(delta @ delta)))
+                if distance > 0:
+                    target_yaw = math.degrees(math.atan2(delta[1], delta[0]))
+                    target_pitch = -math.degrees(math.atan2(delta[2], math.hypot(delta[0], delta[1])))
+                    initial = angle_between(sight.view_vector(sid, me.tick), delta / distance)
+                    if initial is not None:
+                        upd["crosshair_initial_deg"] = initial
+                        upd["crosshair_initial_offset_m"] = round(
+                            distance / 39.37 * math.sin(math.radians(min(initial, 90))), 3)
+                        upd["crosshair_initial_yaw_deg"] = round(abs((mine.yaw - target_yaw + 180) % 360 - 180), 2)
+                        upd["crosshair_initial_pitch_deg"] = round(mine.pitch - target_pitch, 2)
+            airborne = match.player_ticks(sid, me.tick - p.airborne_lookback, my_dmg)["is_airborne"]
+            upd["airborne_near_seen"] = bool(airborne.any())
     if valid(opp) and not opp_blind and opp_dmg is not None:
         upd["opponent_time_to_damage_s"] = p.secs(opp_dmg - opp.tick)
     if usable_me:
@@ -595,6 +616,27 @@ def find_missed_trades(match: MatchData, p: _Params, sid: int) -> list[MissedTra
             continue
         if not _spotted_by(match, killer, sid, tick, tick + p.trade):
             continue
+        reloading = any(bool(st["is_in_reload"]) for t in (tick - 1, tick)
+                        if (st := match.state_at(sid, t)) is not None)
+        view_seconds = first_view = None
+        if p.sight is not None and p.sight.available:
+            own_states = p.sight.states(sid, tick, tick + p.trade)
+            killer_states = p.sight.states(killer, tick, tick + p.trade)
+            visible = [t for t, st in own_states.items()
+                       if t in killer_states and p.sight.sees(st, killer_states[t])]
+            view_seconds = p.secs(len(visible))
+            first_view = p.secs(min(visible) - tick) if visible else None
+        fight_start = tick - round(0.5 * p.rate)
+        damages = match.damages
+        nearby = (damages[damages["tick"].between(fight_start, tick + p.other_fight_window)]
+                  if not damages.empty else damages)
+        others = {other for other in match.players if other != killer and
+                  (st := match.state_at(other, tick - 1)) is not None and
+                  _int_or_none(st["team_num"]) != _int_or_none(me["team_num"])}
+        fighting = (nearby[((nearby["attacker"] == sid) & nearby["victim"].isin(others)) |
+                           ((nearby["victim"] == sid) & nearby["attacker"].isin(others))]
+                    if not nearby.empty else nearby)
+        other_fight = p.secs(int(fighting["tick"].min()) - tick) if len(fighting) else None
         number = int(r["round"])
         rnd = match.round(number)
         start = (rnd.freeze_end_tick if rnd.freeze_end_tick is not None else rnd.start_tick) if rnd else tick
@@ -610,6 +652,8 @@ def find_missed_trades(match: MatchData, p: _Params, sid: int) -> list[MissedTra
                 enemy += 1
         out.append(MissedTrade(round=number, tick=tick, teammate=victim, killer=killer,
             distance=round(dist, 1), killer_traded_by_other=len(revenge) > 0,
+            killer_in_view_s=view_seconds, killer_first_in_view_s=first_view,
+            reloading_at_death=reloading, other_fight_s=other_fight,
             side="T" if my_team == Team.T else "CT", alive_own=own, alive_enemy=enemy,
             round_time_s=round((tick - start) / match.meta.tick_rate, 2),
             bomb_planted=bomb_planted(match, number, tick)))

@@ -485,3 +485,37 @@ def test_digest_blind_roles_are_explicit_for_both_subjects(subject, role, source
                      thrower=None, thrower_ambiguous=role is None, thrower_role=role)
     expected = f"{source}闪的" if source is not None else "投掷者无法确定"
     assert _blind_line(subject, info) == f"{subject}被闪（事件时剩 0.8s，最长 2.0s，{expected}）"
+
+
+# ---------- 031：漏补的视线、换弹、正在交火 ----------
+
+
+def test_missed_trade_killer_out_of_view_by_default():
+    # A 朝 +X，击杀者 D 在 +Y 方向（90°，超出视野）
+    t = find_moments(scenario(), A, CFG).missed_trades[0]
+    assert t.killer_in_view_s == 0 and t.killer_first_in_view_s is None
+    assert t.reloading_at_death is False and t.other_fight_s is None
+
+
+def test_missed_trade_killer_in_view_seconds():
+    extra = {(A, tt): {"X": 3.5, "yaw": 90.0} for tt in range(150, 200)}
+    t = find_moments(scenario(extra_ticks=extra), A, CFG).missed_trades[0]
+    assert t.killer_first_in_view_s == 0.0
+    assert t.killer_in_view_s == pytest.approx(50 / 64, abs=0.02)  # A 在 200 阵亡
+
+
+def test_missed_trade_reloading_and_other_fight():
+    reload = find_moments(scenario(extra_ticks={(A, 149): {"X": 3.5, "is_in_reload": True}}), A, CFG)
+    assert reload.missed_trades[0].reloading_at_death is True
+    damages = [hurt(95, A, C, 30, 70), hurt(100, A, C, 120, 0), hurt(150, D, B, 100, 0),
+               hurt(160, C, A, 10, 90), hurt(200, D, A, 90, 0)]
+    fight = find_moments(scenario(damages=damages), A, CFG).missed_trades[0]
+    assert fight.other_fight_s == pytest.approx(10 / 64, abs=0.01)
+    late = [*damages[:3], hurt(300, C, A, 10, 90), damages[-1]]
+    assert find_moments(scenario(damages=late), A, CFG).missed_trades[0].other_fight_s is None
+
+
+def test_is_in_reload_is_parsed_as_bool():
+    from cs2coach.parsing.match import _BOOL_PROPS, PLAYER_PROPS
+    assert "is_in_reload" in PLAYER_PROPS and "is_in_reload" in _BOOL_PROPS
+    assert scenario().ticks["is_in_reload"].dtype == bool

@@ -22,6 +22,7 @@ _DEFAULTS = {
     "X": 0.0, "Y": 0.0, "Z": 0.0, "pitch": 0.0, "yaw": 0.0,
     "health": 100, "armor_value": 100, "is_alive": True,
     "is_airborne": False, "is_walking": False, "duck_amount": 0.0, "is_scoped": False,
+    "is_in_reload": False,
     "active_weapon_name": "AK-47", "flash_duration": 0.0, "last_place_name": "Mid",
     "spotted_by_mask": 0, "controlling_bot": False,
 }

@@ -37,7 +37,7 @@ COUNT_LABELS = {
 }
 PROBLEM_VALUES = {
     "slow_reaction": ("ttd_ms", "ttd_ms", "ms"),
-    "poor_crosshair_placement": ("crosshair_placement_deg", "crosshair_placement_deg", "deg"),
+    "poor_crosshair_placement": ("crosshair_initial_offset_m", "crosshair_initial_offset_m", "offset_m"),
     "spray_control": ("hit_pct", "expected_hit_pct", "pct"),
     "awp_unscoped_shot": ("distance_m", "distance_m", "m"),
     "glock_long_range": ("distance_m", "distance_m", "m"),
@@ -73,6 +73,8 @@ def _fmt(value, unit="count") -> str:
         return f"{value:.2f} 倍"  # 与频率表的倍数列一致
     if unit == "m":
         return f"{value:.0f} 米"
+    if unit == "offset_m":
+        return f"{value:.1f} 米"  # 准星初始偏差，常见 1–3 米，取整会失真
     if unit == "units":
         return f"{value:.0f} 单位"
     if unit == "speed":

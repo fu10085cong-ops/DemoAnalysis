@@ -50,6 +50,9 @@
 | `time_to_damage_s`（Leetify 同名） | 看见对手 → 第一次对他造成伤害 | 同上 |
 | `seen_to_first_shot_s` / `first_shot_to_damage_s` / `damage_to_kill_s` | Time to Damage 拆成三段（Leetify 没有）：看见 → 第一枪（负数表示看见前就开枪）、第一枪 → 第一次命中、第一次命中 → 击杀 | 同上 |
 | `crosshair_placement_deg`（Leetify 同名） | 从看见对手到第一次造成伤害，准星转过的角度 | 视角数据准确 |
+| `crosshair_initial_deg` / `crosshair_initial_offset_m` | 首次看见时视角与本人眼睛到对手眼睛的夹角；眼睛按下蹲量调整，偏差米数为眼睛间距离 × sin(min(夹角, 90°)) | 头部位置按眼睛近似 |
+| `crosshair_initial_yaw_deg` / `crosshair_initial_pitch_deg` | 初始偏差的水平绝对角和垂直有符号角；pitch 正数表示准星在头下方 | 同上 |
+| `airborne_near_seen` | 首次看见前 0.25 秒到首次造成伤害，任一 tick 在空中 | 逐 tick 状态 |
 | `shots_before_seen` | 看见对手之前就朝他开的枪数（预瞄穿点、隔着掩体扫射、上一次露头时的射击）；`seen_to_first_shot_s` 只从看见后的第一枪算，前两段相加等于 Time to Damage | 同上 |
 | `contact_tick` / `player_speed_at_contact` / `opponent_speed_at_contact` / `contact_type` | 接触时刻（双方中较早看见对方的 tick）前 0.25 秒内双方的平均速度；低于 40 u/s 算几乎静止，不低于 120 算在移动，中间（减速、急停中）不下结论。`peek` 自己移动、对手静止（主动拉出，对手架点）；`held` 反过来；`unclear` 有一方处在过渡状态。用来支撑"干拉""架点"这类判断 | 速度准确；阈值依据 3 个 demo、878 个样本的速度分布（两个峰 0–10 和 200–220） |
 | `visibility_note` | 上述指标为空的原因：`first_hit_unseen`（首次造成伤害时看不到对手，之后看见了）、`lost_sight`（锚点前的回溯窗口看见过，之后视线中断）、`not_seen`（窗口内确实没看见）、`seen_before_window`（回溯 3 秒内一直可见，起点未知）、`smoke`、`blind`、`no_map_data` 等；`lost_sight` 记录 `last_seen_before_s`，`not_seen` 记录 `opponent_off_screen`（锚点附近有几何视线但对手在屏幕外） | — |
@@ -57,6 +60,8 @@
 **烟雾**：CS2 的烟是体素，会被雷和子弹打散，无法精确建模。只用来排除："第一次看见"那一刻视线经过烟雾附近（球体近似，半径 144、展开后 1–18 秒有效）时，起点可能偏早，不计算 Time to Damage、Crosshair Placement。校准：被排除的 3%–5% 样本 Time to Damage 中位数 0.9–1.4 秒，保留样本的中位数几乎不变。
 
 **被闪白**：几何首次可见时，观察者正在经历总时长 ≥ `moments.min_blind_seconds`、剩余时长 ≥ `visibility.blind_min_remaining_seconds` 的致盲，则这一方的“看见”不可靠。首次可见 tick 保留用于核对，`player_seen_while_blind` / `opponent_seen_while_blind` 标记是否被闪白；没有首次可见 tick 时为 None。本人被闪白时 `visibility_note=blind`，烟雾原因优先，TTD、看见到开枪、开枪到命中及准星移动均留空；对手被闪白时对手 TTD 留空。任一方被闪白都不计算谁先看见谁。整场遭遇的 TTD 和准星使用相同过滤；其他枪法统计不变。剩余阈值暂定 1 秒，考虑闪光末段逐渐消退，待数据校准。Leetify 未公开是否采用这样的致盲过滤，这是我们的额外处理。
+
+**准星判定口径（031）**：`crosshair_placement_deg` 保留 Leetify 的看见到命中转角，用于显示；问题检测改用首次看见时准星到对手头部的偏差米数。转角会把跟随移动目标的转动算进去，且相同角度在不同距离代表不同偏差；偏差米数在职业样本的各距离段更稳定。首次看见前 0.25 秒至首次命中间在空中的交火不判断准星摆放。只有原 Leetify 指标可计算时才计算初始偏差。
 
 **核对**：旧 6 点算法在 6 个 demo、736 次击杀中测得雷达 spotted 比几何“第一次看见”晚 0.23–0.28 秒（中位数），85%–88% 在 0–0.55 秒之间；这些延迟尚未按新算法重测。旧算法的 5E、完美击杀者 TTD 中位数分别为 469、516 ms，也尚未重测。新版职业整场 TTD 中位数见下方 v2 基准。
 
@@ -122,7 +127,7 @@
 
 - `metrics` 保留每人每份 demo 的整场枪法分布，原 `compare()` 接口兼容。
 - `weapons` 按交火第一枪的武器归组；没开枪时从手持显示名反查规范名，查不到则跳过。只含击杀、死亡且有交火的数据，不含回合结束后、误杀、bot 和世界伤害；交火少于 `baseline.min_engagements`（默认 30）的武器不输出。
-- 每把武器记录交火数，TTD、准星移动、距离的 p50/p75/p90 和 n；分位数使用线性插值。TTD 排除 ≥ 1 秒以及烟雾、被闪白的样本，准星排除烟雾和被闪白；首枪停稳率、命中率分别排除 None，并各自记录分母 `first_shot_stopped_n` / `first_shot_hit_n`。
+- 每把武器记录交火数，TTD、准星移动、初始偏差米数、距离的 p50/p75/p90 和 n；分位数使用线性插值。TTD 排除 ≥ 1 秒以及烟雾、被闪白的样本，准星排除烟雾和被闪白，初始偏差另外排除空中交火；首枪停稳率、命中率分别排除 None，并各自记录分母 `first_shot_stopped_n` / `first_shot_hit_n`。
 - `spray` 只取上述交火中开枪前一 tick 看见这次交火对手的子弹，按每发实际使用的自动武器归组；视野不可用或没看见对手的子弹不计入。`recoil_index` 从 0 开始，分段起点来自配置，默认 0、1、3、6、10、15，最后一段不封顶。每段记录 from/to、shots、hit_pct，空段命中率为 None，缺失连射序号的子弹不计入。
 - `weapon_threshold()` 和 `spray_segments()` 提供读取接口，旧基准、缺失武器或指标返回 None / 空列表。
 - `problem_rates` 使用同一次生成的新武器/压枪阈值，对每名职业选手逐图运行问题检测；仅统计实际已实现规则，包含默认停用项及亮点供后续校准，不含待开发项和 `other`。只计 target 不是 `match` 的命中，回合数为全部人次的在场回合数（`rounds_played`）之和，每十回合频率保留两位小数；至少命中一次的人次占比保留一位小数。
@@ -195,6 +200,8 @@
 
 ## 漏补 `missed_trades`
 不是目标玩家自己的击杀 / 死亡，单独列出：队友阵亡时目标玩家存活、与阵亡队友的直线距离 ≤ `missed_trade_max_distance`、5 秒补枪窗口内在雷达上发现过击杀者，但没在窗口内击杀他。距离不考虑视线，"发现"是雷达状态（约 0.5 秒更新一次），**只是近似**，给 AI 作参考。
+
+问题检测还要求：在补枪窗口内通过地图视野看见击杀者累计至少 0.25 秒，首次看见不能晚到剩余反应时间不足 1 秒；队友阵亡时本人未换弹，且阵亡前 0.5 秒至后 2 秒没有与另一名敌人互相造成伤害。地图视野不可用时原始记录保留，但问题计入缺失而不判。
 
 ## 已知局限
 - 实际扣血的总和比记分板的伤害统计（`m_iDamage`）系统性地低约 1%（每人每场 7–27 点）。试过几种算法都对不上，原因未查明；单次交火的伤害按事件中的剩余血量计算，是自洽的。

@@ -62,7 +62,7 @@ def _validate_problems(cfg: dict[str, Any]) -> None:
     from cs2coach.features.problems import PROBLEMS
 
     conditions = {"through_smoke", "first_seen_through_smoke", "wallbang", "player_blinded_in_fight",
-                  "opponent_blinded_by_own_side", "killed_by_utility", "fired_before_seen"}
+                  "opponent_blinded_by_own_side", "killed_by_utility", "fired_before_seen", "airborne_near_seen"}
     exclusions = cfg["exclusions"]
     if (not isinstance(exclusions, dict) or set(exclusions) != conditions or any(
             not isinstance(ids, list) or
@@ -81,7 +81,8 @@ def _validate_problems(cfg: dict[str, Any]) -> None:
     distance = cfg["spray_max_distance_m"]
     if type(distance) not in (int, float) or not math.isfinite(distance) or distance <= 0:
         raise ConfigError("配置项 problems.spray_max_distance_m 应为正有限数")
-    for key in ("crosshair_margin_ratio", "highlight_min_lead_s"):
+    for key in ("crosshair_margin_ratio", "highlight_min_lead_s", "crosshair_airborne_lookback_seconds",
+                "missed_trade_min_view_seconds", "missed_trade_min_react_seconds", "missed_trade_other_fight_seconds"):
         value = cfg[key]
         if type(value) not in (int, float) or not math.isfinite(value) or value < 0:
             raise ConfigError(f"配置项 problems.{key} 应为非负有限数")

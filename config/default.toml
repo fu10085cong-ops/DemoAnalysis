@@ -303,6 +303,14 @@ spray_moving_ratio = 0.5
 max_shots_before_seen = 1
 # 准星转角相对职业 75 分位的余量
 crosshair_margin_ratio = 0.10
+# 准星：首次看见前多少秒到首次命中之间有一刻在空中，就不判（031；游戏内确认的 2 条准星错判都是跳跃中看见）
+crosshair_airborne_lookback_seconds = 0.25
+# 漏补：补枪窗口内能看到击杀者（屏幕内、有视线）累计至少多少秒才判
+missed_trade_min_view_seconds = 0.25
+# 漏补：第一次看到击杀者时，补枪窗口至少还剩多少秒反应时间
+missed_trade_min_react_seconds = 1.0
+# 漏补：队友阵亡前 0.5 秒到阵亡后多少秒内和别的敌人互有伤害，说明正在交火，不判
+missed_trade_other_fight_seconds = 2.0
 # 先看见、先开枪至少领先的秒数；0.045 让 64 tick 下的 3 tick（0.047 秒）刚好够格
 highlight_min_lead_s = 0.045
 # 已被其他队友补上的记录不作为漏补枪问题
@@ -328,6 +336,7 @@ player_blinded_in_fight = ["slow_reaction", "poor_crosshair_placement", "spray_c
 opponent_blinded_by_own_side = ["peeked_into_held_angle", "overpeek_in_advantage"]
 killed_by_utility = ["died_without_seeing", "peeked_into_held_angle"]
 fired_before_seen = ["slow_reaction", "poor_crosshair_placement"]
+airborne_near_seen = ["poor_crosshair_placement"]
 
 [audit]
 # 接近接触速度、首枪停稳阈值的相对范围
