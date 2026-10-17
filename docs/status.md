@@ -1,7 +1,47 @@
 # 当前进度与待办（交接用）
 
-> 2026-10-16 在 Windows 上整理，准备换到 Mac 继续。**新会话、换机器后先读这一页**，再按 `CLAUDE.md` 工作。
+> 最近更新：2026-10-18 在 Mac 上整理，准备换到 Windows 继续。**新会话、换机器后先读这一页**，再按 `CLAUDE.md` 工作。
 > 这一页记录"现在做到哪、接下来做什么、有哪些约定"；产品方向的取舍以 `docs/product.md` 为准，评测数据以 `docs/eval_log.md` 为准。
+
+## 〇、2026-10-18 交接（Mac → Windows）
+
+**状态**：`parsing-layer` 已推送，最新是 042 合并，工作区干净，没有进行中的任务。889 个测试通过。
+
+**到 Windows 后先做**：
+1. `git pull`，然后运行一次 `python scripts/install_hooks.py`：启用提交前自动隐私扫描（S06）。没启用的话，那边的提交不会扫描。
+2. `.env` 里需要有 `DEEPSEEK_API_KEY`；要用小米 MiMo 时，还要加 `MIMO_API_KEY`。Mac 的 `.env` 不同步，密钥不要写进仓库或聊天记录。
+3. **游戏内确认**"看见对手却没开枪"（039）的 8 条：
+   `python scripts/review_pack.py install 2026-10-17-noshot --csgo "<CS2>\game\csgo"` → CS2 里 `exec cs2coach_review`，按 `checklist.md` 逐条跳转（`r1`–`r8`）→ 填 `data/review/2026-10-17-noshot/review.toml` → `python scripts/review_pack.py apply 2026-10-17-noshot`。复盘包在局域网共享目录里，Windows 能直接看到。
+
+**10 月 17–18 日做了什么**（详见 `docs/tasks/README.md` 的索引和 `docs/eval_log.md`）：
+- **规则**：031–040 共 10 项修正，经过五轮审计后，事实准确率基本都是 100%。有用率：出枪慢、人数优势冒进、换弹时被打死 100%；漏补 96%；压枪、急停、有闪直接拉约 90%；**准星 73%**（待讨论）。
+- **新问题**：换弹时被打死（033）、看见对手却没开枪（039；游戏内确认待做）。
+- **结构性**：
+  - S03：事实性说法改由程序提供，口径错配从 4 处降到 0，token 少了 24%；
+  - S04：判定加上"值不值得提醒"；
+  - S05：逐轮 token 用量；
+  - S06：提交钩子；
+  - S07：规则回归工具和交火数据集；
+  - S08：问题登记完整性测试。
+- **AI**：接入小米 MiMo（`--provider mimo`）。DeepSeek 仍是默认。
+- **产品方向**（`docs/product.md`）：复刻 Leetify 的指标层，加上逐次交火诊断和中文 AI 复盘；国内已有竞品 CS2Analysis 和破雾；主播模式记录为备选方向。
+
+**新工具**：
+- 改完规则：`python scripts/rule_regression.py --name <新目录> --compare-to <上次目录>`，输出命中数变化和沿用判定估算的有用率；
+- 数据研究：`python scripts/dataset_export.py` 导出一次（约 18 分钟），之后用 `cs2coach.dataset.load(...)` 查询，列名见 `docs/dataset.md`；
+- 审计判定沿用：hit_key 只由比赛、玩家、问题、目标组成，跨轮次可以直接对上。
+
+**等产品负责人决定 / 讨论**：
+- 准星规则的取舍（有用率 73%）；
+- 先手转化率做报告主线：业余玩家里和 KD 的相关系数是 0.55，做之前要先定"先手"的门槛和"装备劣势"的界定；
+- ΔWP 要不要提前做（CLAUDE.md 架构原则第 5 条）；
+- 以前留下的："最该练的一件事"怎么选、免费版文字定稿、路人基准、训练闭环。
+
+**AI 分工的实际情况**：
+- Kimi 保持 Plus 档，5 小时额度大约只够一个中等任务，只安装在 Mac 上；
+- Codex 默认用 medium，A 类任务用 high；
+- Kimi 不可用时，B 类任务改由 Codex 来做。
+
 
 ## 一、现在能做什么
 
