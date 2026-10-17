@@ -41,11 +41,18 @@ def _validate_radar(cfg: dict[str, Any]) -> None:
     for key in ("max_strengths", "max_problems", "max_examples", "max_highlights"):
         if type(cfg[key]) is not int or cfg[key] < 1:
             raise ConfigError(f"配置项 radar.{key} 应为正整数")
-    for key in ("strength_min_percentile", "problem_bad_ratio", "problem_min_excess"):
+    for key in ("strength_min_percentile", "problem_min_excess"):
         if type(cfg[key]) not in (int, float) or not math.isfinite(cfg[key]):
             raise ConfigError(f"配置项 radar.{key} 应为有限数")
-    if not 0 <= cfg["strength_min_percentile"] <= 100 or cfg["problem_bad_ratio"] <= 1:
-        raise ConfigError("radar 百分位应在 [0, 100] 内，问题倍率应大于 1")
+    if not 0 <= cfg["strength_min_percentile"] <= 100 or cfg["problem_min_excess"] < 0:
+        raise ConfigError("radar 百分位应在 [0, 100] 内，多出次数应非负")
+    for key in ("rounds", "deaths", "flashes", "tier_values"):
+        if type(cfg["min_samples"][key]) is not int or cfg["min_samples"][key] < 1:
+            raise ConfigError(f"配置项 radar.min_samples.{key} 应为正整数")
+    if type(cfg["verdict_weak_percentile"]) not in (int, float) or not 0 < cfg["verdict_weak_percentile"] <= 100:
+        raise ConfigError("配置项 radar.verdict_weak_percentile 应在 (0, 100] 内")
+    if type(cfg["verdict_min_axes"]) is not int or not 1 <= cfg["verdict_min_axes"] <= 6:
+        raise ConfigError("配置项 radar.verdict_min_axes 应为 [1, 6] 内的整数")
     axes = cfg["axes"]
     if (not isinstance(axes, list) or len(axes) != 6 or any(
             not isinstance(axis, dict) or set(axis) != {"id", "name", "metrics"}

@@ -40,14 +40,13 @@ def sample_page(kind="match", tiers=True):
                unit="次/10回合", count=3, severity="bad", text="需要练习。", examples=[example])
     comparison = dict(id="tier_median", name="分段中位数", values=[50] * 6)
     return ReportPage(kind=kind, title="目标玩家", subtitle="本场" if kind == "match" else "2 场",
-        verdict="需要练习出枪速度。", axes=[dict(id="speed" if i == 0 else str(i), name=name)
+        axes=[dict(id="speed" if i == 0 else str(i), name=name)
             for i, name in enumerate(["出枪速度", "准星位置", "急停", "压枪", "补枪配合", "道具使用"])],
-        default_tier="amateur", problem_bad_ratio=1.5,
+        default_tier="amateur",
         tiers=[dict(id="amateur", name="业余", source="合成数据", you=[None, 20, 40, 60, 80, 100],
-                    comparisons=[comparison], problem_targets={"slow_reaction": 2}),
+                    comparisons=[comparison], verdict="业余分段结论", strengths=[], problems=[row]),
                dict(id="pro", name="职业", source="合成数据", you=[10] * 6,
-                    comparisons=[comparison], problem_targets={"slow_reaction": 4})] if tiers else [],
-        strengths=[dict(row, id="counter_strafing_pct", name="急停", severity="ok")], problems=[row],
+                    comparisons=[comparison], verdict="职业分段结论", strengths=[], problems=[row])] if tiers else [],
         highlights=[dict(kind="clutch", title="R2 残局获胜", **{k: v for k, v in example.items()
                                                               if k != "situation"})])
 
@@ -67,8 +66,8 @@ def test_script_boundary_in_names_and_other_text():
     page = sample_page()
     dangerous = '</script><b> & " __PAGE_DATA__'
     page.title = dangerous
-    page.problems[0].text = dangerous
-    page.problems[0].examples[0].command.playdemo = dangerous
+    page.tiers[0].problems[0].text = dangerous
+    page.tiers[0].problems[0].examples[0].command.playdemo = dangerous
     html = render_page(page)
     assert "</script><b>" not in html
     parser = PageDataParser()

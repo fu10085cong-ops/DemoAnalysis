@@ -1,6 +1,6 @@
 # 045 报告页统计口径修正（外部审查 14 条中的 12 条）+ 一致性检查
 
-状态：待做
+状态：完成
 难度：A（改数据结构、统计判定和页面模板，跨 radar、page_data、lobby、分段基准）
 执行：Codex（思考强度 high）
 分支：`task/045-report-page-stats`
@@ -141,7 +141,7 @@ tier_values = 30    # 分段里某指标的有效人次少于这个数时，该�
 
 ## 验收标准
 
-- [ ] `tests/test_page_data.py`、`tests/test_page_check.py`、`tests/test_radar.py` 分别覆盖：
+- [x] `tests/test_page_data.py`、`tests/test_page_check.py`、`tests/test_radar.py` 分别覆盖：
   - 审查报告的复现例子都改正了：
     - 两个分段 5 次和 1 次、本人 4 次：切换到 1 次的分段后会出现这个问题；
     - 两场 TTD 100 和 300 毫秒、基准 [201, 250, 299]：优点和雷达的口径一致；
@@ -152,13 +152,13 @@ tier_values = 30    # 分段里某指标的有效人次少于这个数时，该�
     - 分段 17/4930、分析 1000 回合：期望 3.448，不是 3；
   - 一致性检查的 7 条规则，各有一个正例和一个反例；
   - 补枪按击杀次数计：一次击杀两名队友的凶手，只算 1 次。
-- [ ] 重建分段基准：`python scripts/build_tier_baseline.py --tier amateur_tmp`。贴出 `source` 一行和各指标的 n。
-- [ ] `python scripts/page_check_all.py` 的最终输出为 0 处违规；如果不是 0，贴出汇总并说明原因。
-- [ ] 用评测集第一个 case 和同一 player 跑 `analyze` 和 `summary`，贴出：
+- [x] 重建分段基准：`python scripts/build_tier_baseline.py --tier amateur_tmp`。贴出 `source` 一行和各指标的 n。
+- [x] `python scripts/page_check_all.py` 的最终输出为 0 处违规；如果不是 0，贴出汇总并说明原因。
+- [x] 用评测集第一个 case 和同一 player 跑 `analyze` 和 `summary`，贴出：
   - 每个分段的 `verdict`；
   - 每个分段 problems 的 id、severity、count、expected；
   - 每个分段 strengths 的 id、percentile、samples。
-- [ ] 开发时只跑相关测试文件；完成前跑一次全部测试，报告只贴最后一行。
+- [x] 开发时只跑相关测试文件；完成前跑一次全部测试，报告只贴最后一行。
 
 ## 范围外（不要做）
 
@@ -171,8 +171,77 @@ tier_values = 30    # 分段里某指标的有效人次少于这个数时，该�
 ## 完成报告（实现方填写，尽量简短）
 
 - 改动的文件及原因：
+  - `features/models.py`、`lobby.py`、`radar.py`：新增补枪击杀事件数和闪光投掷数，补上样本门槛，移除未用道具价值；旧补枪人数口径保留。
+  - `report/page_data.py`、`page_template.html`、`cli.py`：逐分段生成完整区块；统一典型单场百分位，使用完整精度期望和泊松尾概率，修正指标说明与例子来源。
+  - `report/page_check.py`、`scripts/page_check_all.py`：实现七类一致性检查，CLI 提示不中断，批量结果仅用匿名编号。
+  - `config/default.toml`、`config.py`、`scripts/build_tier_baseline.py`：声明并校验样本门槛，按新口径构建基准；整体判断的维度门槛也放入配置 `radar.verdict_min_axes = 4`。
+  - `tests/test_page_data.py`、`test_page_check.py`、`test_radar.py`、`test_page_html.py`：覆盖指定复现、七条规则正反例及新数据结构；同步 `docs/features.md` 和任务索引。无新增依赖，修改文件均为 LF。
 - 测试结果（最后一行）：
-- 真实 demo 验证（如有）：
+  - 相关三个测试文件：`87 passed in 2.17s`
+  - 全量原命令遇到已知的 `test_platform_check.py` 共享目录收集错误；按用户说明排除此文件后：`994 passed, 3 skipped in 38.02s`
+  - 隐私扫描：`身份信息命中：0 处。`；`git diff --check` 通过。
+- 真实 demo 验证（全程未调用 AI）：
+  - 已执行 `.venv/Scripts/python.exe scripts/build_tier_baseline.py --tier amateur_tmp`；已更新 `src/cs2coach/baselines/tiers/amateur_tmp.json`。
+  - `source: 23 份 demo、230 人次`
+  - 各指标 n：
+
+```text
+time_to_damage_ms: n=229
+crosshair_placement_deg: n=229
+counter_strafing_pct: n=230
+spray_accuracy_pct: n=230
+trade_kill_events_per_round: n=230
+traded_death_pct: n=229
+utility_damage_per_round: n=230
+enemies_flashed_per_flash: n=184
+```
+
+  - `.venv/Scripts/python.exe scripts/page_check_all.py`：七类均为 0；`已检查 230 人次，无法检查 0 项`，`报告页一致性检查：0 处违规`。
+  - 用 `data/eval/eval_set.toml` 第 1 个 case 的 demo 和目标玩家执行 `analyze`（30 回合），同一目标玩家执行 `summary`（自动扫描，21 场、438 回合、跳过 0 场），两者退出码均为 0。均使用重建后的基准；本机当前只有 `amateur_tmp` 分段，具体结果如下。输出保存在忽略目录 `data/tmp/task045-validation/`。
+
+```text
+analyze / amateur_tmp
+verdict: 这场没有检出明显多于业余（临时）的问题。雷达上最弱的是补枪配合（第 9 百分位）。
+problems（id / severity / count / expected）:
+poor_crosshair_placement / warn / 6 / 4.089249492900609
+spray_control / warn / 2 / 0.7849898580121704
+overpeek_in_advantage / warn / 1 / 0.26774847870182555
+dry_peek_with_utility / warn / 1 / 0.565922920892495
+saw_but_no_shot / warn / 1 / 0.6937119675456389
+strengths（id / percentile / samples）:
+counter_strafing_pct / 83 / 170
+time_to_damage_ms / 66 / 31
+```
+
+```text
+summary / amateur_tmp
+verdict: 这段时间没有检出明显多于业余（临时）的问题。雷达上最弱的是预瞄（第 51 百分位）。
+problems（id / severity / count / expected）:
+poor_crosshair_placement / warn / 68 / 59.70304259634889
+died_without_seeing / warn / 18 / 16.7026369168357
+overpeek_in_advantage / warn / 5 / 3.909127789046653
+died_while_reloading / warn / 2 / 1.421501014198783
+glock_long_range / warn / 1 / 0.44421906693711966
+strengths（id / percentile / samples）:
+counter_strafing_pct / 86 / 1888
+utility_damage_per_round / 75 / 438
+time_to_damage_ms / 66 / 489
+```
+
 - 遗留问题 / 需要确认的地方：
+  - 已知共享目录测试收集问题未处理。
+  - 本机业余目录实际发现 23 份 demo，与 `config/tiers.toml` 的“24 场”备注不同；按实际发现的全部 demo 完成重建和检查，未改范围外的备注。
 
 ## 审查意见（Claude 填写）
+
+（2026-10-18，Windows）**通过**。全部测试 998 通过；`page_check_all.py` 检查 230 人次，0 处违规。按新的审查规则，用 3 名水平不同的玩家生成了真实页面：
+
+- 产品负责人：单场的结论是最弱补枪配合，第 9 百分位；汇总没有 bad。
+- 另一名业余玩家：汇总的结论是"最该练的是准星没提前放好：8 场里出现 34 次，按业余（临时）的频率约 23 次"，泊松尾概率 1.9%，与审查前人工判断一致。
+- ZywOo：命中速度第 100 百分位，预瞄第 97 百分位，没有 bad，没有乱挑毛病。
+
+审查时 Claude 改了一处：汇总里最低的维度是第 51 百分位，结论却写"最弱的是预瞄"。新增配置 `radar.verdict_weak_percentile = 40`，低于它才说"最弱"，否则写"没有明显偏弱的维度"。百分位改为四舍五入显示。
+
+遗留问题：
+- 职业分段还没有构建，审查时已在后台构建。
+- `tiers.toml` 的备注写的是 24 场，实际是 23 场。
