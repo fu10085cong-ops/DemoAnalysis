@@ -122,6 +122,8 @@ def test_aggregate_uses_played_rounds_and_shared_frequency_math():
 
 
 def test_build_summary_skips_one_failed_match(tmp_path, monkeypatch):
+    from tests.test_radar import line
+    monkeypatch.setattr("cs2coach.features.lobby.lobby_line", lambda *args: line())
     refs = [ref("a"), ref("b")]
     monkeypatch.setattr("cs2coach.summary.aggregate.resolve_demo", lambda path, member=None: path)
     def parse(path, cfg):
@@ -141,6 +143,8 @@ def test_build_summary_skips_one_failed_match(tmp_path, monkeypatch):
 
 
 def test_build_summary_does_not_cache_match_without_visibility(tmp_path, monkeypatch):
+    from tests.test_radar import line
+    monkeypatch.setattr("cs2coach.features.lobby.lobby_line", lambda *args: line())
     from cs2coach import cache
     demo = tmp_path / "a.dem"
     demo.write_bytes(b"demo")
@@ -177,7 +181,8 @@ def test_summary_cli_writes_and_archives_files(tmp_path, monkeypatch):
     assert (folder / "basic_report.md").is_file()
     assert len(list((folder / "历史版本").glob("*.md"))) == 2
     assert len(list((folder / "历史版本").glob("basic_report_*.md"))) == 1
-    assert len(list((folder / "历史版本").glob("*.json"))) == 1
+    assert len(list((folder / "历史版本").glob("*.json"))) == 2
+    assert (folder / "report_data.json").is_file()
     data = json.loads((folder / "summary.json").read_text(encoding="utf-8"))
     assert data["steamid"] == A and data["matches"][0]["number"] == "M1"
     assert "## 每场概况" in render_summary_problems(sample)

@@ -4,7 +4,7 @@ import os
 from datetime import datetime
 from pathlib import Path
 
-from cs2coach.cli import _output_folder, main
+from cs2coach.cli import _build_parser, _output_folder, _page_tiers, main
 from cs2coach.config import load_config
 from tests.helpers.synthetic import A
 from tests.test_moments import find_moments, scenario
@@ -45,7 +45,7 @@ def test_rerun_moves_both_ai_files_and_keeps_program_outputs(tmp_path, monkeypat
     archive = folder / "历史版本"
     assert (archive / f"report_{label}.md").read_text(encoding="utf-8") == "first report.md"
     assert (archive / f"submission_{label}.json").read_text(encoding="utf-8") == "first submission.json"
-    assert {p.name for p in folder.iterdir()} == {"moments.json", "facts.md", "problems.md", "basic_report.md", "历史版本"}
+    assert {p.name for p in folder.iterdir()} == {"moments.json", "facts.md", "problems.md", "basic_report.md", "report_data.json", "历史版本"}
 
     for name in ("report.md", "submission.json"):
         old = folder / name
@@ -55,3 +55,16 @@ def test_rerun_moves_both_ai_files_and_keeps_program_outputs(tmp_path, monkeypat
     assert (archive / f"report_{label}_2.md").read_text(encoding="utf-8") == "second report.md"
     assert (archive / f"submission_{label}_2.json").read_text(encoding="utf-8") == "second submission.json"
     assert capsys.readouterr().out.rstrip().endswith(str(folder))
+
+
+def test_target_selects_default_and_keeps_all_built_tiers(monkeypatch, capsys):
+    tiers = {"pro": {"id": "pro"}, "amateur_tmp": {"id": "amateur_tmp"}}
+    monkeypatch.setattr("cs2coach.report.page_data.load_tiers", lambda cfg: tiers)
+    for command in (["analyze", "example.dem"], ["summary"]):
+        cfg = load_config()
+        args = _build_parser().parse_args(command + ["--player", str(A), "--target", "pro"])
+        assert _page_tiers(cfg, args) == tiers
+        assert cfg["radar"]["default_tier"] == "pro"
+        args.target = "missing"
+        assert _page_tiers(cfg, args) == {}
+    assert "missing" in capsys.readouterr().out
