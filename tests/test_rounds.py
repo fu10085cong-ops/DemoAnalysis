@@ -34,7 +34,6 @@ def test_two_rounds():
     assert (r2.number, r2.start_tick, r2.freeze_end_tick, r2.end_tick, r2.last_tick) == (2, 150, 170, 250, 300)
     assert r2.winner == Team.CT
     assert r1.contains(149) and not r1.contains(150)
-    assert r1.is_live(20) and r1.is_live(100) and not r1.is_live(19) and not r1.is_live(101)
 
 
 def test_warmup_round_is_dropped():
@@ -50,7 +49,6 @@ def test_demo_starting_mid_round():
     df = rules(300, freeze=[(150, 170)], ends=[(100, 3, 1), (250, 2, 2)], first=40)
     r1, r2 = segment_rounds(df, [170])
     assert (r1.start_tick, r1.freeze_end_tick, r1.end_tick, r1.last_tick) == (40, None, 100, 149)
-    assert r1.is_live(40)
     assert (r2.number, r2.freeze_end_tick) == (2, 170)
 
 

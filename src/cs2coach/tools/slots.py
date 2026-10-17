@@ -43,22 +43,6 @@ PROBLEM_VALUES = {
     "glock_long_range": ("distance_m", "distance_m", "m"),
     "spray_while_moving": ("moving_ratio", "moving_ratio", "ratio"),
 }
-# 改口径前生成的命中（缓存、旧报告）证据里只有旧键：按旧键取值和阈值，保证两者同一口径
-LEGACY_PROBLEM_VALUES = {
-    "slow_reaction": ("ttd_ms", "ttd_ms", "ms"),  # 032 之前比较 TTD
-    "poor_crosshair_placement": ("crosshair_placement_deg", "crosshair_placement_deg", "deg"),  # 031 之前比较转角
-}
-
-
-def problem_values(problem: str | None, hit) -> tuple[str, str, str] | None:
-    """该问题用来填 value / threshold / gap 的证据键、阈值键和单位。"""
-    mapping = PROBLEM_VALUES.get(problem)
-    legacy = LEGACY_PROBLEM_VALUES.get(problem)
-    if mapping and legacy and hit is not None and mapping[0] not in hit.evidence and legacy[0] in hit.evidence:
-        return legacy
-    return mapping
-
-
 # 模型常写的同义字段（本地千问实测写过 location）
 FIELD_ALIASES = {"location": "place", "opponent_location": "opponent_place", "position": "place"}
 

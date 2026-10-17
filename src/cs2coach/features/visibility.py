@@ -210,9 +210,6 @@ class Sight:
             out.append(seen)
         return out
 
-    def any_enemy_seen(self, steamid: int, tick: int) -> bool:
-        return self.enemies_seen(steamid, [tick])[0]
-
 
 def blinded_at(match: MatchData, p: Any, steamid: int, tick: int) -> bool:
     """该 tick 是否仍被闪白；p 提供 rate、min_blind、blind_min_remaining，供交火和整场共用。"""
