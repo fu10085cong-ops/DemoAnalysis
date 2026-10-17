@@ -40,7 +40,7 @@ def summary_target_card(summary: PlayerSummary, target: str) -> list[str]:
         lines.extend([render_moment_card(moment, names).split("\n\n", 1)[1], ""])
     else:
         rows = [row for row in mm.missed_trades if local == f"R{row.round}"]
-        lines.extend(f"- {text}" for row in rows for text in missed_trade_facts(row, {}))
+        lines.extend(f"- {text}" for row in rows for text in missed_trade_facts(row, mm.player_names))
         lines.append("")
     return lines
 

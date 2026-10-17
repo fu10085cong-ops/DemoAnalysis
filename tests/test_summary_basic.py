@@ -63,6 +63,9 @@ def test_missed_trade_uses_record_facts_without_jump():
     report = render_summary_basic_report(summary, sections, None)
     assert "队友" in report and "阵亡时离你 100 单位" in report
     assert "| M1 · game1 | M1:R2 |" not in report
+    # 042：每场缓存里带了玩家名，多场汇总的漏补记录显示队友名
+    mm.player_names = {B: "bob"}
+    assert "队友 bob 阵亡时离你 100 单位" in render_summary_basic_report(summary, build_summary_l0(summary, cfg), None)
     assert "## 附录：每场概况" in report
     assert "## 附录：跳转命令" not in report
     assert "| 比赛 | 编号 | tick | 命令 |" not in report
