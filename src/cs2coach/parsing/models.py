@@ -45,7 +45,3 @@ class Round(BaseModel):
     def contains(self, tick: int) -> bool:
         return self.start_tick <= tick <= self.last_tick
 
-    def is_live(self, tick: int) -> bool:
-        """冻结期结束到胜负判定之间（不含回合结束后的自由时间）。"""
-        start = self.freeze_end_tick if self.freeze_end_tick is not None else self.start_tick
-        return start <= tick <= self.end_tick

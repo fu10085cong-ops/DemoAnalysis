@@ -17,7 +17,6 @@ import pandas as pd
 from cs2coach.parsing.models import Round, Team
 
 # rules 表需要的列（每个 tick 一行，按 tick 升序）
-RULES_COLUMNS = ["tick", "total_rounds_played", "is_freeze_period", "is_warmup_period", "win_status", "win_reason"]
 
 
 def segment_rounds(rules: pd.DataFrame, freeze_end_ticks: list[int]) -> list[Round]:

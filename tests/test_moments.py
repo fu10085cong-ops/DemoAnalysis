@@ -143,7 +143,7 @@ def test_shot_visibility_checks_engagement_opponent_not_any_enemy():
     # 90 tick 的子弹朝 C 飞，前一 tick A 看着 D，不能把 D 的可见性算给 C。
     match = scenario(extra_ticks={(A, 89): {"yaw": 90.0}})
     sight = Sight(match, CFG, checker=AlwaysVisible())
-    assert sight.any_enemy_seen(A, 89)
+    assert sight.enemies_seen(A, [89])[0]
     shot = moment(_find_moments(match, A, CFG, sight=sight), "R1-kill1").engagement.shots[0]
     assert shot.tick == 90 and shot.seen_opponent is False
 
