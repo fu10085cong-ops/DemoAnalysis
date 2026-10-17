@@ -214,7 +214,7 @@ def test_cli_writes_moments_and_facts_without_ai(tmp_path, monkeypatch):
     expected = folder / "facts.md"
     assert expected.read_text(encoding="utf-8") == render_facts_file(mm, NAMES)
     assert json.loads((folder / "moments.json").read_text(encoding="utf-8")) == json.loads(mm.model_dump_json())
-    assert {p.name for p in folder.iterdir()} == {"moments.json", "facts.md", "problems.md", "basic_report.md"}
+    assert {p.name for p in folder.iterdir()} == {"moments.json", "facts.md", "problems.md", "basic_report.md", "report_data.json"}
 
 
 @pytest.mark.parametrize("subject,field", [("你", "player_blind"), ("对手", "opponent_blind")])

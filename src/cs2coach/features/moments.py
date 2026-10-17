@@ -63,7 +63,7 @@ def find_moments(match: MatchData, steamid: int, cfg: dict[str, Any], sight: Sig
     moments.sort(key=lambda m: (m.tick, m.kind != "death"))
     _assign_ids(moments)
     player = match.players[int(steamid)]
-    return MatchMoments(
+    mm = MatchMoments(
         demo=match.demo_path.name, map_name=match.meta.map_name, tick_rate=match.meta.tick_rate,
         player=int(steamid), player_name=player.name, rounds=len(match.rounds),
         player_names={int(k): v.name.strip() for k, v in match.players.items() if int(k) > 0},
@@ -72,6 +72,10 @@ def find_moments(match: MatchData, steamid: int, cfg: dict[str, Any], sight: Sig
         visibility_data_version=p.sight.data_version, visibility_unavailable=p.sight.unavailable_reason,
         absent_rounds=list(player.absent_rounds),
     )
+    from cs2coach.features.highlights import find_highlights
+
+    mm.highlights = find_highlights(mm, match.rounds)
+    return mm
 
 
 class _Params:

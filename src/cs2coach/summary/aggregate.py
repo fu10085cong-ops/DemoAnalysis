@@ -127,6 +127,7 @@ def build_summary(steamid: int, refs: list[DemoRef], cfg: dict,
                   baseline: dict | None, use_cache: bool = True) -> PlayerSummary:
     """逐场解析与检测；失败的比赛记录原因，其余比赛继续。"""
     from cs2coach.features.moments import find_moments
+    from cs2coach.features.lobby import lobby_line
 
     games = []
     skipped = list(getattr(refs, "skipped", []))
@@ -142,6 +143,7 @@ def build_summary(steamid: int, refs: list[DemoRef], cfg: dict,
                 match = parse_match(demo, cfg)
                 player = match.require_player(steamid, cfg["parsing"]["min_target_coverage"])
                 mm = find_moments(match, player.steamid, cfg)
+                mm.lobby = [lobby_line(match, steamid, cfg, mm)]
                 return mm, detect_problems(mm, baseline, cfg), match_score(match, steamid)
 
             # 同一份 demo、配置和代码不变时直接读缓存（汇总 21 场从约 5 分钟降到十几秒）；

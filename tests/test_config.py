@@ -9,6 +9,17 @@ def test_default_config_loads():
     assert 0 < cfg["parsing"]["min_target_coverage"] <= 1
 
 
+@pytest.mark.parametrize("override", [
+    'max_examples = 0', 'strength_min_percentile = 101', 'problem_bad_ratio = 1',
+    'best_player_rule = "unknown"', 'axes = []',
+])
+def test_radar_invalid_config_is_rejected(tmp_path, override):
+    path = tmp_path / "radar.toml"
+    path.write_text("[radar]\n" + override + "\n", encoding="utf-8")
+    with pytest.raises(ConfigError, match="radar"):
+        load_config(path)
+
+
 def test_user_config_overrides_single_key(tmp_path):
     p = tmp_path / "my.toml"
     p.write_text("[parsing]\nmin_target_coverage = 0.5\n", encoding="utf-8")

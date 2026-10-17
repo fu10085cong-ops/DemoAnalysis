@@ -375,6 +375,42 @@ visibility_problems = ["slow_reaction", "poor_crosshair_placement", "peeked_into
 # 这些说明表示视野起点可能不完整；持续可见类说明不计入
 incomplete_visibility_notes = ["not_seen", "lost_sight", "first_hit_unseen", "smoke", "blind", "no_map_data"]
 
+[radar]
+default_tier = "amateur_tmp"
+strength_min_percentile = 65
+max_strengths = 3
+max_problems = 5
+max_examples = 5
+# 高光回合最多列几条：残局（对手越多越前）> 多杀（越多越前）> 首杀并赢下 > 闪光助攻，同类按比赛和 tick
+max_highlights = 6
+best_player_rule = "kills_minus_deaths"
+problem_bad_ratio = 1.5
+
+[[radar.axes]]
+id = "ttd"
+name = "出枪速度"
+metrics = ["time_to_damage_ms"]
+[[radar.axes]]
+id = "crosshair"
+name = "准星位置"
+metrics = ["crosshair_placement_deg"]
+[[radar.axes]]
+id = "strafe"
+name = "急停"
+metrics = ["counter_strafing_pct"]
+[[radar.axes]]
+id = "spray"
+name = "压枪"
+metrics = ["spray_accuracy_pct"]
+[[radar.axes]]
+id = "trade"
+name = "补枪配合"
+metrics = ["trade_kills_per_round", "traded_death_pct"]
+[[radar.axes]]
+id = "utility"
+name = "道具使用"
+metrics = ["utility_damage_per_round", "enemies_flashed_per_flash", "wasted_utility_avg"]
+
 [review]
 # CS2 的 game/csgo 目录；也可用 CS2COACH_CSGO_DIR 或 install --csgo 指定
 csgo_dir = ""

@@ -31,7 +31,7 @@ def _output_folder(root: Path, demo: Path, name: str, steamid: int) -> Path:
     return player_dir / demo.stem
 
 
-def _archive_reports(folder: Path, names: tuple[str, ...] = ("report.md", "submission.json")) -> None:
+def _archive_reports(folder: Path, names: tuple[str, ...] = ("report.md", "submission.json", "report_data.json")) -> None:
     """重跑前保存指定文件；同一分钟内重跑也不覆盖历史版本。"""
     for name in names:
         old = folder / name
@@ -58,6 +58,7 @@ def _build_parser() -> argparse.ArgumentParser:
     analyze.add_argument("--player", required=True, help="目标玩家 SteamID64")
     analyze.add_argument("--out", type=Path, default=Path("data/output"), help="输出目录")
     analyze.add_argument("--config", type=Path, default=None, help="阈值配置文件（TOML），只需写要覆盖的条目")
+    analyze.add_argument("--target", default=None, help="报告对比的目标分段 id")
     analyze.add_argument("--ai", action="store_true", help="调用 AI 生成中文复盘报告（模型在配置的 [ai] 段，需要对应的 API 凭据）")
     analyze.add_argument("--provider", choices=("deepseek", "mimo", "claude", "local"), help="覆盖配置中的 AI 模型服务")
     analyze.add_argument("--model", default=None, help="覆盖所选模型服务的模型名，例如 deepseek-v4-pro")
@@ -68,6 +69,7 @@ def _build_parser() -> argparse.ArgumentParser:
     summary.add_argument("--demos-dir", type=Path, default=Path("data/demos"), help="自动扫描的 demo 根目录")
     summary.add_argument("--out", type=Path, default=Path("data/output"), help="输出目录")
     summary.add_argument("--config", type=Path, default=None, help="阈值配置文件（TOML）")
+    summary.add_argument("--target", default=None, help="报告对比的目标分段 id")
     summary.add_argument("--ai", action="store_true", help="调用 AI 生成多场中文复盘报告")
     summary.add_argument("--provider", choices=("deepseek", "mimo", "claude", "local"), help="覆盖配置中的 AI 模型服务")
     summary.add_argument("--model", default=None, help="覆盖所选模型服务的模型名，例如 deepseek-v4-pro")
@@ -90,6 +92,18 @@ def _apply_ai_overrides(cfg: dict, args: argparse.Namespace) -> None:
         cfg["ai"]["provider"] = args.provider
     if args.model:
         cfg["ai"].setdefault(cfg["ai"]["provider"], {})["model"] = args.model
+
+
+def _page_tiers(cfg: dict, args: argparse.Namespace) -> dict:
+    from cs2coach.report.page_data import load_tiers
+
+    if args.target:
+        cfg["radar"]["default_tier"] = args.target
+    tiers = load_tiers(cfg)
+    if cfg["radar"]["default_tier"] not in tiers:
+        print(f"提示：目标分段 {cfg['radar']['default_tier']} 的基准尚未构建，本次报告不含分段对比。")
+        return {}
+    return tiers
 
 
 def _summary(args: argparse.Namespace) -> int:
@@ -128,7 +142,7 @@ def _summary(args: argparse.Namespace) -> int:
     result = build_summary(steamid, refs, cfg, baseline)
     folder = _output_folder(args.out, Path("汇总.dem"), result.primary_name, steamid)
     folder.mkdir(parents=True, exist_ok=True)
-    _archive_reports(folder, ("problems.md", "summary.json", "basic_report.md"))
+    _archive_reports(folder, ("problems.md", "summary.json", "basic_report.md", "report_data.json"))
     problems = folder / "problems.md"
     summary_file = folder / "summary.json"
     problems.write_text(render_summary_problems(result), encoding="utf-8")
@@ -136,6 +150,10 @@ def _summary(args: argparse.Namespace) -> int:
     basic = folder / "basic_report.md"
     basic.write_text(render_summary_basic_report(result, build_summary_l0(result, cfg), baseline), encoding="utf-8")
     print(f"已写入 {basic}")
+    from cs2coach.report.page_data import build_summary_page
+
+    page = build_summary_page(result, cfg, _page_tiers(cfg, args))
+    (folder / "report_data.json").write_text(page.model_dump_json(indent=2) + "\n", encoding="utf-8")
     print(f"汇总完成：{len(result.matches)} 场，在场 {result.rounds_played_total} 回合，"
           f"跳过 {len(result.skipped)} 场")
     if args.ai:
@@ -293,6 +311,10 @@ def _analyze(args: argparse.Namespace) -> int:
     basic.write_text(render_basic_report(moments, build_l0(moments, detected, frequencies, cfg, names), frequencies,
                                          match_score(match, player.steamid), baseline, cfg, detected), encoding="utf-8")
     print(f"已写入 {basic}")
+    from cs2coach.report.page_data import build_match_page
+
+    page = build_match_page(moments, detected, frequencies, cfg, _page_tiers(cfg, args))
+    (folder / "report_data.json").write_text(page.model_dump_json(indent=2) + "\n", encoding="utf-8")
     if not args.ai:
         print("加上 --ai 生成 AI 复盘报告")
         print(f"输出目录：{folder}")

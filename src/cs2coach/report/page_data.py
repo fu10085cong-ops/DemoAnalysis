@@ -1,0 +1,280 @@
+"""新版报告页的确定性数据；单场与多场复用同一套行和跳转模板。"""
+
+from __future__ import annotations
+
+import json
+from pathlib import Path
+from statistics import mean, median
+from typing import Literal
+
+from pydantic import BaseModel
+import pandas as pd
+
+from cs2coach.features.highlights import round_time
+from cs2coach.features.labels import weapon_label
+from cs2coach.features.models import MatchMoments, Moment
+from cs2coach.features.problems import ProblemReport
+from cs2coach.features.radar import RADAR_METRICS, axis_values, median_axes, percentile, player_metrics
+from cs2coach.report.basic import choose_problems, problem_texts
+from cs2coach.report.evidence import evidence_sentence
+from cs2coach.summary.aggregate import PlayerSummary
+from cs2coach.tools.slots import situation_text
+
+TIER_DIR = Path(__file__).resolve().parents[1] / "baselines/tiers"
+METRIC_TEXT = {
+    "time_to_damage_ms": ("出枪速度", "ms"),
+    "crosshair_placement_deg": ("准星位置", "°"),
+    "counter_strafing_pct": ("急停", "%"),
+    "spray_accuracy_pct": ("压枪命中率", "%"),
+    "trade_kills_per_round": ("补枪", "次/回合"),
+    "traded_death_pct": ("阵亡被补枪比例", "%"),
+    "utility_damage_per_round": ("道具伤害", "伤害/回合"),
+    "enemies_flashed_per_flash": ("每颗闪光致盲敌人数", "人/颗"),
+    "wasted_utility_avg": ("阵亡时未用道具价值", "$"),
+}
+PROBLEM_METRICS = {
+    "slow_reaction": "time_to_damage_ms", "poor_crosshair_placement": "crosshair_placement_deg",
+    "shot_while_moving": "counter_strafing_pct", "spray_while_moving": "counter_strafing_pct",
+    "spray_control": "spray_accuracy_pct", "missed_trade": "trade_kills_per_round",
+    "post_plant_utility_unused": "wasted_utility_avg", "dry_peek_with_utility": "wasted_utility_avg",
+}
+
+
+class Command(BaseModel):
+    playdemo: str
+    jump: str
+
+
+class Example(BaseModel):
+    match_label: str
+    round: int
+    time: str
+    situation: str
+    what: str
+    tick: int
+    command: Command
+
+
+class Row(BaseModel):
+    id: str
+    name: str
+    axis: str | None
+    you: float
+    target: float | None
+    unit: str
+    count: int
+    severity: Literal["bad", "warn", "ok"]
+    text: str
+    examples: list[Example]
+
+
+class Highlight(BaseModel):
+    kind: str
+    title: str
+    match_label: str
+    round: int
+    time: str
+    what: str
+    tick: int
+    command: Command
+
+
+class Comparison(BaseModel):
+    id: str
+    name: str
+    values: list[float | None]
+
+
+class TierView(BaseModel):
+    id: str
+    name: str
+    source: str
+    you: list[float | None]
+    comparisons: list[Comparison]
+    problem_targets: dict[str, float]
+
+
+class ReportPage(BaseModel):
+    kind: Literal["match", "summary"]
+    title: str
+    subtitle: str
+    verdict: str
+    axes: list[dict]
+    default_tier: str
+    problem_bad_ratio: float
+    tiers: list[TierView]
+    strengths: list[Row]
+    problems: list[Row]
+    highlights: list[Highlight]
+
+
+def load_tiers(cfg) -> dict[str, dict]:
+    """只加载已经构建的分段文件；缺省分段的可用性由 CLI 提示。"""
+    return {data["id"]: data for path in sorted(TIER_DIR.glob("*.json"))
+            for data in [json.loads(path.read_text(encoding="utf-8"))]}
+
+
+def commands(mm: MatchMoments, tick: int, cfg: dict) -> Command:
+    review = cfg["review"]
+    return Command(playdemo=review["playdemo_template"].format(
+        subdir=review["demo_subdir"], demo_stem=Path(mm.demo).stem),
+        jump=review["jump_template"].format(tick=tick))
+
+
+def _metrics(mm):
+    line = next((line for line in mm.lobby if line.steamid == mm.player), None)
+    return player_metrics(line) if line else dict.fromkeys(RADAR_METRICS)
+
+
+def _axis(metric, axes):
+    return next((a["id"] for a in axes if metric in a["metrics"]), None)
+
+
+def _example(mm, label, source, what, cfg) -> Example:
+    context = source.context if isinstance(source, Moment) else source
+    return Example(match_label=label, round=source.round,
+        time=round_time(context.round_time_s or 0), situation=situation_text(context.side,
+            context.alive_own, context.alive_enemy, context.bomb_planted, context.round_time_s) or "",
+        what=what, tick=source.jump_tick if isinstance(source, Moment) else source.tick,
+        command=commands(mm, source.jump_tick if isinstance(source, Moment) else source.tick, cfg))
+
+
+def _moment_what(mm, moment):
+    opponent = mm.player_names.get(moment.opponent, moment.opponent_name or "对手")
+    if moment.kind == "assist":
+        return f"闪光助攻击杀 {opponent}"
+    return f"用 {weapon_label(moment.weapon)} " + (
+        f"击杀 {opponent}" if moment.kind == "kill" else f"与 {opponent} 交火后阵亡")
+
+
+def _strength_moments(mm, metric, limit, cfg):
+    kills = [m for m in mm.moments if m.kind == "kill" and not
+             {"teamkill", "after_round_end", "victim_is_bot"}.intersection(m.tags)]
+    if metric in ("time_to_damage_ms", "crosshair_placement_deg"):
+        field = "time_to_damage_s" if metric == "time_to_damage_ms" else metric
+        valid = [m for m in kills if m.engagement and getattr(m.engagement, field) is not None]
+        return sorted(valid, key=lambda m: (getattr(m.engagement, field), m.tick))[:limit]
+    if metric == "counter_strafing_pct":
+        return [m for m in kills if m.engagement and m.engagement.first_shot_stopped is True]
+    if metric == "spray_accuracy_pct":
+        from cs2coach.features.aim_stats import _spray_shots
+
+        return [m for m in kills if m.engagement and m.engagement.shots and not _spray_shots(
+            pd.DataFrame([{"tick": s.tick, "weapon": s.weapon}
+                          for s in sorted(m.engagement.shots, key=lambda s: s.tick)]),
+            mm.tick_rate, cfg["aim_stats"]).empty]
+    if metric in ("trade_kills_per_round", "traded_death_pct"):
+        return [m for m in kills if "trade_kill" in m.tags]
+    return [m for m in mm.moments if m.kind == "assist" and "flash_assist" in m.tags]
+
+
+def _rows(games, frequency, cfg, tier):
+    radar = cfg["radar"]
+    axes, limit = radar["axes"], radar["max_examples"]
+    texts = problem_texts()
+    problems = []
+    for row in choose_problems(frequency, radar["max_problems"]):
+        target = tier.get("problem_rates", {}).get(row.problem, {}).get("per_10_rounds") if tier else None
+        severity = ("warn" if target is None else "bad" if row.per_10_rounds >= radar["problem_bad_ratio"] * target
+                    else "warn" if row.per_10_rounds > target else "ok")
+        examples = []
+        for mm, report, label in games:
+            moments = {m.id: m for m in mm.moments}
+            for hit in report.hits:
+                if hit.problem != row.problem:
+                    continue
+                if hit.target in moments:
+                    examples.append(_example(mm, label, moments[hit.target], evidence_sentence(hit), cfg))
+                elif hit.target.startswith("R") and hit.target[1:].isdigit():
+                    for trade in mm.missed_trades:
+                        if trade.round == int(hit.target[1:]):
+                            examples.append(_example(mm, label, trade, evidence_sentence(hit), cfg))
+        # 比赛沿用汇总顺序，单场内按 tick 排序；同一回合漏补只列一条。
+        examples.sort(key=lambda e: (next(i for i, g in enumerate(games) if g[2] == e.match_label), e.tick))
+        unique = {(e.match_label, e.round, e.tick): e for e in examples}
+        why = texts.get(row.problem, {}).get("why", "")
+        problems.append(Row(id=row.problem, name=row.label, axis=_axis(PROBLEM_METRICS.get(row.problem), axes),
+            you=row.per_10_rounds, target=target, unit="次/10回合", count=row.hits, severity=severity,
+            text=why.split("。", 1)[0] + ("。" if why else ""), examples=list(unique.values())[:limit]))
+    strengths = []
+    if tier:
+        samples = [_metrics(mm) for mm, _, _ in games]
+        metrics = {key: median(valid) if (valid := [s[key] for s in samples if s[key] is not None]) else None
+                   for key in RADAR_METRICS}
+        ranked = [(key, p) for key in RADAR_METRICS
+                  if (p := percentile(key, metrics[key], tier)) is not None and p >= radar["strength_min_percentile"]]
+        for key, p in sorted(ranked, key=lambda pair: -pair[1])[:radar["max_strengths"]]:
+            selected = [(mm, label, m) for mm, _, label in games for m in _strength_moments(mm, key, limit, cfg)]
+            count = len(selected)
+            if key in ("time_to_damage_ms", "crosshair_placement_deg"):
+                field = "time_to_damage_s" if key == "time_to_damage_ms" else key
+                selected.sort(key=lambda item: (getattr(item[2].engagement, field), item[2].tick))
+            selected = selected[:limit]
+            selected.sort(key=lambda item: (next(i for i, g in enumerate(games) if g[2] == item[1]), item[2].tick))
+            name, unit = METRIC_TEXT[key]
+            strengths.append(Row(id=key, name=name, axis=_axis(key, axes), you=metrics[key],
+                target=tier.get("metrics", {}).get(key, {}).get("median"), unit=unit, count=count,
+                severity="ok", text=f"{name}优于{tier['name']}样本中 {p:g}% 的人次。",
+                examples=[_example(mm, label, m, _moment_what(mm, m), cfg) for mm, label, m in selected]))
+    return strengths, problems
+
+
+def _build_page(kind, games, frequency, cfg, tiers, title, subtitle):
+    radar = cfg["radar"]
+    axes = radar["axes"]
+    views = []
+    for ident, tier in tiers.items():
+        values = [axis_values(_metrics(mm), tier, axes) for mm, _, _ in games]
+        comparisons = []
+        if kind == "match":
+            lobby = games[0][0].lobby
+            all_values = [axis_values(player_metrics(line), tier, axes) for line in lobby]
+            average = [mean(valid) if (valid := [v[i] for v in all_values if v[i] is not None]) else None
+                       for i in range(len(axes))]
+            comparisons.append(Comparison(id="match_avg", name="本场平均", values=average))
+            if lobby:
+                best = min(lobby, key=lambda line: (-(line.kills - line.deaths), -line.kills, line.steamid))
+                comparisons.append(Comparison(id="match_best", name=f"本场最佳（{best.name}，{best.kills}/{best.deaths}）",
+                    values=axis_values(player_metrics(best), tier, axes)))
+        comparisons.append(Comparison(id="tier_median", name="分段中位数", values=[50] * len(axes)))
+        views.append(TierView(id=ident, name=tier["name"], source=tier["source"],
+            you=median_axes(values, len(axes)), comparisons=comparisons,
+            problem_targets={pid: rate["per_10_rounds"] for pid, rate in tier.get("problem_rates", {}).items()}))
+    tier = tiers.get(radar["default_tier"])
+    strengths, problems = _rows(games, frequency, cfg, tier)
+    bad = next((row for row in problems if row.severity == "bad"), None)
+    if bad:
+        verdict = f"最该练的是{bad.name}：每 10 回合 {bad.you:g} 次，{tier['name']}是 {bad.target:g} 次。"
+    elif tier:
+        view = next(view for view in views if view.id == radar["default_tier"])
+        valid = [(axis["name"], value) for axis, value in zip(axes, view.you) if value is not None]
+        period = "这场" if kind == "match" else "这段时间"
+        # 没有严重问题时也点出最弱的维度，避免雷达上明显的短板在结论里被说成"没有落后"
+        best, worst = max(valid, key=lambda pair: pair[1]) if valid else None, min(valid, key=lambda pair: pair[1]) if valid else None
+        verdict = ("当前指标样本不足，暂无法判断最强的方向。" if not valid else
+                   f"{period}没有明显落后于{tier['name']}的问题，最强的是{best[0]}。" if len(valid) < 2 else
+                   f"{period}没有明显落后于{tier['name']}的问题，最强的是{best[0]}，最弱的是{worst[0]}。")
+    else:
+        verdict = "目标分段基准尚未构建，暂无法给出分段对比结论。"
+    order = {"clutch": 0, "multikill": 1, "opening_win": 2, "flash_assist": 3}
+    ranked = sorted((((order.get(h.kind, 9), -h.size, index, h.tick), mm, label, h)
+                     for index, (mm, _, label) in enumerate(games) for h in mm.highlights), key=lambda item: item[0])
+    highlights = [Highlight(**h.model_dump(exclude={"size"}), match_label=label, command=commands(mm, h.tick, cfg))
+                  for _, mm, label, h in ranked[:radar["max_highlights"]]]
+    return ReportPage(kind=kind, title=title, subtitle=subtitle, verdict=verdict,
+        axes=[{"id": a["id"], "name": a["name"]} for a in axes], default_tier=radar["default_tier"],
+        problem_bad_ratio=radar["problem_bad_ratio"], tiers=views,
+        strengths=strengths, problems=problems, highlights=highlights)
+
+
+def build_match_page(mm: MatchMoments, report: ProblemReport, frequency, cfg, tiers: dict[str, dict]) -> ReportPage:
+    return _build_page("match", [(mm, report, "本场")], frequency, cfg, tiers,
+                       f"{mm.player_name} · {mm.map_name}", f"本场 · 在场 {mm.rounds_played} 回合")
+
+
+def build_summary_page(summary: PlayerSummary, cfg, tiers: dict[str, dict]) -> ReportPage:
+    games = [(*summary.detail(match.number), f"{match.map_name.removeprefix('de_').title()} {match.number}")
+             for match in summary.matches]
+    return _build_page("summary", games, summary.frequency, cfg, tiers,
+                       f"{summary.primary_name} · 多场汇总",
+                       f"{len(summary.matches)} 场 · 在场 {summary.rounds_played_total} 回合")

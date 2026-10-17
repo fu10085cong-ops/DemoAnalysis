@@ -262,10 +262,23 @@ class LobbyLine(BaseModel):
     trade_kills: int
     flash_assists: int
     utility_damage: int
+    rounds_played: int = 0
     traded_deaths: int = 0
     wasted_utility_avg: float | None = None
     enemies_flashed_per_flash: float | None = None
     teammates_flashed_per_flash: float | None = None
+
+
+class Highlight(BaseModel):
+    """特征层高光；报告层再附上比赛标签和加载命令。"""
+
+    round: int
+    kind: str
+    title: str
+    time: str
+    what: str
+    tick: int
+    size: int = 0  # 残局为对手人数，多杀为击杀数；报告层按它排序
 
 
 class MatchMoments(BaseModel):
@@ -281,6 +294,7 @@ class MatchMoments(BaseModel):
     excluded: list[Excluded]  # 不参与分析的记录（接管 bot、冻结期自杀等）及原因
     aim_stats: AimStats | None = None
     lobby: list[LobbyLine] = []
+    highlights: list[Highlight] = []
     # 本场所有玩家的名字（steamid → 名字，已去掉首尾空格）；多场汇总只缓存 MatchMoments，靠它显示队友名（042）
     player_names: dict[int, str] = {}
     # 视野计算用的 awpy-data 版本；为 None 时视野相关指标全部为空，原因见 visibility_unavailable

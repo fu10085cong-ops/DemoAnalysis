@@ -27,7 +27,34 @@ def load_config(path: Path | None = None) -> dict[str, Any]:
     _validate_review(cfg["review"])
     _validate_problems(cfg["problems"])
     _validate_economy(cfg["economy"])
+    _validate_radar(cfg["radar"])
     return cfg
+
+
+def _validate_radar(cfg: dict[str, Any]) -> None:
+    from cs2coach.features.radar import RADAR_METRICS
+
+    if not isinstance(cfg["default_tier"], str) or not cfg["default_tier"]:
+        raise ConfigError("配置项 radar.default_tier 应为非空字符串")
+    if cfg["best_player_rule"] != "kills_minus_deaths":
+        raise ConfigError("配置项 radar.best_player_rule 仅支持 kills_minus_deaths")
+    for key in ("max_strengths", "max_problems", "max_examples", "max_highlights"):
+        if type(cfg[key]) is not int or cfg[key] < 1:
+            raise ConfigError(f"配置项 radar.{key} 应为正整数")
+    for key in ("strength_min_percentile", "problem_bad_ratio"):
+        if type(cfg[key]) not in (int, float) or not math.isfinite(cfg[key]):
+            raise ConfigError(f"配置项 radar.{key} 应为有限数")
+    if not 0 <= cfg["strength_min_percentile"] <= 100 or cfg["problem_bad_ratio"] <= 1:
+        raise ConfigError("radar 百分位应在 [0, 100] 内，问题倍率应大于 1")
+    axes = cfg["axes"]
+    if (not isinstance(axes, list) or len(axes) != 6 or any(
+            not isinstance(axis, dict) or set(axis) != {"id", "name", "metrics"}
+            or any(not isinstance(axis[key], str) or not axis[key] for key in ("id", "name"))
+            or not isinstance(axis["metrics"], list) or not axis["metrics"]
+            or any(not isinstance(metric, str) or metric not in RADAR_METRICS for metric in axis["metrics"])
+            or len(set(axis["metrics"])) != len(axis["metrics"]) for axis in axes)
+            or len({axis["id"] for axis in axes}) != len(axes)):
+        raise ConfigError("配置项 radar.axes 应为六个编号唯一且指标有效的维度")
 
 
 def _validate_review(cfg: dict[str, Any]) -> None:
