@@ -131,7 +131,8 @@ def test_apply_keeps_original_line_endings(tmp_path: Path) -> None:
     """判定文件在 Mac 与 Windows 间共享：写回时不能把整份文件的换行符改掉。"""
     audit, rows = _fixture(tmp_path)
     path = audit / "labels.toml"
-    crlf = path.read_bytes().replace(b"\n", b"\r\n")
+    # 先统一成 LF 再转 CRLF：Windows 上 write_text 写出的已经是 CRLF，直接替换会变成 \r\r\n
+    crlf = path.read_bytes().replace(b"\r\n", b"\n").replace(b"\n", b"\r\n")
     path.write_bytes(crlf)
     keys = tmp_path / "keys.txt"
     keys.write_text(rows[0]["hit_key"] + "\n", encoding="utf-8")
