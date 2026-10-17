@@ -13,7 +13,6 @@ from cs2coach.report.evidence import evidence_sentence
 from cs2coach.summary.aggregate import PlayerSummary
 from cs2coach.summary.render import summary_frequency_table, summary_match_table
 from cs2coach.tools.digest import METRIC_LABELS, TypedNumbers
-from cs2coach.tools.drills import drill_guidance
 
 
 def _numeric_leaves(value) -> list[float]:
@@ -136,7 +135,6 @@ def build_summary_digest(summary: PlayerSummary, baseline: dict | None, cfg: dic
                      representative_hits(summary, pid, limit))
     from cs2coach.tools.slots import slot_guidance
     lines.extend(["", slot_guidance(summary=summary)])
-    lines.extend(drill_guidance(cfg))
     return "\n".join(lines) + "\n"
 
 

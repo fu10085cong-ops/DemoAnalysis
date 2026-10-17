@@ -4,12 +4,12 @@ from __future__ import annotations
 
 import json
 import re
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from typing import Any, Literal
 
 from pydantic import BaseModel
 
-from cs2coach.ai.prompts import SYSTEM_PROMPT, USER_INSTRUCTION
+from cs2coach.ai.prompts import USER_INSTRUCTION, system_prompt
 from cs2coach.ai.providers import ChatProvider, ToolResult, Usage, make_provider
 from cs2coach.features.models import MatchMoments
 from cs2coach.features.problems import FrequencyRow, ProblemReport, detect_problems, problem_frequency
@@ -52,6 +52,7 @@ class Diagnosis:
     usage: Usage = field(default_factory=Usage)
     repairs: int = 0
     prompt_tokens_history: list[int] = field(default_factory=list)
+    usage_turns: list[Usage] = field(default_factory=list)
     rendered_submission: dict[str, Any] = field(default_factory=dict)
 
 
@@ -205,6 +206,7 @@ class LoopResult:
     repairs: int
     model: str
     prompt_tokens_history: list[int]
+    usage_turns: list[Usage]
 
 
 def run_diagnosis_loop(provider: ChatProvider, cfg: dict, system_prompt: str, digest: str,
@@ -224,6 +226,7 @@ def run_diagnosis_loop(provider: ChatProvider, cfg: dict, system_prompt: str, di
                 "violations_history": [[v.model_dump() for v in group] for group in state.get("history", [])],
                 "raw_calls": state.get("raw_calls", []),
                 "prompt_tokens_history": state.get("prompt_tokens_history", []),
+                "usage_turns": [asdict(u) for u in state.get("usage_turns", [])],
             }
         raise
 
@@ -236,6 +239,7 @@ def _run_loop(provider, cfg, system_prompt, digest, instruction, tools, submissi
     raw_calls: list[dict[str, Any]] = []
     repairs = 0
     prompt_tokens_history: list[int] = []
+    usage_turns: list[Usage] = []
     query_count = 0
     query_limit = ac.get(provider.name, {}).get("max_tool_calls")
     queries_exhausted = False
@@ -243,15 +247,17 @@ def _run_loop(provider, cfg, system_prompt, digest, instruction, tools, submissi
     model = provider.model
     latest: ReportSubmission | None = None
     latest_violations: list[Violation] = []
-    state.update(history=history, raw_calls=raw_calls, prompt_tokens_history=prompt_tokens_history)
+    state.update(history=history, raw_calls=raw_calls, prompt_tokens_history=prompt_tokens_history,
+                 usage_turns=usage_turns)
 
     def finish(submission, dropped=None):
         return LoopResult(submission, dropped or [], history, raw_calls, calls, usage, repairs,
-                          model, prompt_tokens_history)
+                          model, prompt_tokens_history, usage_turns)
 
     for _ in range(int(ac["max_turns"])):
         turn = provider.send()
         usage.add(turn.usage)
+        usage_turns.append(Usage(**asdict(turn.usage)))
         prompt_tokens_history.append(turn.usage.input_tokens)
         model = turn.model or model
         if turn.stop == "refusal":
@@ -362,7 +368,7 @@ def diagnose(match: MatchData, mm: MatchMoments, cfg: dict[str, Any], baseline: 
     deaths = sum(m.kind == "death" for m in mm.moments)
     fallback = ("本场比分 {match.score}，击杀 {count.kills} 次、死亡 {count.deaths} 次"
                 "（AI 总览未通过检查，已替换）。")
-    result = run_diagnosis_loop(provider, cfg, SYSTEM_PROMPT, digest, USER_INSTRUCTION,
+    result = run_diagnosis_loop(provider, cfg, system_prompt(cfg), digest, USER_INSTRUCTION,
         TOOLS, submission_tool,
         lambda candidate: check_submission(candidate, mm, problems, digest, cfg, whole_numbers,
                                            score, frequency, baseline),
@@ -371,7 +377,7 @@ def diagnose(match: MatchData, mm: MatchMoments, cfg: dict[str, Any], baseline: 
         digest=digest, provider=provider.name, model=result.model, score=score, usage=result.usage,
         tool_calls=result.tool_calls, raw_calls=result.raw_calls, repairs=result.repairs,
         violations_history=result.violations_history, dropped=result.dropped,
-        prompt_tokens_history=result.prompt_tokens_history)
+        prompt_tokens_history=result.prompt_tokens_history, usage_turns=result.usage_turns)
     from cs2coach.report.render import render_diagnosis
     d.report = render_diagnosis(d, mm, {sid: p.name for sid, p in match.players.items()}, cfg, baseline)
     return d

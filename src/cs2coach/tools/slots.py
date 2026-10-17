@@ -492,10 +492,17 @@ MOMENT_GUIDE = [
 
 
 def slot_guidance(mm: MatchMoments | None = None, summary=None) -> str:
-    """在摘要里公布完整字段表、显示样式与计数口径。"""
+    """在摘要里公布本场或本批的计数值。"""
     values = ({k: sum(count_values(summary.detail(m.number)[0])[k] for m in summary.matches)
                for k in COUNT_LABELS} if summary is not None else count_values(mm))
-    prefix = "M1:R5-kill2" if summary is not None else "R5-kill2"
+    lines = ["## 占位符", "### 计数：{count.名称}（程序统计，纯数字）"]
+    lines += [f"- {key}：{COUNT_LABELS[key]}，本{'批' if summary is not None else '场'} {value}" for key, value in values.items()]
+    return "\n".join(lines)
+
+
+def slot_guidance_fixed(summary: bool = False) -> str:
+    """每份报告相同的字段表、显示样式与写法规则，放在系统提示词中。"""
+    prefix = "M1:R5-kill2" if summary else "R5-kill2"
     lines = ["## 占位符",
         "总览、analysis 里不写任何数字（包括“两次”“三发”这类中文数字），需要数字时写 {对象.字段}，程序会换成带单位的数值。",
         "**占位符已经带单位，后面不要再写单位**：写“用了{" + prefix + ".ttd}”，不要写“{" + prefix + ".ttd}ms”。"
@@ -522,12 +529,11 @@ def slot_guidance(mm: MatchMoments | None = None, summary=None) -> str:
         "### 频率：{freq.问题编号.字段}",
         "hits（本场次数）、expected（按职业频率预期次数）、excess（多出的次数，纯数字，不是百分比）、"
         "chance（偶然概率，显示如 0.1%）、ratio（倍数，显示如 2.93 倍）"
-        + ("；多场另有 matches_with_hits（出现场数）、matches_above_pro（高于职业的场数）。" if summary is not None else "。"),
+        + ("；多场另有 matches_with_hits（出现场数）、matches_above_pro（高于职业的场数）。" if summary else "。"),
         "### 计数：{count.名称}（程序统计，纯数字）"]
-    lines += [f"- {key}：{COUNT_LABELS[key]}，本{'批' if summary is not None else '场'} {value}" for key, value in values.items()]
-    if summary is not None:
+    if summary:
         lines += ["### 场次：{M3.字段}", "score、kills、deaths、rounds_played。"]
-    lines += ["", "总览只能用 match、pro、freq、count" + ("、M 场次" if summary is not None else "") + " 这几类。"
+    lines += ["", "总览只能用 match、pro、freq、count" + ("、M 场次" if summary else "") + " 这几类。"
               "涉及谁先开枪、谁先看见、谁在架点，优先用 shot_order、seen_order、contact 完整句，避免方向写反。"]
     return "\n".join(lines)
 

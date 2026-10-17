@@ -104,10 +104,14 @@ class OpenAICompatProvider:
                                     f"（num_ctx {self.num_ctx} 减输出上限 {self.params['max_tokens']}）；"
                                     "请改用更大上下文模型。")
         self.prompt_tokens_history.append(prompt_tokens)
+        prompt_details = getattr(u, "prompt_tokens_details", None)
+        completion_details = getattr(u, "completion_tokens_details", None)
         usage = Usage(
             input_tokens=prompt_tokens,
             output_tokens=getattr(u, "completion_tokens", 0) or 0,
-            cache_read_tokens=getattr(u, "prompt_cache_hit_tokens", 0) or 0,
+            cache_read_tokens=(getattr(u, "prompt_cache_hit_tokens", 0) or
+                               getattr(prompt_details, "cached_tokens", 0) or 0),
+            reasoning_tokens=getattr(completion_details, "reasoning_tokens", 0) or 0,
         )
         model = getattr(resp, "model", None) or self.model
         choice = resp.choices[0]

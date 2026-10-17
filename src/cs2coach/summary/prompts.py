@@ -20,3 +20,11 @@ SUMMARY_PROMPT = (SYSTEM_PROMPT
 """)
 
 SUMMARY_INSTRUCTION = USER_INSTRUCTION
+
+
+def summary_prompt(cfg: dict) -> str:
+    """多场报告共用固定说明，与摘要中的本批数据分开。"""
+    from cs2coach.tools.drills import drill_guidance
+    from cs2coach.tools.slots import slot_guidance_fixed
+
+    return SUMMARY_PROMPT + "\n\n" + slot_guidance_fixed(summary=True) + "\n" + "\n".join(drill_guidance(cfg))

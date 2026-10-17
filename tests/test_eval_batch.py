@@ -73,6 +73,8 @@ def test_batch_continues_after_failure_and_summarises(tmp_path):
     ok, bad = rows
     assert ok["status"] == "成功" and ok["model"] == "local / m" and ok["rounds"] == "2→0"
     assert ok["codes"] == "raw_number 1、unknown_slot 1" and (ok["removed"], ok["replaced"]) == (0, 1)
+    assert ok["cache_rate"] == "40.0%" and ok["reasoning_rate"] == "0.0%"
+    assert "缓存命中率" in eb.render_summary(rows, "测试", "现在")
     assert ok["tool_calls"] == 3 and ok["tokens"] == "100（40）/ 20" and ok["seconds"] == 2.5
     assert ok["report"].endswith("report.md")
     assert bad["status"].startswith("失败：删除违规结论后没有任何 finding") and bad["rounds"] == "1→1→1"

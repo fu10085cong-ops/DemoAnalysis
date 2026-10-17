@@ -70,3 +70,11 @@ SYSTEM_PROMPT = """你是一名 CS2 教练，为普通玩家复盘一场比赛�
 }"""
 
 USER_INSTRUCTION = "请先读数据并选取重点，必要时查询细节，最后调用 submit_report 提交完整结构化结论。"
+
+
+def system_prompt(cfg: dict) -> str:
+    """固定于同一配置的系统提示词，供不同比赛复用缓存。"""
+    from cs2coach.tools.drills import drill_guidance
+    from cs2coach.tools.slots import slot_guidance_fixed
+
+    return SYSTEM_PROMPT + "\n\n" + slot_guidance_fixed() + "\n" + "\n".join(drill_guidance(cfg))

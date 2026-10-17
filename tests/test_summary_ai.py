@@ -96,6 +96,21 @@ def test_digest_sections_representatives_and_pro_notice():
     assert "本人就在职业样本中" not in build_summary_digest(summary, {}, cfg)
 
 
+def test_summary_system_prompt_is_fixed_between_batches():
+    summary, baseline, cfg = sample()
+    other, _, _ = sample()
+    other.names = ["另一位玩家"]
+    for match in other.matches:
+        match.map_name = "de_other"
+    first = FakeProvider([submission()])
+    second = FakeProvider([submission()])
+    diagnose_summary(summary, cfg, baseline, first)
+    diagnose_summary(other, cfg, baseline, second)
+    assert first.system == second.system
+    assert "## 占位符" in first.system and "## 训练练习图白名单" in first.system
+    assert "## 训练练习图白名单" not in first.user_texts[0]
+
+
 def test_representatives_sort_within_match_by_deviation():
     summary, _, _ = sample()
     mm, report = summary.detail("M1")

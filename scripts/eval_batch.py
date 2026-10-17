@@ -121,6 +121,11 @@ def case_row(case: dict[str, Any], folder: Path, exit_code: int | None, seconds:
         "tool_calls": run.get("tool_calls", "-"),
         "tokens": (f"{run['input_tokens']}（{run['cache_read_tokens']}）/ {run['output_tokens']}"
                    if "input_tokens" in run else "-"),  # 失败的审计只有模型名，没有用量
+        "turns": run.get("turns", len((audit or {}).get("usage_turns", [])) or "-"),
+        "cache_rate": (f"{run['cache_read_tokens'] / run['input_tokens']:.1%}"
+                       if run.get("input_tokens", 0) else "-"),
+        "reasoning_rate": (f"{run.get('reasoning_tokens', 0) / run['output_tokens']:.1%}"
+                           if run.get("output_tokens", 0) else "-"),
         "seconds": round(seconds, 1),
         "report": _short(report) if report and not failed else (_short(audit_path) if audit_path else "-"),
     }
@@ -169,7 +174,9 @@ def select_cases(cases: list[dict[str, Any]], only: str | None) -> list[dict[str
 
 COLUMNS = [("name", "case"), ("kind", "类型"), ("status", "结果"), ("model", "模型"), ("rounds", "各轮违规数"),
            ("codes", "违规代码分布"), ("removed", "删除"), ("replaced", "替换"), ("tool_calls", "工具调用"),
-           ("tokens", "输入（缓存）/ 输出 token"), ("seconds", "耗时（秒）"), ("report", "报告"),
+           ("tokens", "输入（缓存）/ 输出 token"), ("turns", "请求轮数"),
+           ("cache_rate", "缓存命中率"), ("reasoning_rate", "思考/输出"),
+           ("seconds", "耗时（秒）"), ("report", "报告"),
            ("manual", "人工核对：错误数")]
 
 
