@@ -83,8 +83,8 @@ def evidence_sentence(hit: ProblemHit) -> str:
         since = f"下包后 {_number(e['seconds_since_plant'])} 秒阵亡，" if e.get("seconds_since_plant") is not None else ""
         return f"T 方已下包，{since}死亡时还携带：{_grenades(e.get('unused_grenades'))}。"
     if pid == "died_while_reloading":
-        return (f"阵亡时正在换弹，换弹前弹匣还有 {_number(e.get('ammo_before_reload'))} 发，"
-                f"开始换弹 {_number(e.get('reload_started_s'))} 秒后阵亡。")
+        return (f"阵亡时正在换弹，换弹前弹匣还有 {_number(e.get('ammo_before_reload'))} / "
+                f"{_number(e.get('magazine_size'))} 发，开始换弹 {_number(e.get('reload_started_s'))} 秒后阵亡。")
     if pid == "weapon_not_ready":
         return "有阵亡时武器还不能开枪的检测标签。"
     if pid == "awp_unscoped_shot":

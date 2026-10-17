@@ -57,8 +57,10 @@ CASES = [
     ("died_without_seeing", dict(tags=["died_without_seeing"], engagement={"opponent_off_screen": True}),
      dict(tags=["died_without_seeing"], engagement={"opponent_off_screen": False})),
     ("turned_into_flash", dict(engagement={"player_blind": blind()}), dict(engagement={"player_blind": blind("teammate")})),
-    ("died_while_reloading", dict(death={"reloading_at_death": True, "ammo_before_reload": 1, "reload_started_s": 0.25}),
-     dict(death={"reloading_at_death": True, "ammo_before_reload": 0, "reload_started_s": 0.25})),
+    ("died_while_reloading", dict(death={"reloading_at_death": True, "ammo_before_reload": 9,
+                                         "reload_started_s": 0.5, "magazine_size": 30}),
+     dict(death={"reloading_at_death": True, "ammo_before_reload": 8,
+                 "reload_started_s": 0.5, "magazine_size": 30})),
     ("post_plant_utility_unused", dict(context={"bomb_planted": True, "seconds_since_plant": 10.0}, death={"unused_grenades": ["molotov"]}),
      dict(context={"bomb_planted": True, "side": "CT"}, death={"unused_grenades": ["molotov"]})),
     ("weapon_not_ready", dict(tags=["weapon_not_ready"]), dict(tags=[])),
@@ -95,12 +97,12 @@ def test_died_while_reloading_missing_utility_and_evidence(cfg, baseline):
     from cs2coach.report.evidence import evidence_sentence
 
     cfg["problems"]["disabled"] = []
-    death = {"reloading_at_death": True, "ammo_before_reload": 12, "reload_started_s": 0.25}
+    death = {"reloading_at_death": True, "ammo_before_reload": 12, "reload_started_s": 0.5, "magazine_size": 30}
     report = detect_problems(make_mm([make_moment(death=death)]), baseline, cfg)
     hit = next(h for h in report.hits if h.problem == "died_while_reloading")
     assert hit.evidence["ammo_before_reload"] == 12
-    assert hit.thresholds == {"min_ammo_left": 1, "source": "config"}
-    assert "12 发" in evidence_sentence(hit) and "0.25 秒" in evidence_sentence(hit)
+    assert hit.thresholds == {"min_ammo_left": 1, "min_ammo_fraction": 0.30, "min_seconds": 0.3, "source": "config"}
+    assert "12 / 30 发" in evidence_sentence(hit) and "0.5 秒" in evidence_sentence(hit)
 
     missing = detect_problems(make_mm([make_moment(death=death | {"ammo_before_reload": None})]), baseline, cfg)
     assert missing.skipped["died_while_reloading"] == 1
