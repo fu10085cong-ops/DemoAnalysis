@@ -213,7 +213,7 @@ def main(argv: list[str] | None = None, runner: Callable[[list[str]], int] | Non
     ensure_utf8_stdio()
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--set", type=Path, default=DEFAULT_SET, help="评测清单（TOML）")
-    ap.add_argument("--provider", choices=("deepseek", "claude", "local"), default=None)
+    ap.add_argument("--provider", choices=("deepseek", "mimo", "claude", "local"), default=None)
     ap.add_argument("--model", default=None)
     ap.add_argument("--label", default="eval", help="这次评测的简短说明，用在输出目录名里")
     ap.add_argument("--out", type=Path, default=OUTPUT_ROOT, help="评测输出根目录")

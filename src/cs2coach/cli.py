@@ -58,7 +58,7 @@ def _build_parser() -> argparse.ArgumentParser:
     analyze.add_argument("--out", type=Path, default=Path("data/output"), help="输出目录")
     analyze.add_argument("--config", type=Path, default=None, help="阈值配置文件（TOML），只需写要覆盖的条目")
     analyze.add_argument("--ai", action="store_true", help="调用 AI 生成中文复盘报告（模型在配置的 [ai] 段，需要对应的 API 凭据）")
-    analyze.add_argument("--provider", choices=("deepseek", "claude", "local"), help="覆盖配置中的 AI 模型服务")
+    analyze.add_argument("--provider", choices=("deepseek", "mimo", "claude", "local"), help="覆盖配置中的 AI 模型服务")
     analyze.add_argument("--model", default=None, help="覆盖所选模型服务的模型名，例如 deepseek-v4-pro")
     summary = sub.add_parser("summary", help="汇总同一玩家的多场 demo（程序部分）")
     summary.add_argument("demo", nargs="*", type=Path, help="指定 demo；省略时递归扫描 --demos-dir")
@@ -68,7 +68,7 @@ def _build_parser() -> argparse.ArgumentParser:
     summary.add_argument("--out", type=Path, default=Path("data/output"), help="输出目录")
     summary.add_argument("--config", type=Path, default=None, help="阈值配置文件（TOML）")
     summary.add_argument("--ai", action="store_true", help="调用 AI 生成多场中文复盘报告")
-    summary.add_argument("--provider", choices=("deepseek", "claude", "local"), help="覆盖配置中的 AI 模型服务")
+    summary.add_argument("--provider", choices=("deepseek", "mimo", "claude", "local"), help="覆盖配置中的 AI 模型服务")
     summary.add_argument("--model", default=None, help="覆盖所选模型服务的模型名，例如 deepseek-v4-pro")
     return parser
 
