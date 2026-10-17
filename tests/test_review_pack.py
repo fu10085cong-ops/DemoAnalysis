@@ -144,3 +144,26 @@ def test_apply_keeps_original_line_endings(tmp_path: Path) -> None:
     assert b"\n" not in updated.replace(b"\r\n", b"")  # 没有混入单独的 LF
     other = f'[labels."{rows[2]["hit_key"]}"]'.encode()
     assert crlf.split(other)[1] == updated.split(other)[1]
+
+
+def test_checklist_names_opponent_and_load_alias(tmp_path: Path) -> None:
+    """产品负责人 2026-10-17 实测：清单要写明对手是谁，并能用短命令加载 demo；共享目录里的文件一律 LF。"""
+    audit, rows = _fixture(tmp_path)
+    rows[0]["fact_card"] = ("### 〔R1-death〕死亡（CT，第 109 秒，4v3，已下包）\n\n"
+                            "- 你在 BombsiteB，对手 某对手 在 BombsiteB，距离 8 米。\n"
+                            "- 你手持 M4A1-S，对手手持 AK-47；本回合装备价值 5700 对 4800。\n"
+                            "- 交火前血量：你 75，对手 21。\n- 对手用 AK-47（爆头）击杀了你。")
+    rows[1]["fact_card"] = ("### 〔R2〕漏补枪\n\n- 第 20 秒，T 方，下包前，队友阵亡后 4v4。\n"
+                            "- 队友 甲 被对手 乙 击杀，阵亡时离你 335 单位，你在补枪时间窗口内没有击杀击杀他的对手。")
+    (audit / "hits.jsonl").write_text("".join(json.dumps(r, ensure_ascii=False) + "\n" for r in rows), encoding="utf-8")
+    review_pack.main(["build", "--audit", "example", "--pick", "ingame", "--name", "scene"], tmp_path)
+    output = tmp_path / "data/review/scene"
+    md = (output / "checklist.md").read_text(encoding="utf-8")
+    assert "时间与局面：死亡（CT，第 109 秒，4v3，已下包）" in md
+    assert "对手 某对手 在 BombsiteB，距离 8 米" in md and "对手用 AK-47（爆头）击杀了你" in md
+    assert "被对手 乙 击杀" in md and "交火前血量" not in md
+    cfg = (output / "cs2coach_review.cfg").read_text(encoding="utf-8")
+    assert 'alias p1 "playdemo ' in cfg and 'alias r1 "demo_gototick 100' in cfg
+    assert "加载：`p1`" in md
+    for name in ("checklist.md", "review.toml", "cs2coach_review.cfg"):
+        assert b"\r\n" not in (output / name).read_bytes()

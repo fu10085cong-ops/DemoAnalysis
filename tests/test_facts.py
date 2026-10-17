@@ -182,7 +182,7 @@ def test_missed_trade_card_and_complete_file():
     mt = mm.missed_trades[0]
     assert missed_trade_facts(mt, NAMES) == [
         "第 2 秒，T 方，下包前，队友阵亡后 1v1。",
-        "队友 bob 阵亡时离你 4 单位，你在补枪时间窗口内没有击杀击杀他的对手。"]
+        "队友 bob 被对手 dave 击杀，阵亡时离你 4 单位，你在补枪时间窗口内没有击杀击杀他的对手。"]
     mt.killer_traded_by_other = True
     assert missed_trade_facts(mt, {}) == [
         "第 2 秒，T 方，下包前，队友阵亡后 1v1。",

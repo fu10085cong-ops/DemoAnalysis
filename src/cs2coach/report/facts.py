@@ -242,10 +242,13 @@ def render_moment_card(m: Moment, names: Mapping[int, str]) -> str:
 def missed_trade_facts(mt: MissedTrade, names: Mapping[int, str]) -> list[str]:
     """漏补只描述窗口内的击杀结果，不评价距离或机会。"""
     who = _named("队友", mt.teammate, names)
+    killer = names.get(mt.killer)
+    # 写明击杀者，游戏内复盘时才知道要找谁（产品负责人 2026-10-17 反馈）
+    by = f"被对手 {killer} 击杀，" if killer else ""
     other = "；对手随后被其他队友击杀" if mt.killer_traded_by_other else ""
     context = missed_trade_context(mt.model_dump())
     return ([context] if context else []) + [
-        f"{who} 阵亡时离你 {mt.distance:.0f} 单位，你在补枪时间窗口内没有击杀击杀他的对手{other}。"]
+        f"{who} {by}阵亡时离你 {mt.distance:.0f} 单位，你在补枪时间窗口内没有击杀击杀他的对手{other}。"]
 
 
 def render_facts_file(mm: MatchMoments, names: Mapping[int, str]) -> str:
