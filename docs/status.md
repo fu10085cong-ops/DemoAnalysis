@@ -128,6 +128,18 @@
 3. **Windows**：产品负责人以管理员身份打开命令提示符，在项目目录下对三个目录分别执行 `mklink /D data\audit \\<Mac 地址>\cs2coach-shared\audit`；如果原目录已存在，先改名备份。
 4. 两边各运行一次 `audit_report.py`，结果相同就说明共享成功。
 
+**实际设置（2026-10-17 完成）**：
+- Mac 局域网地址 `192.168.1.163`，Windows `192.168.1.155`。Windows 上解析不了 `.local` 名字（可能被代理 `xray_tun` 拦住），所以链接用的是 IP。**建议在路由器里给 Mac 固定 IP**，否则地址一变链接就断。
+- Windows 的三个链接：
+  - `data\audit` → `\\192.168.1.163\cs2coach-shared\audit`
+  - `data\eval\platform` → `…\platform`
+  - `data\review` → `…\review`
+
+  链接用管理员 `mklink /D` 创建；访问共享用的是普通账户里保存的 Mac 凭据。
+- 验证：Windows 上 `audit_report.py --name 2026-10-17` 生成的 `precision.md` 与 Mac 的内容完全一致；只有换行符不同，Windows 写的是 CRLF。
+- **换行符**：Windows 上 Python 默认用 CRLF 写文本。两边都能读，但同一个文件会被两台电脑来回改换行符。共享目录里的文件以后由脚本写入时，最好显式指定 `newline="\n"`。`review_pack apply` 已经会保留原文件的换行符。
+- 连不上时依次检查：Mac 是否休眠；Mac 的地址是否变了；Windows 是否还保存着凭据（`net use`）；代理是否把 `192.168.1.0/24` 设为直连。
+
 ## 游戏内复盘
 
 先在 Mac 上生成复盘包，例如 `python scripts/review_pack.py build --audit 2026-10-17 --keys data/review/keys-2026-10-17.txt --name 2026-10-17-ingame`；也可以用 `--audit 2026-10-17 --pick ingame` 自动选择需要游戏内确认的条目。输出在 `data/review/<名称>/`，包含 `checklist.md`、`review.toml` 和 `cs2coach_review.cfg`。
