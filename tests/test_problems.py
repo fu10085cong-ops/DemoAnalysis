@@ -53,7 +53,8 @@ CASES = [
      dict(engagement={"contact_type": "peek", "opponent_blind": blind()}, death={"unused_grenades": ["flashbang"]})),
     ("overpeek_in_advantage", dict(tags=["man_advantage"], engagement={"contact_type": "peek"}),
      dict(tags=["man_advantage"], engagement={"contact_type": "peek"}, trade={"traded": True})),
-    ("died_without_seeing", dict(tags=["died_without_seeing"]), dict(tags=["died_without_seeing"], wallbang=True)),
+    ("died_without_seeing", dict(tags=["died_without_seeing"], engagement={"opponent_off_screen": True}),
+     dict(tags=["died_without_seeing"], engagement={"opponent_off_screen": False})),
     ("turned_into_flash", dict(engagement={"player_blind": blind()}), dict(engagement={"player_blind": blind("teammate")})),
     ("post_plant_utility_unused", dict(context={"bomb_planted": True}, death={"unused_grenades": ["molotov"]}),
      dict(context={"bomb_planted": True, "side": "CT"}, death={"unused_grenades": ["molotov"]})),
@@ -108,7 +109,8 @@ def test_missed_trade_records_are_preserved(cfg, baseline):
         "player_blind": blind()}}),
     ("opponent_blinded_by_own_side", "peeked_into_held_angle", {"engagement": {"contact_type": "peek",
         "opponent_blind": blind("teammate")}}),
-    ("killed_by_utility", "died_without_seeing", {"weapon": "inferno", "tags": ["died_without_seeing"]}),
+    ("killed_by_utility", "died_without_seeing", {"weapon": "inferno", "tags": ["died_without_seeing"],
+        "engagement": {"opponent_off_screen": True}}),
     ("fired_before_seen", "slow_reaction", {"engagement": {"time_to_damage_s": .8,
         "shots_before_seen": 1}}),
 ])
@@ -497,3 +499,16 @@ def test_cli_writes_problem_report_without_ai_or_baseline(tmp_path, monkeypatch,
     detected = detect_problems(mm, None, cfg)
     expected = render_problem_report(detected, problem_frequency(detected, mm, None, cfg))
     assert (tmp_path / f"alice_{A}" / "test" / "problems.md").read_text(encoding="utf-8") == expected
+
+
+def test_died_without_seeing_requires_off_screen_and_is_enabled_by_default(baseline):
+    """启用后默认配置会判；完全没有几何视线（不在屏幕外）的不判，穿墙同样排除。"""
+    cfg = load_config()
+    assert "died_without_seeing" not in cfg["problems"]["disabled"]
+    on = make_moment(tags=["died_without_seeing"], engagement={"opponent_off_screen": True})
+    no_los = make_moment(tags=["died_without_seeing"], engagement={"opponent_off_screen": False})
+    wall = make_moment(tags=["died_without_seeing"], wallbang=True, engagement={"opponent_off_screen": True})
+    hits = lambda m: {h.problem for h in detect_problems(make_mm([m]), baseline, cfg).hits}
+    assert "died_without_seeing" in hits(on)
+    assert "died_without_seeing" not in hits(no_los)
+    assert "died_without_seeing" not in hits(wall)

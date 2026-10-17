@@ -190,14 +190,15 @@ def test_default_disabled_rules_and_match_toggle_preserve_detection_conditions()
     blind = dict(blinded_at_event=True, remaining_at_event_s=1, max_duration_s=2,
                  thrower=None, thrower_ambiguous=False, thrower_role="enemy")
     shots = [make_shot(tick=i, recoil_index=3, stopped=False) for i in range(30)]
-    mm = make_mm([make_moment(tags=["died_without_seeing", "weapon_not_ready"]),
+    mm = make_mm([make_moment(tags=["died_without_seeing", "weapon_not_ready"], engagement={"opponent_off_screen": True}),
                   make_moment(engagement={"player_blind": blind}), make_moment(weapon="awp"),
                   make_moment(engagement={"shots": shots})])
     baseline = {"spray": {"ak47": [{"from": 3, "to": 5, "hit_pct": 65}]}}
     current = detect_problems(mm, baseline, cfg)
-    expected = {"died_without_seeing", "turned_into_flash", "weapon_not_ready", "spray_while_moving", "awp_unscoped_shot"}
+    expected = {"turned_into_flash", "weapon_not_ready", "spray_while_moving", "awp_unscoped_shot"}
     assert set(cfg["problems"]["disabled"]) == expected
     assert not expected.intersection(h.problem for h in current.hits)
+    assert any(h.problem == "died_without_seeing" for h in current.hits)  # 2026-10-17 启用
     assert not any(h.target == "match" for h in current.hits)
     assert any(h.problem == "spray_control" and h.target != "match" for h in current.hits)
     cfg["problems"].update(disabled=[], spray_match_enabled=True)

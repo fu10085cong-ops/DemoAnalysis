@@ -297,9 +297,12 @@ def detect_problems(mm: MatchMoments, baseline: dict | None, cfg: dict) -> Probl
                                     {"moving_ratio": p["spray_moving_ratio"], "min_shots": p["spray_moving_min_shots"],
                                      "min_recoil_index": p["spray_moving_min_recoil_index"], "source": "config"})
 
-            if "died_without_seeing" in m.tags and d is not None and d.blinded is False:
-                hit("died_without_seeing", {"died_without_seeing": True, "wallbang": m.wallbang,
-                    "through_smoke": m.through_smoke, "blinded": d.blinded})
+            # 只算"对手在屏幕外"：双方有视线但对手不在本人屏幕内（侧面或背后）。完全没有几何视线却被打死
+            # 多半是几何误差，不判（2026-10-17 审计：189/197 属于前者；游戏内确认 3/3）
+            if ("died_without_seeing" in m.tags and d is not None and d.blinded is False
+                    and e is not None and e.opponent_off_screen is True):
+                hit("died_without_seeing", {"died_without_seeing": True, "opponent_off_screen": True,
+                    "wallbang": m.wallbang, "through_smoke": m.through_smoke, "blinded": d.blinded})
             blind = e.player_blind if e is not None else None
             if blind is not None:
                 if blind.blinded_at_event and blind.thrower_role is None:
