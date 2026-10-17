@@ -24,9 +24,38 @@ def load_config(path: Path | None = None) -> dict[str, Any]:
     _validate_visibility(cfg["visibility"])
     _validate_report_card(cfg["report"]["card"])
     _validate_audit(cfg["audit"])
+    _validate_review(cfg["review"])
     _validate_problems(cfg["problems"])
     _validate_economy(cfg["economy"])
     return cfg
+
+
+def _validate_review(cfg: dict[str, Any]) -> None:
+    from string import Formatter
+
+    for key in ("csgo_dir", "demo_subdir", "playdemo_template", "jump_template", "follow_template"):
+        if not isinstance(cfg[key], str):
+            raise ConfigError(f"配置项 review.{key} 应为字符串")
+    subdir = Path(cfg["demo_subdir"])
+    if (not cfg["demo_subdir"] or subdir.is_absolute() or
+            any(part in (".", "..") for part in subdir.parts) or ":" in cfg["demo_subdir"] or "\\" in cfg["demo_subdir"]):
+        raise ConfigError("配置项 review.demo_subdir 应为 game/csgo 下的相对子目录")
+    fields = {"playdemo_template": {"subdir", "demo_stem"},
+              "jump_template": {"tick"}, "follow_template": {"steamid"}}
+    for key, allowed in fields.items():
+        value = cfg[key]
+        if key != "follow_template" and not value:
+            raise ConfigError(f"配置项 review.{key} 不能为空")
+        try:
+            used = {field for _, field, _, _ in Formatter().parse(value) if field is not None}
+        except ValueError as exc:
+            raise ConfigError(f"配置项 review.{key} 模板无效") from exc
+        if not used <= allowed or (key != "follow_template" and not used):
+            raise ConfigError(f"配置项 review.{key} 占位符无效")
+    questions = cfg["questions"]
+    if (not isinstance(questions, dict) or not questions.get("generic") or
+            any(not isinstance(value, str) or not value.strip() for value in questions.values())):
+        raise ConfigError("配置项 review.questions 应包含非空的 generic 问题")
 
 
 def _validate_problems(cfg: dict[str, Any]) -> None:

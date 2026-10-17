@@ -1,6 +1,6 @@
 # 028 游戏内复盘包：一条命令准备好要确认的 demo 和跳转命令
 
-状态：待做（在 027 完成并合并之后开始）
+状态：完成（Windows 实机验证待产品负责人完成）
 执行机器：Mac 或 Windows 实现均可；**CS2 相关的验证只能在装了 CS2 的 Windows 电脑上做**。
 
 ## 目标
@@ -91,7 +91,7 @@
   - `apply`：结果映射、note 追加、备份；**未出现的条目一字不动**；没填结果的跳过；
   - 配置模板替换正确。
 - [ ] 全部测试通过：`.venv/bin/python -m pytest -q`，Windows 上是 `.venv/Scripts/python.exe -m pytest -q`。
-- [ ] **真实数据**：用 `--keys` 生成审计中待游戏内确认的 8 条，`hit_key` 见下方，贴出 `checklist.md` 的前两条，不贴玩家名以外的个人信息。
+- [ ] **真实数据**：用 `--keys` 生成审计中待游戏内确认的 8 条，`hit_key` 见下方，贴出 `checklist.md` 的前两条，**玩家名一律替换成"（已匿名）"**。
 - [ ] **Windows 实机验证**：由产品负责人完成，结果写进完成报告的"遗留问题"，Codex 不需要做。
 - [ ] 不调用 DeepSeek、Claude 或本地模型。
 
@@ -121,9 +121,37 @@ missed_trade-…2d56e57c
 
 ## 完成报告（GPT 填写）
 
-- 改动的文件及原因：
-- 测试结果：
-- 真实 demo 验证（如有）：
-- 遗留问题 / 需要确认的地方：
+- 改动的文件及原因：新增 `scripts/review_pack.py` 的 build、install、apply；在 `config/default.toml` 和 `src/cs2coach/config.py` 声明并校验复盘配置、问题文案和命令模板；新增 `tests/test_review_pack.py` 用临时目录覆盖选择、清单与命令、去重与冲突、结果回填和原条目字节保持；在 `docs/status.md`、`README.md` 补使用步骤及 Windows CS2 路径。没有新增依赖。
+- 测试结果：`.venv/bin/python -m pytest -q`：734 passed、3 skipped。apply 和 install 只在临时目录测试；未对真实审计目录执行 apply。
+- 真实 demo 验证：对 `data/audit/2026-10-17` 中 `data/review/keys-2026-10-17.txt` 指定的 8 条运行 build，生成 `data/review/2026-10-17-ingame/`；`review.toml` 和 `checklist.md` 均有 8 条，cfg 有 8 个短命令。仅使用已有审计记录，未解析或安装真实 demo。清单前两条如下：
+
+  ```text
+  ## r1 · de_inferno
+  Demo：9209547595508347918_0.dem（来源：9209547595508347918_0.zip）
+  目标玩家：（已匿名）；回合：15
+  要确认：对手开枪打你的那一刻，他在不在你的屏幕里？在屏幕外填‘对’，在屏幕里填‘不对’。
+  Claude 原判：correct
+  原备注：Claude 2026-10-17：推断对手在屏幕外（双方有视线且非穿墙穿烟）
+  加载：playdemo replays/9209547595508347918_0
+  跳转：r1（demo_gototick 96128）
+
+  ## r2 · de_dust2
+  Demo：9215177492731139980_0.dem（来源：9215177492731139980_0.zip）
+  目标玩家：（已匿名）；回合：23
+  要确认：对手开枪打你的那一刻，他在不在你的屏幕里？在屏幕外填‘对’，在屏幕里填‘不对’。
+  Claude 原判：correct
+  原备注：Claude 2026-10-17：推断对手在屏幕外（双方有视线且非穿墙穿烟）
+  加载：playdemo replays/9215177492731139980_0
+  跳转：r2（demo_gototick 131464）
+  ```
+
+- 遗留问题 / 需要确认的地方：Windows 实机验证由产品负责人完成：按清单第一条确认默认 `playdemo`、`demo_gototick` 和 `exec`/alias 的实际写法、加载与跳转位置，以及是否需要 `follow_template`。本机没有 CS2，未执行真实安装。若命令不适用，修改 `[review]` 配置并重新 build。
 
 ## 审查意见（Claude 填写）
+
+**审查通过（2026-10-17）。** build、install、apply 三个子命令都符合任务单：apply 按条目定位并备份，install 遇到冲突不覆盖，CS2 命令全部可配置。用真实审计数据 build 出 8 条，清单和 cfg 正确。
+
+**Claude 在审查时修了一处跨平台问题**：判定文件在 Mac 与 Windows 间共享。原来 apply 用 `write_text` 写回，Windows 上会把整份文件改成 CRLF；替换字段的正则 `.*` 还会吞掉行尾的 `\r`。现在改为按原样读写换行符，正则改为 `[^\r\n]*`，并补了 CRLF 文件的回归测试。改之前这个测试会失败。735 个测试通过。
+
+**待产品负责人在 Windows 上验证**：按 `checklist.md` 第一条操作，确认 `playdemo` 的路径、`exec cs2coach_review` 和 `r1` 跳转都正确。如果写法不对，只改 `[review]` 配置。
+

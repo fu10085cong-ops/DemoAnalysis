@@ -127,3 +127,11 @@
 2. **Mac**：产品负责人打开"系统设置 → 通用 → 共享 → 文件共享"，添加 `~/cs2coach-shared`，记下 Mac 的局域网地址。
 3. **Windows**：产品负责人以管理员身份打开命令提示符，在项目目录下对三个目录分别执行 `mklink /D data\audit \\<Mac 地址>\cs2coach-shared\audit`；如果原目录已存在，先改名备份。
 4. 两边各运行一次 `audit_report.py`，结果相同就说明共享成功。
+
+## 游戏内复盘
+
+先在 Mac 上生成复盘包，例如 `python scripts/review_pack.py build --audit 2026-10-17 --keys data/review/keys-2026-10-17.txt --name 2026-10-17-ingame`；也可以用 `--audit 2026-10-17 --pick ingame` 自动选择需要游戏内确认的条目。输出在 `data/review/<名称>/`，包含 `checklist.md`、`review.toml` 和 `cs2coach_review.cfg`。
+
+在装有 CS2 的 Windows 电脑上运行 `python scripts/review_pack.py install <名称> --csgo "<CS2安装目录>/game/csgo"`。也可在配置 `review.csgo_dir` 或环境变量 `CS2COACH_CSGO_DIR` 指定目录。工具会复制每场 demo 和 cfg；遇到同名但内容不同的目标文件会停止并提示。进入 CS2 后，先在控制台输入 `exec cs2coach_review`，然后按清单每条输入加载命令和 `r1`、`r2` 等跳转命令。先用第一条确认 demo 能加载、跳转位置正确；默认命令尚待 Windows 实机验证，可在 `[review]` 修改模板后重新 build。
+
+看完后在包内 `review.toml` 为每条填写 `result = "对"`、`"不对"` 或 `"看不出"`，可填 `comment`。运行 `python scripts/review_pack.py apply <名称>` 回填审计标签；未填写的条目会跳过，原 `labels.toml` 会先备份。两台电脑不要同时修改同一个审计判定文件。

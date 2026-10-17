@@ -46,6 +46,8 @@ pytest
 
 解压 .rar 格式的 demo 会用到 Windows 10/11 自带的 `tar.exe`，不需要额外安装。
 
+游戏内复盘包的 `--csgo` 参数要指向 CS2 安装目录里的 `game/csgo`，例如 `C:\Program Files (x86)\Steam\steamapps\common\Counter-Strike Global Offensive\game\csgo`。如果安装到了其他 Steam 库，在 Steam 中右键 CS2 →“管理”→“浏览本地文件”，从打开的目录进入 `game\csgo`；PowerShell 中路径有空格时用引号括起来。
+
 ### macOS
 
 ```bash
