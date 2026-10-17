@@ -95,6 +95,15 @@ def test_spray_segment_boundaries_and_missing_recoil():
         (6, 9, 2, 50.0), (10, 14, 2, 50.0), (15, None, 2, 50.0)]
 
 
+def test_spray_stats_excludes_unseen_and_unknown_visibility():
+    shots = [make_shot(tick=90, recoil_index=3, hit=False, seen_opponent=True),
+             make_shot(tick=91, recoil_index=3, hit=True, seen_opponent=False),
+             make_shot(tick=92, recoil_index=3, hit=True, seen_opponent=None)]
+    s = spray_stats([make_mm([make_moment(engagement={"shots": shots})])], config())
+    segment = s["ak47"][2]
+    assert segment["shots"] == 1 and segment["hit_pct"] == 0
+
+
 def test_spray_uses_actual_shot_weapon_and_configured_segments():
     cfg = config()
     cfg["baseline"]["spray_segment_starts"] = [0, 4]

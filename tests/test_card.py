@@ -135,7 +135,7 @@ def test_table_markers_team_order_and_shared_front():
     front = '\n'.join(render_front(mm, report(), [], cfg, None))
     assert '## 本场体检' in front and '## 同场对比' in front
     assert '道具伤害' in front
-    assert '补枪按 3 秒窗口统计' in front
+    assert '补枪按 5 秒窗口统计' in front
     assert '{' not in front and '}' not in front
 
 

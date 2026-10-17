@@ -179,8 +179,10 @@ def detect_problems(mm: MatchMoments, baseline: dict | None, cfg: dict) -> Probl
                             {"crosshair_placement_deg": limit, "source": "pro_p75"})
 
                 if w in automatic:
-                    late = [s for s in e.shots if s.weapon == w and _finite(s.recoil_index)
-                            and s.recoil_index >= p["spray_late_recoil_index"]]
+                    eligible = [s for s in e.shots if s.weapon == w and _finite(s.recoil_index)
+                                and s.recoil_index >= p["spray_late_recoil_index"]]
+                    late = [s for s in eligible if s.seen_opponent is True]
+                    excluded_unseen = len(eligible) - len(late)
                     if len(late) >= p["spray_min_late_shots"]:
                         segments = spray_segments(baseline, w)
                         refs = [_segment(segments, s.recoil_index) for s in late]
@@ -192,6 +194,7 @@ def detect_problems(mm: MatchMoments, baseline: dict | None, cfg: dict) -> Probl
                             if actual < expected - p["spray_margin_pct"]:
                                 hit("spray_control", {"scope": "engagement", "shots": len(late),
                                     "hits": sum(s.hit for s in late), "hit_pct": actual,
+                                    "excluded_unseen_shots": excluded_unseen,
                                     "recoil_indices": _json([s.recoil_index for s in late]),
                                     "shot_hits": _json([s.hit for s in late])},
                                     {"expected_hit_pct": expected, "source": "pro_segments_weighted",
@@ -232,7 +235,8 @@ def detect_problems(mm: MatchMoments, baseline: dict | None, cfg: dict) -> Probl
                             "distance_m": c.distance}, {"distance_m": p["awp_noscope_max_distance_m"], "source": "config"})
                 if w in automatic:
                     moving = [s for s in e.shots if s.weapon == w and _finite(s.recoil_index)
-                              and s.recoil_index >= p["spray_moving_min_recoil_index"]]
+                              and s.recoil_index >= p["spray_moving_min_recoil_index"]
+                              and s.seen_opponent is True]
                     if len(moving) >= p["spray_moving_min_shots"]:
                         if any(s.stopped is None for s in moving):
                             missing("spray_while_moving")

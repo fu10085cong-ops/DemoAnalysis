@@ -2185,108 +2185,108 @@
       {
         "from": 0,
         "to": 0,
-        "shots": 1910,
-        "hit_pct": 35.86
+        "shots": 1847,
+        "hit_pct": 36.82
       },
       {
         "from": 1,
         "to": 2,
-        "shots": 2788,
-        "hit_pct": 47.09
+        "shots": 2647,
+        "hit_pct": 49.3
       },
       {
         "from": 3,
         "to": 5,
-        "shots": 1978,
-        "hit_pct": 48.18
+        "shots": 1811,
+        "hit_pct": 52.07
       },
       {
         "from": 6,
         "to": 9,
-        "shots": 707,
-        "hit_pct": 37.77
+        "shots": 623,
+        "hit_pct": 42.38
       },
       {
         "from": 10,
         "to": 14,
-        "shots": 224,
-        "hit_pct": 27.68
+        "shots": 197,
+        "hit_pct": 30.46
       },
       {
         "from": 15,
         "to": null,
-        "shots": 57,
-        "hit_pct": 45.61
+        "shots": 41,
+        "hit_pct": 51.22
       }
     ],
     "m4a1": [
       {
         "from": 0,
         "to": 0,
-        "shots": 517,
-        "hit_pct": 38.68
+        "shots": 500,
+        "hit_pct": 39.8
       },
       {
         "from": 1,
         "to": 2,
-        "shots": 842,
-        "hit_pct": 47.39
+        "shots": 796,
+        "hit_pct": 49.75
       },
       {
         "from": 3,
         "to": 5,
-        "shots": 660,
-        "hit_pct": 52.42
+        "shots": 609,
+        "hit_pct": 56.65
       },
       {
         "from": 6,
         "to": 9,
-        "shots": 311,
-        "hit_pct": 41.48
+        "shots": 276,
+        "hit_pct": 45.65
       },
       {
         "from": 10,
         "to": 14,
-        "shots": 128,
-        "hit_pct": 35.94
+        "shots": 117,
+        "hit_pct": 36.75
       },
       {
         "from": 15,
         "to": null,
-        "shots": 79,
-        "hit_pct": 44.3
+        "shots": 78,
+        "hit_pct": 43.59
       }
     ],
     "m4a1_silencer": [
       {
         "from": 0,
         "to": 0,
-        "shots": 738,
-        "hit_pct": 37.94
+        "shots": 707,
+        "hit_pct": 39.04
       },
       {
         "from": 1,
         "to": 2,
-        "shots": 1256,
-        "hit_pct": 50.24
+        "shots": 1193,
+        "hit_pct": 52.14
       },
       {
         "from": 3,
         "to": 5,
-        "shots": 944,
-        "hit_pct": 57.63
+        "shots": 874,
+        "hit_pct": 60.53
       },
       {
         "from": 6,
         "to": 9,
-        "shots": 360,
-        "hit_pct": 46.39
+        "shots": 335,
+        "hit_pct": 48.66
       },
       {
         "from": 10,
         "to": 14,
-        "shots": 72,
-        "hit_pct": 40.28
+        "shots": 70,
+        "hit_pct": 40.0
       },
       {
         "from": 15,
@@ -2550,10 +2550,10 @@
       "player_share_pct": 31.2
     },
     "overpeek_in_advantage": {
-      "hits": 59,
+      "hits": 54,
       "rounds": 5620,
       "per_10_rounds": 0.1,
-      "player_share_pct": 18.8
+      "player_share_pct": 18.1
     },
     "died_without_seeing": {
       "hits": 229,
@@ -2568,10 +2568,10 @@
       "player_share_pct": 57.3
     },
     "missed_trade": {
-      "hits": 471,
+      "hits": 563,
       "rounds": 5620,
-      "per_10_rounds": 0.84,
-      "player_share_pct": 80.4
+      "per_10_rounds": 1.0,
+      "player_share_pct": 83.5
     },
     "post_plant_utility_unused": {
       "hits": 10,
@@ -2604,22 +2604,22 @@
       "player_share_pct": 11.2
     },
     "spray_control": {
-      "hits": 116,
+      "hits": 92,
       "rounds": 5620,
-      "per_10_rounds": 0.21,
-      "player_share_pct": 35.8
+      "per_10_rounds": 0.16,
+      "player_share_pct": 30.4
     },
     "spray_while_moving": {
-      "hits": 8,
+      "hits": 7,
       "rounds": 5620,
       "per_10_rounds": 0.01,
-      "player_share_pct": 3.1
+      "player_share_pct": 2.7
     },
     "good_trade": {
-      "hits": 558,
+      "hits": 697,
       "rounds": 5620,
-      "per_10_rounds": 0.99,
-      "player_share_pct": 84.6
+      "per_10_rounds": 1.24,
+      "player_share_pct": 88.5
     },
     "flash_assist": {
       "hits": 199,

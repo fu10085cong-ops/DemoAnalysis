@@ -103,7 +103,7 @@ def _validate_training(cfg: dict[str, Any]) -> None:
 def _validate_checker(cfg: dict[str, Any]) -> None:
     """敏感说法允许配置扩展，但谓词名称和正则必须能被检查器执行。"""
     from cs2coach.tools.checker import (DISTANCE_PREDICATES, PHRASE_SCOPES,
-                                        PREDICATES, SEGMENT_PREDICATES)
+                                        PREDICATES, SEGMENT_PREDICATES, range_phrase_pattern)
     if type(cfg.get("finding_candidates")) is not int or cfg["finding_candidates"] < 1:
         raise ConfigError("配置项 checker.finding_candidates 应为正整数")
     for key in ("teammate_far_distance", "teammate_near_distance", "close_range_m", "long_range_m"):
@@ -112,6 +112,11 @@ def _validate_checker(cfg: dict[str, Any]) -> None:
     if (type(cfg.get("segment_major_ratio")) not in (int, float)
             or not 0 < cfg["segment_major_ratio"] <= 1):
         raise ConfigError("配置项 checker.segment_major_ratio 应在 (0, 1] 内")
+    words = cfg["range_weapon_words"]
+    if (not isinstance(words, list) or not words or
+            any(not isinstance(word, str) or not word.strip() or word != word.strip() for word in words) or
+            len(set(words)) != len(words)):
+        raise ConfigError("配置项 checker.range_weapon_words 应为不重复的非空武器名数组")
     aliases = cfg["map_aliases"]
     if (not isinstance(aliases, dict) or any(not isinstance(names, list) or not names
             or any(not isinstance(name, str) or not name for name in names)
@@ -141,7 +146,7 @@ def _validate_checker(cfg: dict[str, Any]) -> None:
         if not isinstance(phrase["pattern"], str) or not phrase["pattern"]:
             raise ConfigError(f"{name}.pattern 应为非空正则字符串")
         try:
-            re.compile(phrase["pattern"])
+            re.compile(range_phrase_pattern(phrase, cfg))
         except re.error as exc:
             raise ConfigError(f"{name}.pattern 正则无效：{exc}") from None
 

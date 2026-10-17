@@ -23,7 +23,7 @@ max_absent_round_share = 0.5
 engagement_gap_seconds = 1.0
 engagement_max_seconds = 5.0
 # 补枪：被击杀后多少秒内击杀者被队友击杀，算"被补回"；反之亦然
-trade_window_seconds = 3.0
+trade_window_seconds = 5.0
 # 漏补：队友阵亡时目标玩家与他的直线距离不超过此值（游戏单位）才算"在附近"。不考虑视线，只是近似
 missed_trade_max_distance = 800
 # 关键助攻：闪光助攻，或本回合对被击杀者造成的伤害不低于此值（记分板的伤害助攻本身要求 > 40）
@@ -332,6 +332,13 @@ teammate_near_distance = 300.0
 # “近距离/短距离”“远距离/中远距离”说法的交火距离门槛（米，与事实卡相同）
 close_range_m = 12.0
 long_range_m = 20.0
+# 距离说法里可夹在距离词与交火名词之间的武器名；含 WEAPON_LABELS 显示名及常用简称
+range_weapon_words = [
+  "AK-47", "M4A4", "M4A1-S", "AWP", "USP-S", "Glock-18", "Desert Eagle", "SSG 08",
+  "P2000", "P250", "Tec-9", "Five-SeveN", "CZ75-Auto", "Galil AR", "FAMAS", "AUG",
+  "SG 553", "MAC-10", "MP9", "MP7", "UMP-45", "P90", "MAG-7", "Nova", "XM1014",
+  "手雷", "燃烧", "刀", "AK", "M4", "沙鹰", "大狙", "步枪", "手枪", "冲锋枪",
+]
 # "主要慢在哪一段"至少占 TTD 的比例
 segment_major_ratio = 0.5
 
@@ -447,11 +454,11 @@ scope = "all"
 [[checker.phrases]]
 # 描述交火距离的说法要和实际距离一致（评测：28 米被说成"短距离交火"）。
 # 只匹配“近距离交火/对枪/遭遇”这类描述，不匹配“拉近距离”“近距离时……”这类建议
-pattern = "(?:近距离|短距离|贴脸|近身)(?:的)?(?:交火|对枪|遭遇|接敌|对拼)"
+pattern = '(?:近距离|短距离|贴脸|近身)\s*(?:的\s*)?(?:(?:(?:用|拿|持)\s*)?{weapon}\s*(?:的\s*)?)?(?:交火|对枪|遭遇|接敌|对拼|对狙)'
 require = "close_range"
 
 [[checker.phrases]]
-pattern = "(?:远距离|中远距离|长距离)(?:的)?(?:交火|对枪|遭遇|接敌|对拼)"
+pattern = '(?:远距离|中远距离|长距离)\s*(?:的\s*)?(?:(?:(?:用|拿|持)\s*)?{weapon}\s*(?:的\s*)?)?(?:交火|对枪|遭遇|接敌|对拼|对狙)'
 require = "long_range"
 
 [[checker.phrases]]

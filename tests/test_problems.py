@@ -205,6 +205,36 @@ def test_spray_weighted_expectation_and_strict_boundary(cfg, baseline):
     assert h.thresholds["margin_pct"] == 15
     assert json.loads(h.thresholds["pro_hit_pcts"]) == [90, 90, 90, 40, 40, 40]
     assert h.evidence["shots"] == 6 and h.evidence["hits"] == 2
+    assert h.evidence["excluded_unseen_shots"] == 0
+
+
+def test_spray_excludes_shots_before_opponent_seen(cfg, baseline):
+    shots = bullets(n=10)
+    for shot in shots[:3]:
+        shot.seen_opponent = False
+        shot.hit = True
+    shots[3].seen_opponent = None
+    h = next(h for h in detect_problems(make_mm([make_moment(engagement={"shots": shots})]), baseline, cfg).hits
+             if h.problem == "spray_control")
+    assert h.evidence["shots"] == 6
+    assert h.evidence["hits"] == 0
+    assert h.evidence["excluded_unseen_shots"] == 4
+
+
+def test_spray_below_minimum_after_visibility_filter_is_not_evaluated(cfg, baseline):
+    shots = bullets(n=8)
+    for shot in shots[:3]:
+        shot.seen_opponent = False
+    report = detect_problems(make_mm([make_moment(engagement={"shots": shots})]), baseline, cfg)
+    assert "spray_control" not in {h.problem for h in report.hits}
+
+
+def test_moving_spray_uses_same_visibility_filter(cfg, baseline):
+    shots = bullets(n=4, start=1, stopped=False)
+    shots[0].seen_opponent = False
+    shots[1].seen_opponent = None
+    report = detect_problems(make_mm([make_moment(engagement={"shots": shots})]), baseline, cfg)
+    assert "spray_while_moving" not in {h.problem for h in report.hits}
 
 
 @pytest.mark.parametrize("missing", ["weapon", "segment", "pct"])

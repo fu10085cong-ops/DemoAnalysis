@@ -179,7 +179,15 @@ def engagement(match: MatchData, p: _Params, sid: int, opponent: int, tick: int,
 
     states = match.player_ticks(sid, start - 1, tick).set_index("tick")
     hit_ticks = set(dealt["tick"].astype(int))
-    shots = [_shot(p, r, states, hit_ticks) for _, r in my_shots.iterrows()]
+    sight = p.sight
+    seen_before: dict[int, bool] = {}
+    if sight is not None and sight.available and not my_shots.empty:
+        ticks_before = [int(t) - 1 for t in my_shots["tick"]]
+        me = sight.states_at(sid, ticks_before)
+        enemy = sight.states_at(opponent, ticks_before)
+        seen_before = {t: sight.sees(me.get(t), enemy.get(t)) for t in set(ticks_before)}
+    shots = [_shot(p, r, states, hit_ticks, seen_before.get(int(r["tick"]) - 1))
+             for _, r in my_shots.iterrows()]
     cs = [x for x in shots if not x.crouched and not x.airborne and x.stopped is not None]
     first = shots[0] if shots else None
     my_first = int(my_shots["tick"].min()) if len(my_shots) else None
@@ -349,7 +357,8 @@ def contact_type(mine: float | None, theirs: float | None, still: float, moving:
             ("moving", "moving"): "both_moving", ("still", "still"): "both_still"}[(a, b)]
 
 
-def _shot(p: _Params, r: pd.Series, states: pd.DataFrame, hit_ticks: set[int]) -> Shot:
+def _shot(p: _Params, r: pd.Series, states: pd.DataFrame, hit_ticks: set[int],
+          seen_opponent: bool | None = None) -> Shot:
     t = int(r["tick"])
     st = states.loc[t] if t in states.index else None
     speed = _float(st["speed_xy"]) if st is not None else None
@@ -363,6 +372,7 @@ def _shot(p: _Params, r: pd.Series, states: pd.DataFrame, hit_ticks: set[int]) -
         crouched=bool(st is not None and _float(st["duck_amount"]) is not None and st["duck_amount"] >= p.crouch),
         airborne=bool(st is not None and st["is_airborne"]), scoped=scoped,
         recoil_index=_float(r["recoil_index"]), hit=t in hit_ticks,
+        seen_opponent=seen_opponent,
         aim_error_deg=_float(r.get("target_angle")),
     )
 
@@ -432,6 +442,7 @@ def trade_info(match: MatchData, p: _Params, sid: int, opponent: int | None, tic
     last = before.sort_values("tick").iloc[-1] if len(before) else None
     return Trade(
         is_trade_kill=last is not None,
+        avenged_teammate_count=len(before),
         avenged_teammate=int(last["victim"]) if last is not None else None,
         avenge_delay_s=p.secs(tick - int(last["tick"])) if last is not None else None,
     )

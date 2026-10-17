@@ -27,6 +27,7 @@ class Shot(BaseModel):
     scoped: bool  # 开枪前一 tick 的开镜状态，缺数据时取开枪 tick（fields.md 陷阱 23）
     recoil_index: float | None  # 连射第几发，从 0 开始
     hit: bool  # 同一 tick 对这次交火的对手造成了伤害
+    seen_opponent: bool | None = None  # 开枪前一 tick 能否看见这次交火的对手；无地图视野时为空
     # 子弹方向与"眼睛 → 对手身体中心"的夹角（度，近似，见 features/aim.py）；没判定为瞄准对手时为 None
     aim_error_deg: float | None = None
 
@@ -129,6 +130,7 @@ class Trade(BaseModel):
     nearest_teammate_distance: float | None = None  # 死亡时最近的存活队友距离（游戏单位）
     # 击杀：是否替刚被这名对手击杀的队友报仇
     is_trade_kill: bool | None = None
+    avenged_teammate_count: int | None = None  # 同一击杀可能替多名队友报仇
     avenged_teammate: int | None = None
     avenge_delay_s: float | None = None
 

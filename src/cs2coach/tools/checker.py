@@ -101,6 +101,15 @@ DISTANCE_PREDICATES = {"teammate_far", "teammate_near", "close_range", "long_ran
 SEGMENT_PREDICATES = {"seen_to_shot_major", "shot_to_hit_major"}
 PHRASE_SCOPES = {"any", "all"}
 
+
+def range_phrase_pattern(phrase: dict, checker_cfg: dict) -> str:
+    """展开武器名分支；直接在原文匹配，句内位置不会因预处理偏移。"""
+    pattern = phrase["pattern"]
+    if phrase["require"] in ("close_range", "long_range") and "{weapon}" in pattern:
+        words = sorted(checker_cfg["range_weapon_words"], key=len, reverse=True)
+        pattern = pattern.replace("{weapon}", "(?:" + "|".join(re.escape(word) for word in words) + ")")
+    return pattern
+
 # 从旧引用模块原样迁移，仅用于拒绝分析文字里的引用；检查规则不变。
 CITATION = re.compile(r"\[\[\s*([A-Za-z0-9\-]+)\s*\]\]")
 _NUMBER = re.compile(r"\d+(?:\.\d+)?")
@@ -473,7 +482,7 @@ def _check_entries(sub: ReportSubmission, cfg: dict,
             for phrase in cfg["checker"]["phrases"]:
                 require = phrase["require"]
                 reported_sentences: set[tuple[int, int]] = set()
-                for match in re.finditer(phrase["pattern"], entry.analysis):
+                for match in re.finditer(range_phrase_pattern(phrase, cfg["checker"]), entry.analysis):
                     span, selected, indices = _sentence_targets(entry.analysis, match.start(), target_data)
                     if span in reported_sentences:
                         continue

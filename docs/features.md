@@ -60,8 +60,9 @@
 **核对**：旧 6 点算法在 6 个 demo、736 次击杀中测得雷达 spotted 比几何“第一次看见”晚 0.23–0.28 秒（中位数），85%–88% 在 0–0.55 秒之间；这些延迟尚未按新算法重测。旧算法的 5E、完美击杀者 TTD 中位数分别为 469、516 ms，也尚未重测。新版职业整场 TTD 中位数见下方 v2 基准。
 
 ### 补枪 `trade`
-- 死亡：击杀者是否在 `trade_window_seconds` 内被队友击杀（`traded`、`traded_by`、`trade_delay_s`）；死亡时最近存活队友的直线距离。
-- 击杀：这名对手是否在窗口内刚击杀了自己的队友（`is_trade_kill`）。
+- 窗口由 `moments.trade_window_seconds` 统一控制，当前为 5 秒；与完美平台对比时，按 5 秒计算的补枪击杀在 10 人中有 9 人一致。
+- 死亡：击杀者是否在窗口内被队友击杀（`traded`、`traded_by`、`trade_delay_s`）；死亡时最近存活队友的直线距离。
+- 击杀：这名对手是否在窗口内刚击杀了自己的队友（`is_trade_kill`），并记录这次击杀替几名队友报仇（`avenged_teammate_count`）。同场表的“补枪击杀”按被补队友人数累计，因此一次击杀可能计入两次。
 
 ### 死亡状态 `death`
 - `unused_grenades`：死亡前一 tick 背包里的投掷物。
@@ -116,12 +117,12 @@
 
 清单在 `baselines/pro_demos.toml`，生成入口为 `scripts/build_baseline.py`。使用与分析用户相同的解析、特征和致盲过滤流程；覆盖率低于 `parsing.min_target_coverage` 的玩家不入样本，某份 demo 失败时整份跳过并打印原因，来源与实际人次写入基准文件。Mirage p1/p2 是同图两段，按两份样本处理，不称为两张不同地图。
 
-当前 v2（2026-10-16 扩充）来自 ESL Pro League S24、Esports World Cup 2026、FISSURE Playground 3、Stake Ranked Episode 4 的 9 组对局、26 份 demo，共 260 人次、5620 回合；全部成功，覆盖率为 0 的非选手不计入。地图：Mirage 6、Dust2 6、Nuke 4、Ancient 3、Anubis 3、Inferno 2、Cache 2。整场 TTD 职业中位数 391 ms，准星移动中位数 3.71°。各武器交火样本：AK 2490、M4A1-S 945、M4A4 677、AWP 663、Glock 433、Galil 386、USP 337、沙鹰 287、MP9 172、Tec-9 159、MAC-10 123、Five-SeveN 120、FAMAS 108、双枪 89、P250 68、MP7 32、SSG 08 31（不足 30 的武器不输出阈值，UMP-45 等仍缺）。扩充前（15 份）的数值见 git 历史。具体分布和每项有效样本数见 `baselines/pro_sample.json`。上方 30 人次表格是旧算法的早期核对记录。
+当前 v2（2026-10-17 按 5 秒补枪窗口和逐枪视野过滤重建）来自 ESL Pro League S24、Esports World Cup 2026、FISSURE Playground 3、Stake Ranked Episode 4 的 9 组对局、26 份 demo，共 260 人次、5620 回合；全部成功，覆盖率为 0 的非选手不计入。地图：Mirage 6、Dust2 6、Nuke 4、Ancient 3、Anubis 3、Inferno 2、Cache 2。整场 TTD 职业中位数 391 ms，准星移动中位数 3.71°。各武器交火样本：AK 2490、M4A1-S 945、M4A4 677、AWP 663、Glock 433、Galil 386、USP 337、沙鹰 287、MP9 172、Tec-9 159、MAC-10 123、Five-SeveN 120、FAMAS 108、双枪 89、P250 68、MP7 32、SSG 08 31（不足 30 的武器不输出阈值，UMP-45 等仍缺）。扩充前（15 份）的数值见 git 历史。具体分布和每项有效样本数见 `baselines/pro_sample.json`。上方 30 人次表格是旧算法的早期核对记录。
 
 - `metrics` 保留每人每份 demo 的整场枪法分布，原 `compare()` 接口兼容。
 - `weapons` 按交火第一枪的武器归组；没开枪时从手持显示名反查规范名，查不到则跳过。只含击杀、死亡且有交火的数据，不含回合结束后、误杀、bot 和世界伤害；交火少于 `baseline.min_engagements`（默认 30）的武器不输出。
 - 每把武器记录交火数，TTD、准星移动、距离的 p50/p75/p90 和 n；分位数使用线性插值。TTD 排除 ≥ 1 秒以及烟雾、被闪白的样本，准星排除烟雾和被闪白；首枪停稳率、命中率分别排除 None，并各自记录分母 `first_shot_stopped_n` / `first_shot_hit_n`。
-- `spray` 取上述交火中的子弹，按每发实际使用的自动武器归组；`recoil_index` 从 0 开始，分段起点来自配置，默认 0、1、3、6、10、15，最后一段不封顶。每段记录 from/to、shots、hit_pct，空段命中率为 None，缺失连射序号的子弹不计入。
+- `spray` 只取上述交火中开枪前一 tick 看见这次交火对手的子弹，按每发实际使用的自动武器归组；视野不可用或没看见对手的子弹不计入。`recoil_index` 从 0 开始，分段起点来自配置，默认 0、1、3、6、10、15，最后一段不封顶。每段记录 from/to、shots、hit_pct，空段命中率为 None，缺失连射序号的子弹不计入。
 - `weapon_threshold()` 和 `spray_segments()` 提供读取接口，旧基准、缺失武器或指标返回 None / 空列表。
 - `problem_rates` 使用同一次生成的新武器/压枪阈值，对每名职业选手逐图运行问题检测；仅统计实际已实现规则，包含默认停用项及亮点供后续校准，不含待开发项和 `other`。只计 target 不是 `match` 的命中，回合数为全部人次的在场回合数（`rounds_played`）之和，每十回合频率保留两位小数；至少命中一次的人次占比保留一位小数。
 
@@ -133,7 +134,7 @@
 
 - 交火武器直接复用基准的认定函数。枪法与距离规则分别使用同武器职业 p75 / Glock 距离 p90；缺失武器或阈值不会套用其他武器，计入 `skipped`。没有基准仍检测通用规则。
 - TTD 排除烟雾、首次可见时被闪白、缺失数据和达到最大等待时长的样本；死亡还要求对手有 TTD 且更短。其他规则按任务表分别检查首枪、接触类型、人数标签、补枪、死亡道具、致盲归属及亮点。
-- 单次压枪只取交火武器的后段子弹，逐发匹配职业连射段命中率后求平均；混合武器不合并。整场则复用基准 `spray_stats`，按每发实际武器、相同发数段分别比较，默认由 `spray_match_enabled=false` 关闭。两者都要求足够子弹，差值使用百分点；等于差值阈值不命中。移动扫射排除首枪，停稳数据不完整时不推断。
+- 单次压枪只取开枪前一 tick 看见这次交火对手的后段子弹，逐发匹配职业连射段命中率后求平均；混合武器不合并。未看见及视野不可用的子弹被排除，过滤后发数不足则不评价，证据记录 `excluded_unseen_shots`。整场则复用基准 `spray_stats`，按每发实际武器、相同发数段分别比较，默认由 `spray_match_enabled=false` 关闭。两者都要求足够子弹，差值使用百分点；等于差值阈值不命中。移动扫射使用同一视野过滤并排除首枪，停稳数据不完整时不推断。
 - `[problems]` 集中保存阈值和停用列表。默认停用 `died_without_seeing`、`turned_into_flash`、`weapon_not_ready`、`spray_while_moving`、`awp_unscoped_shot`。视野误判已在 018 明显减少，但 `died_without_seeing` 仍待产品负责人根据新频率审查，暂不启用；移动扫射、AWP 未开镜及整场压枪待数据校准；被闪后阵亡、拉栓期间交火按目录降为背景，事实卡照常显示。`awp_moving_shot` 由通用移动首枪规则覆盖。目录待开发项、`awp_close_range_duel`、`other` 仅登记，不检测；AWP 未开镜规则仅检测死亡。检测条件和原有阈值不变。
 - 每条 `ProblemHit` 保留 target、交火武器、判断所用的 evidence 和 thresholds（数值与来源）；子弹序列和道具列表因证据字典只允许标量，编码为 JSON 字符串。`ProblemReport` 同时记录职业来源、停用编号及缺少数据的计数；不满足条件和样本不足不计作缺少数据。
 - `problem_frequency()` 对已实现、启用的非亮点问题计算本场次数，零命中也列出，排除 `match` 目标。职业频率从基准原始 `hits / rounds` 计算，预期次数 λ 为职业频率乘以本场在场回合数（`MatchMoments.rounds_played`：总回合数减去中途掉线、重连前不在场的回合，fields.md 陷阱 24）；多出次数为本场次数减 λ，偶然概率为泊松分布 P(X ≥ 本场次数 | λ)。偶然概率 < `frequency_max_chance`（默认 0.05）且多出次数 ≥ `frequency_min_excess`（默认 2）才突出；职业频率缺失或为零时不判突出。倍数仅作展示。突出项在前，各组按多出次数降序排序。
@@ -189,7 +190,7 @@
 | `teamkill` / `victim_is_bot` / `world_damage` | 误杀队友 / 击杀 bot / 非玩家伤害致死 |
 
 ## 漏补 `missed_trades`
-不是目标玩家自己的击杀 / 死亡，单独列出：队友阵亡时目标玩家存活、与阵亡队友的直线距离 ≤ `missed_trade_max_distance`、窗口内在雷达上发现过击杀者，但没在窗口内击杀他。距离不考虑视线，"发现"是雷达状态（约 0.5 秒更新一次），**只是近似**，给 AI 作参考。
+不是目标玩家自己的击杀 / 死亡，单独列出：队友阵亡时目标玩家存活、与阵亡队友的直线距离 ≤ `missed_trade_max_distance`、5 秒补枪窗口内在雷达上发现过击杀者，但没在窗口内击杀他。距离不考虑视线，"发现"是雷达状态（约 0.5 秒更新一次），**只是近似**，给 AI 作参考。
 
 ## 已知局限
 - 实际扣血的总和比记分板的伤害统计（`m_iDamage`）系统性地低约 1%（每人每场 7–27 点）。试过几种算法都对不上，原因未查明；单次交火的伤害按事件中的剩余血量计算，是自洽的。

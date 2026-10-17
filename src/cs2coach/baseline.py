@@ -146,7 +146,8 @@ def spray_stats(mms: list[MatchMoments], cfg: dict) -> dict:
         if engagement_weapon(m) is None:
             continue
         for s in m.engagement.shots:
-            if s.weapon not in cfg["baseline"]["automatic_weapons"] or s.recoil_index is None:
+            if (s.seen_opponent is not True or s.weapon not in cfg["baseline"]["automatic_weapons"]
+                    or s.recoil_index is None):
                 continue
             if not math.isfinite(s.recoil_index):
                 continue

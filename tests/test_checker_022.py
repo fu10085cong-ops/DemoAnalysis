@@ -6,6 +6,7 @@ import copy
 import pytest
 
 from cs2coach.config import ConfigError, _validate_checker, load_config
+from cs2coach.features.labels import WEAPON_LABELS
 from cs2coach.features.models import MissedTrade
 from cs2coach.features.problems import ProblemHit, ProblemReport
 from cs2coach.summary.aggregate import aggregate_matches
@@ -63,6 +64,46 @@ def test_distance_sentence_selects_the_mentioned_moment_and_checks_second_occurr
     assert len(bad) == 1 and "R2-death" in bad[0].message
     assert len(_bad(mm, report, ["R1-death", "R2-death"],
                     "{R2-death.distance}这次短距离交火，短距离对枪都较慢。")) == 1
+
+
+@pytest.mark.parametrize("phrase,distance,should_fail", [
+    ("近距离 AK 对拼", 19, True), ("近距离 AK 对拼", 8, False),
+    ("近距离的 AWP 对狙", 19, True), ("远距离用 AK 对枪", 8, True),
+    ("短距离拿沙鹰对枪", 19, True), ("中远距离的步枪交火", 8, True),
+])
+def test_distance_phrase_with_weapon(phrase, distance, should_fail):
+    mm = make_mm([make_moment(context={"distance": distance})])
+    bad = _bad(mm, _hits("slow_reaction", "R1-death"), ["R1-death"], phrase)
+    assert bool(bad) == should_fail
+
+
+@pytest.mark.parametrize("phrase", ["近距离和对枪节奏一快就更容易吃亏",
+    "避免在中远距离与步枪正面对枪", "近距离 AK 的站位需要调整"])
+def test_distance_advice_does_not_match(phrase):
+    mm = make_mm([make_moment(context={"distance": 19})])
+    assert _bad(mm, _hits("slow_reaction", "R1-death"), ["R1-death"], phrase) == []
+
+
+def test_distance_weapon_keeps_original_sentence_offsets():
+    near = make_moment(id="R1-death", context={"distance": 8})
+    far = make_moment(id="R2-death", round=2, context={"distance": 19})
+    mm = make_mm([near, far], rounds=2)
+    report = _hits("slow_reaction", "R1-death", "R2-death")
+    bad = _bad(mm, report, ["R1-death", "R2-death"],
+               "近距离 AK 对拼没问题。{R2-death.distance}这次近距离的 AWP 对狙要复盘。")
+    assert len(bad) == 1 and "R2-death" in bad[0].message
+
+
+def test_range_weapon_words_are_complete_and_validated():
+    from cs2coach.config import _validate_checker
+    words = CFG["checker"]["range_weapon_words"]
+    assert set(WEAPON_LABELS.values()) <= set(words)
+    assert {"AK", "M4", "AWP", "沙鹰", "大狙", "步枪", "手枪", "冲锋枪"} <= set(words)
+    for invalid in ([], ["AK", "AK"], [""], [123]):
+        checker = copy.deepcopy(CFG["checker"])
+        checker["range_weapon_words"] = invalid
+        with pytest.raises(ConfigError, match="range_weapon_words"):
+            _validate_checker(checker)
 
 
 @pytest.mark.parametrize("word", ["慢主要出在看见到开枪的这段", "其中大半时间花在看见到开枪之间",

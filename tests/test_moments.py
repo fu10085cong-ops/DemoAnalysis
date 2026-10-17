@@ -14,6 +14,7 @@ import pytest
 from cs2coach.config import load_config
 from cs2coach.features.moments import bomb_planted
 from cs2coach.features.moments import find_moments as _find_moments
+from cs2coach.features.moments import _Params, find_missed_trades, trade_info
 from cs2coach.features.visibility import Sight
 from cs2coach.parsing.match import (
     add_death_inventory,
@@ -98,6 +99,53 @@ def scenario(kills=None, damages=None, fires=None, bullets=None, blinds=None, ex
 
 def moment(mm, mid):
     return next(x for x in mm.moments if x.id == mid)
+
+
+@pytest.mark.parametrize("delay_seconds,traded", [(4, True), (6, False)])
+def test_trade_and_missed_trade_use_five_second_window(delay_seconds, traded):
+    # A、B 同队，C 击杀 B；A 在 4/6 秒后击杀 C。C 在阵亡后曾被 A 的雷达发现。
+    revenge_tick = 100 + delay_seconds * 64
+    ticks = make_ticks(last=600, overrides={(C, 100): {"spotted_by_mask": 1}})
+    match = make_match(ticks, rounds=[make_round(end=550, last=600)])
+    match.kills = build_kills(pd.DataFrame([death(100, C, B), death(revenge_tick, A, C)]), match)
+    params = _Params(match, CFG)
+    assert params.trade == 5 * 64
+    assert trade_info(match, params, B, C, 100, "death").traded is traded
+    assert trade_info(match, params, A, C, revenge_tick, "kill").is_trade_kill is traded
+    assert bool(find_missed_trades(match, params, A)) is not traded
+
+
+def test_one_trade_kill_can_avenge_two_teammates():
+    ticks = make_ticks(last=400)
+    ticks.loc[ticks["steamid"] == C, "team_num"] = 2
+    match = make_match(ticks, rounds=[make_round(end=350, last=400)])
+    match.kills = build_kills(pd.DataFrame([death(100, D, A), death(150, D, B),
+                                            death(200, C, D)]), match)
+    trade = trade_info(match, _Params(match, CFG), C, D, 200, "kill")
+    assert trade.is_trade_kill and trade.avenged_teammate_count == 2
+    assert trade.avenged_teammate == B
+
+
+def test_shot_seen_opponent_uses_previous_tick_and_missing_sight():
+    extra = {(A, 89): {"yaw": 180.0, "X": 0.0},
+             (A, 94): {"yaw": 180.0, "X": 3.5},
+             (A, 99): {"yaw": 0.0, "X": 3.5}}
+    match = scenario(extra_ticks=extra)
+    sight = Sight(match, CFG, checker=AlwaysVisible())
+    shots = moment(_find_moments(match, A, CFG, sight=sight), "R1-kill1").engagement.shots
+    assert [shot.seen_opponent for shot in shots] == [False, False, True]
+    sight.checker = None
+    shots = moment(_find_moments(match, A, CFG, sight=sight), "R1-kill1").engagement.shots
+    assert all(shot.seen_opponent is None for shot in shots)
+
+
+def test_shot_visibility_checks_engagement_opponent_not_any_enemy():
+    # 90 tick 的子弹朝 C 飞，前一 tick A 看着 D，不能把 D 的可见性算给 C。
+    match = scenario(extra_ticks={(A, 89): {"yaw": 90.0}})
+    sight = Sight(match, CFG, checker=AlwaysVisible())
+    assert sight.any_enemy_seen(A, 89)
+    shot = moment(_find_moments(match, A, CFG, sight=sight), "R1-kill1").engagement.shots[0]
+    assert shot.tick == 90 and shot.seen_opponent is False
 
 
 # ---------- 交火 ----------

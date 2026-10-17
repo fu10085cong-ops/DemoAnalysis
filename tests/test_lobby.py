@@ -6,7 +6,7 @@ from cs2coach.features.moments import find_moments
 from cs2coach.features.visibility import Sight
 from cs2coach.parsing.match import build_damages
 from cs2coach.parsing.models import PlayerInfo
-from tests.helpers.moments import make_moment
+from tests.helpers.moments import make_mm, make_moment
 from tests.helpers.synthetic import A, B, D, AlwaysVisible
 from tests.test_moments import hurt, scenario
 
@@ -37,3 +37,13 @@ def test_lobby_event_counts_accuracy_utility_and_target_consistency():
     assert mine.opening_kills == 1 and mine.opening_deaths == 0
     assert mine.trade_kills == 1 and mine.flash_assists == 1
     assert mine.utility_damage == 20  # 300 原始伤害，仅扣掉 20 血
+
+
+def test_lobby_counts_avenged_teammates_for_one_kill():
+    cfg = load_config()
+    match = scenario()
+    sight = Sight(match, cfg, checker=AlwaysVisible())
+    target = make_mm([make_moment('kill', tags=['trade_kill'],
+                                  trade={'is_trade_kill': True, 'avenged_teammate_count': 2})])
+    lines = lobby_lines(match, A, cfg, sight, target_moments=target)
+    assert next(line for line in lines if line.is_target).trade_kills == 2
