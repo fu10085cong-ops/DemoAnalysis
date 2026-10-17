@@ -31,7 +31,7 @@ _GR = "CCSGameRulesProxy.CCSGameRules."
 PLAYER_PROPS = [
     "X", "Y", "Z", "pitch", "yaw",
     "team_num", "health", "armor_value", "is_alive",
-    "is_airborne", "is_walking", "duck_amount", "is_scoped",
+    "is_airborne", "is_walking", "duck_amount", "is_scoped", "is_in_reload",
     "active_weapon_name", "flash_duration", "last_place_name",
     "approximate_spotted_by",
     "CCSPlayerController.m_bControllingBot",
@@ -52,7 +52,7 @@ RULE_PROPS = {
     _GR + "m_eRoundWinReason": "win_reason",
 }
 _CATEGORICAL = ["active_weapon_name", "last_place_name"]
-_BOOL_PROPS = ["is_alive", "is_airborne", "is_walking", "is_scoped", "controlling_bot"]
+_BOOL_PROPS = ["is_alive", "is_airborne", "is_walking", "is_scoped", "is_in_reload", "controlling_bot"]
 
 
 class DemoParseError(Exception):

@@ -48,7 +48,7 @@ def report():
         ProblemHit(problem="slow_reaction", target="R5-kill2", weapon="ak47",
                    evidence={"ttd_ms": 875.0}, thresholds={"ttd_ms": 531.0, "source": "pro_p75"}),
         ProblemHit(problem="poor_crosshair_placement", target="R5-kill2", weapon="fiveseven",
-                   evidence={"crosshair_placement_deg": 23.04}, thresholds={"crosshair_placement_deg": 11.72}),
+                   evidence={"crosshair_initial_offset_m": 4.62}, thresholds={"crosshair_initial_offset_m": 2.34}),
         ProblemHit(problem="spray_control", target="R19-kill1", weapon="ak47",
                    evidence={"hit_pct": 15.38}, thresholds={"expected_hit_pct": 39.18}),
         ProblemHit(problem="missed_trade", target="R9", weapon=None, evidence={}, thresholds={}),
@@ -101,7 +101,7 @@ def test_value_threshold_gap_use_the_entry_problem():
     assert render("{R5-kill2.value}/{R5-kill2.threshold}/{R5-kill2.gap}", problem="slow_reaction") == \
         "875 毫秒/531 毫秒/344 毫秒"
     # 同一瞬间、不同问题取各自的键：这正是"9.7° 配错武器"一类错误的根除方式
-    assert render("{R5-kill2.threshold}", problem="poor_crosshair_placement") == "11.7°"
+    assert render("{R5-kill2.threshold}", problem="poor_crosshair_placement") == "2.3 米"
     assert render("{R19-kill1.value}/{R19-kill1.threshold}", problem="spray_control") == "15.4%/39.2%"
     _, errors = render_slots("{R19-kill1.threshold}", resolver(problem="slow_reaction"))
     assert errors and errors[0].code == "slot_unavailable"  # 该瞬间没有出枪慢命中
@@ -178,7 +178,7 @@ def test_regression_2026_10_16_sentences_render_true_values():
     counts = count_values(make_mm([*moments(), extra], rounds=30))
     assert (counts["opening_kills"], counts["saw_first_kills"]) == (2, 1)  # 两个计数口径不同，不会混用
     # 本地 M7：Five-SeveN 的交火配上 AK 的 9.7° → threshold 按命中取对应武器阈值
-    assert render("{R5-kill2.threshold}", problem="poor_crosshair_placement") == "11.7°"
+    assert render("{R5-kill2.threshold}", problem="poor_crosshair_placement") == "2.3 米"
     # flash 玩家02："其中两次随后阵亡"→ 只能写计数占位符或不写数量
     assert "chinese_number" in _check("其中两次随后阵亡。")
     # flash 汇总："整段九发只中两发"（9 发其实是后段）→ shots/hits 取整段

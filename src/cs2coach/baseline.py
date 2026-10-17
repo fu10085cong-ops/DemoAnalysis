@@ -129,6 +129,8 @@ def weapon_stats(mms: list[MatchMoments], cfg: dict) -> dict:
         out[w] = {
             "engagements": len(ms), "time_to_damage_ms": _distribution(ttd),
             "crosshair_placement_deg": _distribution([e.crosshair_placement_deg for e in reliable]),
+            "crosshair_initial_offset_m": _distribution([
+                e.crosshair_initial_offset_m for e in reliable if e.airborne_near_seen is not True]),
             "first_shot_stopped_pct": round(100 * sum(stopped) / len(stopped), 2) if stopped else None,
             "first_shot_stopped_n": len(stopped),
             "first_shot_hit_pct": round(100 * sum(hit) / len(hit), 2) if hit else None,

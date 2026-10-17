@@ -145,6 +145,8 @@ def detect_problems(mm: MatchMoments, baseline: dict | None, cfg: dict) -> Probl
             if (engagement.shots_before_seen is not None and
                     engagement.shots_before_seen >= p["max_shots_before_seen"]):
                 active.add("fired_before_seen")
+            if engagement.airborne_near_seen is True:
+                active.add("airborne_near_seen")
         if moment.kind == "death" and moment.weapon in ("hegrenade", "inferno", "molotov", "incgrenade"):
             active.add("killed_by_utility")
         return active
@@ -201,14 +203,20 @@ def detect_problems(mm: MatchMoments, baseline: dict | None, cfg: dict) -> Probl
                                 "player_seen_while_blind": e.player_seen_while_blind},
                                 {"ttd_ms": limit, "source": "pro_p75", "ttd_max_seconds": cap,
                                  "ttd_max_source": "config"})
-                cp = e.crosshair_placement_deg
+                cp = e.crosshair_initial_offset_m
                 if not _finite(cp):
                     missing("poor_crosshair_placement")
                 else:
-                    limit = threshold("poor_crosshair_placement", w, "crosshair_placement_deg", "p75")
+                    limit = threshold("poor_crosshair_placement", w, "crosshair_initial_offset_m", "p75")
                     if limit is not None and cp > limit * (1 + p["crosshair_margin_ratio"]):
-                        hit("poor_crosshair_placement", {"crosshair_placement_deg": cp},
-                            {"crosshair_placement_deg": limit, "margin_ratio": p["crosshair_margin_ratio"], "source": "pro_p75"})
+                        hit("poor_crosshair_placement", {
+                            "crosshair_initial_offset_m": cp,
+                            "crosshair_initial_deg": e.crosshair_initial_deg,
+                            "crosshair_initial_yaw_deg": e.crosshair_initial_yaw_deg,
+                            "crosshair_initial_pitch_deg": e.crosshair_initial_pitch_deg,
+                            "distance_m": c.distance if c is not None else None},
+                            {"crosshair_initial_offset_m": limit, "margin_ratio": p["crosshair_margin_ratio"],
+                             "source": "pro_p75"})
 
                 if w in automatic and (not _finite(c.distance) or c.distance <= p["spray_max_distance_m"]):
                     eligible = [s for s in e.shots if s.weapon == w and _finite(s.recoil_index)
@@ -345,6 +353,22 @@ def detect_problems(mm: MatchMoments, baseline: dict | None, cfg: dict) -> Probl
         if p["missed_trade_exclude_traded_by_other"] and record.killer_traded_by_other:
             if "missed_trade" not in disabled:
                 skipped["missed_trade/killer_traded_by_other"] += 1
+            continue
+        if record.killer_in_view_s is None:
+            missing("missed_trade")
+            continue
+        if record.killer_in_view_s < p["missed_trade_min_view_seconds"]:
+            skipped["missed_trade/killer_in_view_s"] += 1
+            continue
+        if (record.killer_first_in_view_s is None or
+                record.killer_first_in_view_s > cfg["moments"]["trade_window_seconds"] - p["missed_trade_min_react_seconds"]):
+            skipped["missed_trade/killer_first_in_view_s"] += 1
+            continue
+        if record.reloading_at_death:
+            skipped["missed_trade/reloading_at_death"] += 1
+            continue
+        if record.other_fight_s is not None:
+            skipped["missed_trade/other_fight_s"] += 1
             continue
         emit("missed_trade", f"R{record.round}", None, record.model_dump())
 
