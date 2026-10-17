@@ -81,7 +81,8 @@ def _validate_problems(cfg: dict[str, Any]) -> None:
     distance = cfg["spray_max_distance_m"]
     if type(distance) not in (int, float) or not math.isfinite(distance) or distance <= 0:
         raise ConfigError("配置项 problems.spray_max_distance_m 应为正有限数")
-    for key in ("crosshair_margin_ratio", "highlight_min_lead_s", "crosshair_airborne_lookback_seconds",
+    for key in ("slow_reaction_margin_ratio", "crosshair_margin_ratio", "crosshair_min_distance_m",
+                "overpeek_t_min_round_time_s", "highlight_min_lead_s", "crosshair_airborne_lookback_seconds",
                 "missed_trade_min_view_seconds", "missed_trade_min_react_seconds", "missed_trade_other_fight_seconds",
                 "post_plant_min_alive_seconds"):
         value = cfg[key]

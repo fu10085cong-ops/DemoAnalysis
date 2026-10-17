@@ -52,7 +52,7 @@ def test_slow_reaction_evidence_has_all_segments(cfg, baseline):
 def test_peeked_into_held_angle_disabled_but_aggravated_variants_kept(cfg, baseline):
     assert "peeked_into_held_angle" in cfg["problems"]["disabled"]
     dry = make_moment(engagement={"contact_type": "peek"}, death={"unused_grenades": ["flashbang"]})
-    over = make_moment(tags=["man_advantage"], engagement={"contact_type": "peek"})
+    over = make_moment(tags=["man_advantage"], engagement={"contact_type": "peek"}, context={"round_time_s": 30})
     found = problems(dry, baseline, cfg) | problems(over, baseline, cfg)
     assert "peeked_into_held_angle" not in found
     assert {"dry_peek_with_utility", "overpeek_in_advantage"} <= found
