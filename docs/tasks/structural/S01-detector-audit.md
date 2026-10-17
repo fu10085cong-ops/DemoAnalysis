@@ -233,3 +233,13 @@
 
 **后续**：Claude 填写 `data/audit/2026-10-17/labels.toml` 中的判定；涉及视野的条目，挑一部分请产品负责人进游戏确认。判定完成后运行 `audit_report.py`，根据准确率决定改哪些规则、停用哪些规则。
 
+
+## 判定口径：第二项 worth（S04 新增）
+
+`verdict` 只判"事实对不对"；`worth` 判"事实成立时教练值不值得把它当成失误提醒"（只在 `verdict = correct` 时填 `yes` / `no`，其余情况留空）。报告里的"有用率"按下面三类统计：
+
+- **有用**：`verdict = correct` 且 `worth = yes`；
+- **无用**：`verdict = wrong`，或者 `verdict = correct` 且 `worth = no`；
+- **未填**：`verdict = correct` 但 `worth` 为空。未填不计入有用率；`unsure` 完全不计入。
+
+分层（可疑 / 不可疑）和按两层在全部命中中的比例加权与准确率表相同，区间用 Wilson。

@@ -192,7 +192,8 @@ def review_page(problem: str, samples: list[tuple[dict, str]]) -> str:
                   row["fact_card"], "", f"程序依据：{row['basis']}", "", "证据 JSON：", "```json",
                   json.dumps({"evidence": row["evidence"], "thresholds": row["thresholds"]}, ensure_ascii=False, indent=2),
                   "```", "", f"跳转命令：`{row.get('jump_command') or '无（整场统计）'}`", "",
-                  "判定：________（correct / wrong / unsure）；原因：________；游戏内核对备注：________", ""]
+                  "判定：________（correct / wrong / unsure）；值得提醒：________（yes / no，只在 correct 时填）；"
+                  "原因：________；游戏内核对备注：________", ""]
     return "\n".join(lines).rstrip() + "\n"
 
 
@@ -209,7 +210,7 @@ def update_labels(path: Path, samples: list[tuple[dict, str]], visibility: set[s
         key = row["hit_key"]
         if key in old:
             continue
-        additions += [f"[labels.{_toml_string(key)}]", f"verdict = {_toml_string('')}",
+        additions += [f"[labels.{_toml_string(key)}]", f"verdict = {_toml_string('')}", f"worth = {_toml_string('')}",
                       f"reason = {_toml_string('')}", f"needs_ingame = {str(row['problem'] in visibility).lower()}",
                       f"note = {_toml_string('')}", f"selection = {_toml_string(selection)}", ""]
         old[key] = True
@@ -238,6 +239,7 @@ def precision_report(rows: list[dict], labels: dict) -> str:
              "| 问题 | 层 | 总命中 | 权重 | 已判定 | 正确 | 错误 | 不确定 | 准确率 | 95% 区间 |",
              "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|"]
     reasons = defaultdict(Counter)
+    worth_counts = defaultdict(Counter)
     for problem in DETECTED_PROBLEMS:
         population = {True: sum(row["problem"] == problem and bool(row["suspicious"]) for row in rows),
                       False: sum(row["problem"] == problem and not row["suspicious"] for row in rows)}
@@ -252,8 +254,24 @@ def precision_report(rows: list[dict], labels: dict) -> str:
                 verdict = entry.get("verdict", "")
                 if verdict not in ("", "correct", "wrong", "unsure"):
                     raise ValueError(f"无效判定 {key}: {verdict}")
+                worth = entry.get("worth", "")
+                if worth not in ("", "yes", "no"):
+                    raise ValueError(f"无效值得提醒判定 {key}: {worth}")
+                if worth and verdict != "correct":
+                    raise ValueError(f"值得提醒只在 correct 时填写 {key}: verdict={verdict}, worth={worth}")
                 if verdict:
                     verdicts[verdict] += 1
+                if worth:
+                    worth_counts[(problem, suspicious)]["filled"] += 1
+                if verdict == "correct":
+                    if worth == "yes":
+                        worth_counts[(problem, suspicious)]["useful"] += 1
+                    elif worth == "no":
+                        worth_counts[(problem, suspicious)]["useless"] += 1
+                    else:
+                        worth_counts[(problem, suspicious)]["unfilled"] += 1
+                elif verdict == "wrong":
+                    worth_counts[(problem, suspicious)]["useless"] += 1
                 if verdict == "wrong":
                     reasons[(problem, suspicious)][entry.get("reason") or "未填写原因"] += 1
             correct, wrong, unsure = (verdicts[v] for v in ("correct", "wrong", "unsure"))
@@ -286,6 +304,46 @@ def precision_report(rows: list[dict], labels: dict) -> str:
         lines.append("")
     if not reasons:
         lines.append("暂无已判定错误。")
+    worth_lines = []
+    for problem in DETECTED_PROBLEMS:
+        if not sum(worth_counts[(problem, s)]["filled"] for s in (True, False)):
+            continue
+        population = {True: sum(row["problem"] == problem and bool(row["suspicious"]) for row in rows),
+                      False: sum(row["problem"] == problem and not row["suspicious"] for row in rows)}
+        total = population[True] + population[False]
+        strata = {}
+        for suspicious, label in ((True, "可疑层"), (False, "不可疑层")):
+            counts = worth_counts[(problem, suspicious)]
+            useful, useless, unfilled = counts["useful"], counts["useless"], counts["unfilled"]
+            n = useful + useless
+            strata[suspicious] = {"useful": useful, "useless": useless, "unfilled": unfilled,
+                                  "p": useful / n if n else None, "n": n}
+            interval = wilson(useful, useless)
+            rate = f"{useful / n:.1%}" if n else "—"
+            ci = f"{interval[0]:.1%}–{interval[1]:.1%}" if interval else "—"
+            worth_lines.append(f"| {problem} | {label} | {n + unfilled} | {useful} | {useless} | {unfilled} | {rate} | {ci} |")
+        judged = sum(s["n"] + s["unfilled"] for s in strata.values())
+        useful = sum(s["useful"] for s in strata.values())
+        useless = sum(s["useless"] for s in strata.values())
+        unfilled = sum(s["unfilled"] for s in strata.values())
+        if total and all(population[s] == 0 or strata[s]["n"] > 0 for s in (True, False)):
+            weighted = sum(population[s] / total * strata[s]["p"] for s in (True, False) if population[s])
+            intervals = {s: wilson(strata[s]["useful"], strata[s]["useless"])
+                         for s in (True, False) if population[s]}
+            rate = f"{weighted:.1%}"
+            ci = (f"{sum(population[s] / total * intervals[s][0] for s in intervals):.1%}–"
+                  f"{sum(population[s] / total * intervals[s][1] for s in intervals):.1%}")
+        else:
+            rate = ci = "不足"
+        worth_lines.append(f"| {problem} | 整体（加权） | {judged} | {useful} | {useless} | {unfilled} | {rate} | {ci} |")
+    lines += ["", "## 有用率（事实成立且值得提醒）", ""]
+    if worth_lines:
+        lines += ["有用 = 事实成立且值得提醒；无用 = 事实错误，或事实成立但不值得提醒；未填 = 事实成立但未填值得提醒，"
+                  "不计入有用率；不确定判定完全不计入。分层和加权与准确率表相同。", "",
+                  "| 问题 | 层 | 已判定 | 有用 | 无用 | 未填 | 有用率 | 95% 区间 |",
+                  "|---|---|---:|---:|---:|---:|---:|---:|"] + worth_lines
+    else:
+        lines.append("暂无“值不值得提醒”判定。")
     return "\n".join(lines).rstrip() + "\n"
 
 
