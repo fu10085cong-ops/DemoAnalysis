@@ -2556,10 +2556,10 @@
       "player_share_pct": 15.4
     },
     "died_without_seeing": {
-      "hits": 201,
+      "hits": 189,
       "rounds": 5620,
-      "per_10_rounds": 0.36,
-      "player_share_pct": 55.0
+      "per_10_rounds": 0.34,
+      "player_share_pct": 53.1
     },
     "turned_into_flash": {
       "hits": 244,
