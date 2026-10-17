@@ -9,7 +9,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from cs2coach.audit import (hit_key, precision_report, sample_hits, scan_hit,
+from cs2coach.audit import (comparison_report, hit_key, precision_report, sample_hits, scan_hit,
                             update_labels, wilson, write_hits)
 from cs2coach.config import ConfigError, load_config
 from cs2coach.features.problems import ProblemHit
@@ -150,13 +150,67 @@ def test_precision_excludes_unsure_and_weights_population_strata():
     assert "| slow_reaction | 可疑层 | 2 | 33.3% | 2 | 1 | 1 | 0 | 50.0% |" in report
     assert "| slow_reaction | 不可疑层 | 4 | 66.7% | 4 | 2 | 1 | 1 | 66.7% |" in report
     assert "| slow_reaction | 整体（加权） | 6 | 100.0% | 6 | 3 | 2 | 1 | 61.1% |" in report
-    assert "61.1% | 18.7%–100.0% |" in report
+    from cs2coach.audit import wilson
+    a, b = wilson(1, 1), wilson(2, 1)
+    interval = f"{(a[0] / 3 + 2 * b[0] / 3):.1%}–{(a[1] / 3 + 2 * b[1] / 3):.1%}"
+    assert f"61.1% | {interval} |" in report
     assert "视野不准：1" in report and "时间不准：1" in report
     assert "0.0%–0.0%" not in report
     lo, hi = wilson(1, 1)
     assert math.isclose(lo, 0.09453120573423068)
     assert math.isclose(hi, 0.9054687942657693)
     assert wilson(0, 0) is None
+
+
+def test_wilson_weighted_interval_does_not_collapse_at_extremes():
+    rows = [record("wrong", suspicious=True), record("right", suspicious=False)]
+    labels = {"wrong": {"verdict": "wrong"}, "right": {"verdict": "correct"}}
+    report = precision_report(rows, labels)
+    a, b = wilson(0, 1), wilson(1, 0)
+    assert f"50.0% | {(a[0] + b[0]) / 2:.1%}–{(a[1] + b[1]) / 2:.1%}" in report
+
+
+def test_comparison_matches_hit_keys_and_lists_removed_correct():
+    before = [record("keep"), record("wrong"), record("correct")]
+    after = [before[0], record("new")]
+    labels = {"keep": {"verdict": "correct"}, "wrong": {"verdict": "wrong"},
+              "correct": {"verdict": "correct", "note": "应当保留"}}
+    report = comparison_report(before, after, labels)
+    assert "| slow_reaction | 3 | 66.7% | 1 | 100.0% | 1 | 1 | 0 | 1 |" in report
+    assert "`correct`：应当保留" in report
+    assert "`wrong`：" not in report
+
+
+def test_report_cli_reads_labels_from_old_directory(tmp_path, monkeypatch):
+    from scripts import audit_report
+
+    old = tmp_path / "data/audit/before"
+    new = tmp_path / "data/audit/after"
+    old.mkdir(parents=True)
+    new.mkdir(parents=True)
+    write_hits(old / "hits.jsonl", [record("keep"), record("removed")])
+    write_hits(new / "hits.jsonl", [record("keep")])
+    (old / "labels.toml").write_text('[labels.keep]\nverdict = "correct"\n'
+                                      '[labels.removed]\nverdict = "wrong"\n', encoding="utf-8")
+    monkeypatch.setattr(audit_report, "ROOT", tmp_path)
+    assert audit_report.main(["--name", "after", "--labels-from", "before"]) == 0
+    text = (new / "precision.md").read_text(encoding="utf-8")
+    assert "# 改动前后同批判定对比" in text
+    assert "| slow_reaction | 2 | 50.0% | 1 | 100.0% | 1 | 0 |" in text
+    assert not (new / "labels.toml").exists()
+
+
+@pytest.mark.parametrize("body", [
+    '[problems.exclusions]\nthrough_smoke = ["unknown_problem"]\n',
+    '[problems]\nmax_shots_before_seen = 0\n',
+    '[problems]\nmoving_shot_margin = -0.1\n',
+    '[problems]\nmissed_trade_exclude_traded_by_other = 1\n',
+])
+def test_problem_config_rejects_invalid_values(tmp_path, body):
+    path = tmp_path / "bad.toml"
+    path.write_text(body, encoding="utf-8")
+    with pytest.raises(ConfigError):
+        load_config(path)
 
 
 def test_overall_precision_is_insufficient_until_each_nonempty_stratum_is_judged():

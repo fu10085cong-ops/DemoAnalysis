@@ -47,6 +47,6 @@ def render_problem_report(report: ProblemReport, frequencies: list[FrequencyRow]
     if not report.hits:
         lines.extend(["未命中已启用的检测规则。", ""])
     lines.extend(["## 停用与缺少数据", "", "停用：" + ("、".join(report.disabled) or "无"), "",
-                  "skipped 按问题统计缺少必要数据或职业阈值而无法判断的次数；同类问题可包含交火和整场段。", ""])
+                  "skipped 中问题编号表示缺少数据或阈值；问题/条件表示命中被该条件排除的次数。", ""])
     lines.extend([f"- {pid}：{n}" for pid, n in report.skipped.items()] or ["无跳过记录。"])
     return "\n".join(lines) + "\n"

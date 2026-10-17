@@ -47,9 +47,13 @@ def evidence_sentence(hit: ProblemHit) -> str:
         return text + "。"
     if pid == "poor_crosshair_placement":
         return (f"准星从看见到首次命中转过 {_number(e.get('crosshair_placement_deg'))}°，"
-                f"高于职业同武器 75 分位 {_number(t.get('crosshair_placement_deg'))}°。")
+                f"高于职业同武器 75 分位 {_number(t.get('crosshair_placement_deg'))}° "
+                f"乘以 {1 + t.get('margin_ratio', 0):.2f}。")
     if pid == "shot_while_moving":
-        return "交火第一枪未停稳，且没有命中。"
+        if e.get("first_seen_shot_speed_ratio") is None or t.get("min_speed_ratio") is None:
+            return "交火第一枪未停稳，且没有命中。"
+        return (f"看见对手后的第一枪未停稳，且没有命中；速度比 {e['first_seen_shot_speed_ratio']:.3f}，"
+                f"不低于配置下限 {t['min_speed_ratio']:.3f}。")
     if pid == "peeked_into_held_angle":
         return "接触类型检测为主动拉出、对手架点（近似判断）。"
     if pid == "dry_peek_with_utility":
@@ -57,7 +61,7 @@ def evidence_sentence(hit: ProblemHit) -> str:
     if pid == "overpeek_in_advantage":
         return "有人数优势标签，接触类型为主动拉出（近似），且死亡后未被补回。"
     if pid == "died_without_seeing":
-        return "有未看到对手标签，且不是穿墙、穿烟，死亡时没有被闪。"
+        return "有未看到对手标签，且不是穿墙、穿烟、道具击杀，死亡时没有被闪。"
     if pid == "turned_into_flash":
         return "记录显示死亡时仍处于致盲中，投掷来源满足对手闪光的检测条件。"
     if pid == "missed_trade":
@@ -72,7 +76,7 @@ def evidence_sentence(hit: ProblemHit) -> str:
     if pid == "awp_unscoped_shot":
         return f"AWP 第一枪未开镜，距离 {_number(e.get('distance_m'))} 米，大于配置阈值 {_number(t.get('distance_m'))} 米。"
     if pid == "deagle_moving_shot":
-        return "沙鹰交火第一枪未停稳。"
+        return "沙鹰看见对手后的第一枪未停稳。"
     if pid == "glock_long_range":
         return f"Glock 交火距离 {_number(e.get('distance_m'))} 米，高于职业距离 90 分位 {_number(t.get('distance_m'))} 米。"
     if pid == "spray_control":
@@ -87,7 +91,8 @@ def evidence_sentence(hit: ProblemHit) -> str:
     if pid == "flash_assist":
         return "该助攻记录为闪光助攻。"
     if pid == "won_duel_seen_first":
-        return "击杀同时具有先看见和先开枪标签（近似指标）。"
+        return (f"击杀时先看见 {_number(e.get('seen_first_lead_s'))} 秒、先开枪 "
+                f"{_number(e.get('first_shot_lead_s'))} 秒，均不低于 {_number(t.get('min_lead_s'))} 秒。")
     return f"证据：{json.dumps(e, ensure_ascii=False)}；阈值：{json.dumps(t, ensure_ascii=False)}。"
 
 

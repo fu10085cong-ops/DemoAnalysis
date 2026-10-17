@@ -46,7 +46,7 @@ def bullets(n=6, start=3, hit=False, stopped=True, weapon="ak47"):
 # 每个已实现的瞬间规则有一个命中与一个仅改变必要条件的不命中样本。
 CASES = [
     ("slow_reaction", dict(engagement={"time_to_damage_s": .6}), dict(engagement={"time_to_damage_s": .5})),
-    ("poor_crosshair_placement", dict(engagement={"crosshair_placement_deg": 11}), dict(engagement={"crosshair_placement_deg": 10})),
+    ("poor_crosshair_placement", dict(engagement={"crosshair_placement_deg": 11.5}), dict(engagement={"crosshair_placement_deg": 10.5})),
     ("shot_while_moving", dict(engagement={"first_shot_stopped": False}), dict(engagement={"first_shot_stopped": False, "first_shot_hit": True})),
     ("peeked_into_held_angle", dict(engagement={"contact_type": "peek"}), dict(engagement={"contact_type": "held"})),
     ("dry_peek_with_utility", dict(engagement={"contact_type": "peek"}, death={"unused_grenades": ["flashbang"]}),
@@ -67,7 +67,9 @@ CASES = [
      dict(engagement={"shots": bullets(n=3, start=1, stopped=False)})),
     ("good_trade", dict(kind="kill", tags=["trade_kill"]), dict(kind="kill", tags=[])),
     ("flash_assist", dict(kind="assist", assist={"flash_assist": True}), dict(kind="assist", assist={"flash_assist": False})),
-    ("won_duel_seen_first", dict(kind="kill", tags=["saw_opponent_first", "shot_first"]), dict(kind="kill", tags=["shot_first"])),
+    ("won_duel_seen_first", dict(kind="kill", tags=["saw_opponent_first", "shot_first"],
+                                 engagement={"seen_first_lead_s": .06, "first_shot_lead_s": .06}),
+     dict(kind="kill", tags=["shot_first"])),
 ]
 
 
@@ -85,12 +87,91 @@ def test_each_moment_rule_has_both_sides(pid, positive, negative, cfg, baseline)
 
 def test_missed_trade_records_are_preserved(cfg, baseline):
     record = MissedTrade(round=5, tick=100, teammate=B, killer=C, distance=200, killer_traded_by_other=True)
-    report = detect_problems(make_mm(missed_trades=[record, record]), baseline, cfg)
+    mm = make_mm(missed_trades=[record, record])
+    report = detect_problems(mm, baseline, cfg)
+    assert mm.missed_trades == [record, record]
+    assert report.hits == []
+    assert report.skipped["missed_trade/killer_traded_by_other"] == 2
+    cfg["problems"]["missed_trade_exclude_traded_by_other"] = False
+    report = detect_problems(mm, baseline, cfg)
     assert len(report.hits) == 2
     assert report.hits[0].target == "R5"
     assert report.hits[0].weapon is None
     assert report.hits[0].evidence == {"weapon": None, **record.model_dump()}
     assert not detect_problems(make_mm(), baseline, cfg).hits
+
+
+@pytest.mark.parametrize("condition,pid,positive", [
+    ("through_smoke", "slow_reaction", {"through_smoke": True, "engagement": {"time_to_damage_s": .8}}),
+    ("wallbang", "peeked_into_held_angle", {"wallbang": True, "engagement": {"contact_type": "peek"}}),
+    ("player_blinded_in_fight", "shot_while_moving", {"engagement": {"first_shot_stopped": False,
+        "player_blind": blind()}}),
+    ("opponent_blinded_by_own_side", "peeked_into_held_angle", {"engagement": {"contact_type": "peek",
+        "opponent_blind": blind("teammate")}}),
+    ("killed_by_utility", "died_without_seeing", {"weapon": "inferno", "tags": ["died_without_seeing"]}),
+    ("fired_before_seen", "slow_reaction", {"engagement": {"time_to_damage_s": .8,
+        "shots_before_seen": 2}}),
+])
+def test_each_exclusion_and_counter(condition, pid, positive, cfg, baseline):
+    cfg["problems"]["disabled"] = []
+    moment = make_moment(**positive)
+    report = detect_problems(make_mm([moment]), baseline, cfg)
+    assert pid not in {h.problem for h in report.hits}
+    assert report.skipped[f"{pid}/{condition}"] == 1
+    cfg["problems"]["exclusions"][condition] = []
+    report = detect_problems(make_mm([moment]), baseline, cfg)
+    assert pid in {h.problem for h in report.hits}
+    assert f"{pid}/{condition}" not in report.skipped
+
+
+def test_first_seen_shot_and_threshold_margins(cfg, baseline):
+    cfg["problems"]["disabled"] = []
+    def problems(shots, **changes):
+        m = make_moment(engagement={"shots": shots, **changes})
+        return {h.problem for h in detect_problems(make_mm([m]), baseline, cfg).hits}
+    unseen = make_shot(tick=80, seen_opponent=False, stopped=False, speed_ratio=.5)
+    assert "shot_while_moving" not in problems([unseen])
+    seen_slow = make_shot(tick=90, stopped=False, speed_ratio=.38)
+    assert "shot_while_moving" in problems([unseen, seen_slow])
+    assert "shot_while_moving" in problems([unseen, seen_slow.model_copy(update={"speed_ratio": .374})])
+    assert "shot_while_moving" not in problems([unseen, seen_slow.model_copy(update={"speed_ratio": .36})])
+    assert "shot_while_moving" not in problems([unseen, seen_slow.model_copy(update={"hit": True})])
+    assert "deagle_moving_shot" not in {h.problem for h in detect_problems(make_mm([
+        make_moment(weapon="deagle", engagement={"shots": [unseen]})]), baseline, cfg).hits}
+    assert "poor_crosshair_placement" not in problems([seen_slow], crosshair_placement_deg=10.5)
+    assert "poor_crosshair_placement" in problems([seen_slow], crosshair_placement_deg=11.5)
+
+
+def test_smoke_does_not_exclude_moving_shot_rules(cfg, baseline):
+    cfg["problems"]["disabled"] = []
+    ak = make_moment(through_smoke=True, engagement={"first_shot_stopped": False})
+    deagle = make_moment(weapon="deagle", through_smoke=True,
+                         engagement={"first_shot_stopped": False})
+    for moment, pid in ((ak, "shot_while_moving"), (deagle, "deagle_moving_shot")):
+        report = detect_problems(make_mm([moment]), baseline, cfg)
+        assert pid in {h.problem for h in report.hits}
+        assert f"{pid}/through_smoke" not in report.skipped
+
+
+def test_fact_card_distinguishes_first_seen_shot():
+    from cs2coach.report.facts import moment_facts
+    before = make_shot(tick=80, seen_opponent=False, stopped=True)
+    after = make_shot(tick=90, seen_opponent=True, stopped=False, speed_ratio=.5)
+    m = make_moment(engagement={"shots": [before, after], "shots_before_seen": 1,
+                                "first_shot_stopped": True, "first_seen_shot_stopped": False})
+    lines = moment_facts(m, {})
+    assert any("看见对手后的第一枪：未停稳" in line for line in lines)
+
+
+def test_highlight_requires_both_leads(cfg, baseline):
+    cfg["problems"]["disabled"] = []
+    def found(seen, shot):
+        m = make_moment(kind="kill", tags=["saw_opponent_first", "shot_first"],
+                        engagement={"seen_first_lead_s": seen, "first_shot_lead_s": shot})
+        return "won_duel_seen_first" in {h.problem for h in detect_problems(make_mm([m]), baseline, cfg).hits}
+    assert not found(.03, .06)
+    assert not found(.06, .03)
+    assert found(.06, .06)
 
 
 @pytest.mark.parametrize("tag", ["after_round_end", "teamkill", "victim_is_bot", "world_damage"])

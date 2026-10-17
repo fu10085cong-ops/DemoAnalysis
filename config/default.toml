@@ -297,6 +297,24 @@ spray_moving_min_recoil_index = 1
 spray_moving_min_shots = 4
 # 移动扫射中未停稳子弹的比例阈值（待用数据校准）
 spray_moving_ratio = 0.5
+# 看见对手前至少开出多少枪时，不判断出枪慢和准星
+max_shots_before_seen = 2
+# 看见后首枪速度相对急停阈值的余量
+moving_shot_margin = 0.10
+# 准星转角相对职业 75 分位的余量
+crosshair_margin_ratio = 0.10
+# 先看见、先开枪至少领先的秒数；0.045 让 64 tick 下的 3 tick（0.047 秒）刚好够格
+highlight_min_lead_s = 0.045
+# 已被其他队友补上的记录不作为漏补枪问题
+missed_trade_exclude_traded_by_other = true
+
+[problems.exclusions]
+through_smoke = ["slow_reaction", "poor_crosshair_placement", "spray_control", "spray_while_moving", "peeked_into_held_angle", "dry_peek_with_utility", "overpeek_in_advantage", "won_duel_seen_first", "died_without_seeing"]
+wallbang = ["peeked_into_held_angle", "dry_peek_with_utility", "overpeek_in_advantage", "died_without_seeing"]
+player_blinded_in_fight = ["slow_reaction", "poor_crosshair_placement", "spray_control", "spray_while_moving", "shot_while_moving", "peeked_into_held_angle", "dry_peek_with_utility"]
+opponent_blinded_by_own_side = ["peeked_into_held_angle", "overpeek_in_advantage"]
+killed_by_utility = ["died_without_seeing", "peeked_into_held_angle"]
+fired_before_seen = ["slow_reaction", "poor_crosshair_placement"]
 
 [audit]
 # 接近接触速度、首枪停稳阈值的相对范围

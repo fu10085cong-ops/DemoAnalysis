@@ -24,8 +24,31 @@ def load_config(path: Path | None = None) -> dict[str, Any]:
     _validate_visibility(cfg["visibility"])
     _validate_report_card(cfg["report"]["card"])
     _validate_audit(cfg["audit"])
+    _validate_problems(cfg["problems"])
     _validate_economy(cfg["economy"])
     return cfg
+
+
+def _validate_problems(cfg: dict[str, Any]) -> None:
+    from cs2coach.features.problems import PROBLEMS
+
+    conditions = {"through_smoke", "wallbang", "player_blinded_in_fight",
+                  "opponent_blinded_by_own_side", "killed_by_utility", "fired_before_seen"}
+    exclusions = cfg["exclusions"]
+    if (not isinstance(exclusions, dict) or set(exclusions) != conditions or any(
+            not isinstance(ids, list) or
+            any(not isinstance(pid, str) or pid not in PROBLEMS for pid in ids) or
+            len(ids) != len(set(ids))
+            for ids in exclusions.values())):
+        raise ConfigError("配置项 problems.exclusions 的条件名或问题编号无效")
+    if type(cfg["max_shots_before_seen"]) is not int or cfg["max_shots_before_seen"] < 1:
+        raise ConfigError("配置项 problems.max_shots_before_seen 应为正整数")
+    for key in ("moving_shot_margin", "crosshair_margin_ratio", "highlight_min_lead_s"):
+        value = cfg[key]
+        if type(value) not in (int, float) or not math.isfinite(value) or value < 0:
+            raise ConfigError(f"配置项 problems.{key} 应为非负有限数")
+    if type(cfg["missed_trade_exclude_traded_by_other"]) is not bool:
+        raise ConfigError("配置项 problems.missed_trade_exclude_traded_by_other 应为布尔值")
 
 
 def _validate_economy(cfg: dict[str, Any]) -> None:

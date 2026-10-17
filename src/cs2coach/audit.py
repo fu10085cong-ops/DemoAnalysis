@@ -234,7 +234,7 @@ def precision_report(rows: list[dict], labels: dict) -> str:
     hits = {row["hit_key"]: row for row in rows}
     lines = ["# 检测规则抽样准确率", "",
              "可疑命中优先抽样，故按可疑与不可疑两层分别统计，再按两层在全部命中中的比例加权得到整体准确率。"
-             "两层使用 Wilson 95% 区间；整体使用分层方差的正态近似区间。未填写与不确定判定不计入准确率。", "",
+             "两层使用 Wilson 95% 区间；整体区间由两层 Wilson 上下界分别按权重相加，偏保守。未填写与不确定判定不计入准确率。", "",
              "| 问题 | 层 | 总命中 | 权重 | 已判定 | 正确 | 错误 | 不确定 | 准确率 | 95% 区间 |",
              "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|"]
     reasons = defaultdict(Counter)
@@ -271,11 +271,11 @@ def precision_report(rows: list[dict], labels: dict) -> str:
         unsure = sum(stratum["unsure"] for stratum in strata.values())
         if total and all(population[s] == 0 or strata[s]["n"] > 0 for s in (True, False)):
             weighted = sum(population[s] / total * strata[s]["p"] for s in (True, False) if population[s])
-            variance = sum((population[s] / total) ** 2 * strata[s]["p"] * (1 - strata[s]["p"]) / strata[s]["n"]
-                           for s in (True, False) if population[s])
-            margin = 1.959963984540054 * math.sqrt(variance)
+            intervals = {s: wilson(strata[s]["correct"], strata[s]["wrong"])
+                         for s in (True, False) if population[s]}
             precision = f"{weighted:.1%}"
-            ci = f"{max(0, weighted - margin):.1%}–{min(1, weighted + margin):.1%}"
+            ci = (f"{sum(population[s] / total * intervals[s][0] for s in intervals):.1%}–"
+                  f"{sum(population[s] / total * intervals[s][1] for s in intervals):.1%}")
         else:
             precision = ci = "不足"
         lines.append(f"| {problem} | 整体（加权） | {total} | {'100.0%' if total else '—'} | {judged} | {correct} | {wrong} | {unsure} | {precision} | {ci} |")
@@ -286,4 +286,51 @@ def precision_report(rows: list[dict], labels: dict) -> str:
         lines.append("")
     if not reasons:
         lines.append("暂无已判定错误。")
+    return "\n".join(lines).rstrip() + "\n"
+
+
+def _weighted_accuracy(rows: list[dict], labels: dict) -> tuple[int, str]:
+    """沿用审计报告的可疑/不可疑分层权重，只统计 correct 和 wrong。"""
+    counts = Counter(bool(row["suspicious"]) for row in rows)
+    total = len(rows)
+    judged = Counter()
+    values = {}
+    insufficient = False
+    for layer in (True, False):
+        verdicts = Counter(labels.get(row["hit_key"], {}).get("verdict") for row in rows
+                           if bool(row["suspicious"]) == layer)
+        n = verdicts["correct"] + verdicts["wrong"]
+        judged.update({layer: n + verdicts["unsure"]})
+        if counts[layer] and not n:
+            insufficient = True
+        values[layer] = verdicts["correct"] / n if n else 0
+    if insufficient:
+        return sum(judged.values()), "不足"
+    return sum(judged.values()), f"{sum(counts[layer] / total * values[layer] for layer in (True, False)):.1%}" if total else "—"
+
+
+def comparison_report(before: list[dict], after: list[dict], labels: dict) -> str:
+    """旧判定按稳定 hit_key 对齐新结果；新增命中没有判定。"""
+    old = {row["hit_key"]: row for row in before}
+    new = {row["hit_key"]: row for row in after}
+    lines = ["# 改动前后同批判定对比", "",
+             "准确率按各自全部命中的可疑/不可疑层比例加权；unsure 不计入准确率。新增命中尚无判定。", "",
+             "| 问题 | 改前已判定 | 改前加权准确率 | 改后已判定 | 改后加权准确率 | 移除 wrong | 移除 correct | 移除 unsure | 新增未判定 |",
+             "|---|---:|---:|---:|---:|---:|---:|---:|---:|"]
+    removed_correct = []
+    for problem in DETECTED_PROBLEMS:
+        old_rows = [row for row in before if row["problem"] == problem]
+        new_rows = [row for row in after if row["problem"] == problem]
+        old_n, old_rate = _weighted_accuracy(old_rows, labels)
+        new_n, new_rate = _weighted_accuracy(new_rows, labels)
+        removed = Counter(labels.get(key, {}).get("verdict") for key, row in old.items()
+                          if row["problem"] == problem and key not in new)
+        added = sum(row["problem"] == problem and key not in old for key, row in new.items())
+        lines.append(f"| {problem} | {old_n} | {old_rate} | {new_n} | {new_rate} | "
+                     f"{removed['wrong']} | {removed['correct']} | {removed['unsure']} | {added} |")
+        removed_correct.extend((key, labels[key].get("note", "")) for key, row in old.items()
+                               if row["problem"] == problem and key not in new
+                               and labels.get(key, {}).get("verdict") == "correct")
+    lines += ["", "## 移除的 correct（需复查）", ""]
+    lines += [f"- `{key}`：{note}" for key, note in removed_correct] or ["无。"]
     return "\n".join(lines).rstrip() + "\n"

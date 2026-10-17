@@ -104,6 +104,12 @@ def _engagement_facts(m: Moment, names: Mapping[int, str]) -> list[str]:
         if e.first_shot_stopped is not None:
             first.append("开第一枪时" + ("已停稳" if e.first_shot_stopped else "未停稳"))
         out.append(shot + ("；" + "，".join(first) if first else "") + "。")
+        first_seen_shot = next((s for s in e.shots if s.seen_opponent is True), None)
+        had_unseen_shot = first_seen_shot is not None and any(
+            s.tick < first_seen_shot.tick for s in e.shots)
+        if (had_unseen_shot and e.first_seen_shot_stopped is not None
+                and e.first_seen_shot_stopped != e.first_shot_stopped):
+            out.append("看见对手后的第一枪：" + ("已停稳" if e.first_seen_shot_stopped else "未停稳") + "。")
     if _known(e.time_to_damage_s):
         parts = []
         for label, value in (("看见→开枪", e.seen_to_first_shot_s), ("开枪→命中", e.first_shot_to_damage_s)):

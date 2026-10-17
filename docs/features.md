@@ -32,6 +32,7 @@
 | 指标 | 定义 | 准确度 |
 |---|---|---|
 | `shots_fired` / `shots_hit` / `first_shot_hit` | 这次交火中瞄准对手的开枪数、同一 tick 对对手造成伤害的开枪数、第一枪是否命中 | 命中准确；开枪数依赖目标判断（近似） |
+| `first_seen_shot_stopped` / `first_seen_shot_hit` | 交火中开枪前一 tick 已看见对手的第一发子弹是否停稳、命中；没有这样的子弹时为空。与整次交火的 `first_shot_*` 分开记录 | 视野受烟雾等动态遮挡影响 |
 | `damage_dealt` / `damage_taken` | 这次交火中双方实际扣掉的血量（不是武器原始伤害） | 准确（与记分板总伤害相差约 1%，原因未查明，见下） |
 | `first_shot_lead_s` | 对手第一枪的 tick 减去自己第一枪的 tick（秒）；正数表示自己先开枪 | 近似（依赖目标判断） |
 | 急停 `shots[].stopped` | 开枪时水平速度 < 武器最高速度 × `accurate_speed_ratio`（34%，Leetify 口径）；开镜按开镜速度，开镜状态取开枪前一 tick | 速度准确（坐标差分）；各武器最高速度已用样本核对；开镜状态见 fields.md 陷阱 23 |
@@ -133,10 +134,11 @@
 `features/problems.py` 登记 `docs/problem_catalog.md` 的全部 25 个编号，实际检测以任务 005 的明确表格为准，共 19 个编号、20 种检测（压枪含单次交火和整场）。命中只表示满足必要条件，并不自动认定为失误；AI 从命中里选取重点并讲解，由结构化检查器核对。
 
 - 交火武器直接复用基准的认定函数。枪法与距离规则分别使用同武器职业 p75 / Glock 距离 p90；缺失武器或阈值不会套用其他武器，计入 `skipped`。没有基准仍检测通用规则。
-- TTD 排除烟雾、首次可见时被闪白、缺失数据和达到最大等待时长的样本；死亡还要求对手有 TTD 且更短。其他规则按任务表分别检查首枪、接触类型、人数标签、补枪、死亡道具、致盲归属及亮点。
+- TTD 排除烟雾、首次可见时被闪白、缺失数据和达到最大等待时长的样本；死亡还要求对手有 TTD 且更短。`[problems.exclusions]` 按条件统一排除不适用的问题：穿烟、穿墙、交火中本人被闪、对手被己方闪、道具击杀，以及看见前至少开出 `max_shots_before_seen` 枪。每次排除在 `skipped` 里按“问题/条件”计数。原有的没看见就被打死规则仍要求死亡时没被闪。
+- 开枪时没停稳、沙鹰移动开枪使用看见对手后的第一枪；前者还要求未命中，且速度比不低于 `accurate_speed_ratio × (1 + moving_shot_margin)`。准星转角要超过职业 75 分位乘以 `1 + crosshair_margin_ratio`。先发现赢对枪要求先看见和先开枪均至少领先 `highlight_min_lead_s`。已被其他队友补上的漏补记录仍保留在 `missed_trades`，默认不计为问题命中。
 - 单次压枪只取开枪前一 tick 看见这次交火对手的后段子弹，逐发匹配职业连射段命中率后求平均；混合武器不合并。未看见及视野不可用的子弹被排除，过滤后发数不足则不评价，证据记录 `excluded_unseen_shots`。整场则复用基准 `spray_stats`，按每发实际武器、相同发数段分别比较，默认由 `spray_match_enabled=false` 关闭。两者都要求足够子弹，差值使用百分点；等于差值阈值不命中。移动扫射使用同一视野过滤并排除首枪，停稳数据不完整时不推断。
-- `[problems]` 集中保存阈值和停用列表。默认停用 `died_without_seeing`、`turned_into_flash`、`weapon_not_ready`、`spray_while_moving`、`awp_unscoped_shot`。视野误判已在 018 明显减少，但 `died_without_seeing` 仍待产品负责人根据新频率审查，暂不启用；移动扫射、AWP 未开镜及整场压枪待数据校准；被闪后阵亡、拉栓期间交火按目录降为背景，事实卡照常显示。`awp_moving_shot` 由通用移动首枪规则覆盖。目录待开发项、`awp_close_range_duel`、`other` 仅登记，不检测；AWP 未开镜规则仅检测死亡。检测条件和原有阈值不变。
-- 每条 `ProblemHit` 保留 target、交火武器、判断所用的 evidence 和 thresholds（数值与来源）；子弹序列和道具列表因证据字典只允许标量，编码为 JSON 字符串。`ProblemReport` 同时记录职业来源、停用编号及缺少数据的计数；不满足条件和样本不足不计作缺少数据。
+- `[problems]` 集中保存阈值和停用列表。默认停用 `died_without_seeing`、`turned_into_flash`、`weapon_not_ready`、`spray_while_moving`、`awp_unscoped_shot`。视野误判已在 018 明显减少，但 `died_without_seeing` 仍待产品负责人根据新频率审查，暂不启用；移动扫射、AWP 未开镜及整场压枪待数据校准；被闪后阵亡、拉栓期间交火按目录降为背景，事实卡照常显示。`awp_moving_shot` 由通用移动首枪规则覆盖。目录待开发项、`awp_close_range_duel`、`other` 仅登记，不检测；AWP 未开镜规则仅检测死亡。
+- 每条 `ProblemHit` 保留 target、交火武器、判断所用的 evidence 和 thresholds（数值与来源）；子弹序列和道具列表因证据字典只允许标量，编码为 JSON 字符串。`ProblemReport` 同时记录职业来源、停用编号、缺少数据的计数及按“问题/条件”统计的排除次数；不满足条件和样本不足不计作缺少数据。
 - `problem_frequency()` 对已实现、启用的非亮点问题计算本场次数，零命中也列出，排除 `match` 目标。职业频率从基准原始 `hits / rounds` 计算，预期次数 λ 为职业频率乘以本场在场回合数（`MatchMoments.rounds_played`：总回合数减去中途掉线、重连前不在场的回合，fields.md 陷阱 24）；多出次数为本场次数减 λ，偶然概率为泊松分布 P(X ≥ 本场次数 | λ)。偶然概率 < `frequency_max_chance`（默认 0.05）且多出次数 ≥ `frequency_min_excess`（默认 2）才突出；职业频率缺失或为零时不判突出。倍数仅作展示。突出项在前，各组按多出次数降序排序。
 - `analyze` 无需 `--ai` 即在 `<输出根目录>/<玩家名>_<SteamID64>/<比赛名>/` 生成（按 steamid 归档：已有以 `_<SteamID64>` 结尾的玩家文件夹时沿用，同一个人在不同平台的名字不同也归到一处） `moments.json`、`facts.md` 和 `problems.md`。频率表展示本场、预期、多出、偶然概率和倍数，突出项加粗；多出次数大于 0 但不突出的标为“次数较少，需要更多比赛确认”，多出次数小于或等于 0 的标为“不高于职业水平”，不作为问题提出。其后列出命中证据、停用项和 skipped。重新运行会把旧 `report.md` 与 `submission.json` 按文件修改时间移入 `历史版本/`。背景项登记于 `CONTEXT_ONLY`，不单独报为问题；不改变事实卡和原始指标。
 

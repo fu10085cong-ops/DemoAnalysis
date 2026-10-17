@@ -12,6 +12,7 @@
   - **武器专项**：先覆盖 AK-47、M4A4、M4A1-S、AWP、USP-S、Glock-18、Desert Eagle 七把武器。其他武器（冲锋枪、霰弹枪、SSG 等）暂时只套用通用问题，以后再补。
 - **枪法类问题的阈值按武器分别设定**：同一条"出枪慢"，AWP 和 Glock 的标准不同。
 - **交火武器的认定**：目标玩家在这次交火中第一枪所用的武器；没开枪时，用事件发生时手持的武器。
+- **统一排除**：具体问题清单以 `config/default.toml` 的 `[problems.exclusions]` 为准。穿烟排除出枪慢、准星、压枪、扫射时移动、三类拉出、先发现先开枪（以及原本排除的没看见就被打死）；穿墙排除三类拉出（以及没看见就被打死）；本人交火中被闪排除出枪慢、准星、压枪、扫射时移动、开枪时没停稳、拉出撞架点和有道具直接拉出；对手被己方闪排除拉出撞架点和人数优势冒进；道具击杀排除没看见就被打死和拉出撞架点。看见前至少开 2 枪排除出枪慢和准星。穿烟不排除移动首枪、沙鹰移动开枪。
 - 阈值来源：ESL Pro League S24 的 15 张图（职业 150 人次）与 5E / 完美 23 场（路人 229 人次）的逐次交火统计（2026-10-15）。下文的"职业 / 路人"数字都出自这批数据。
 - **正式阈值以 `src/cs2coach/baselines/pro_sample.json` 为准**（由 `scripts/build_baseline.py` 生成，任务 004）。下文表格是可行性验证时的统计，口径略有不同（例如交火次数没有计入未开枪的交火），数值与正式基准大体一致，仅供阅读。
 - 标注 **〔待开发〕** 的问题需要新的检测，标注 **〔待核实〕** 的武器特性来自常识，实现前要用 demo 数据或游戏文件核实。
@@ -24,9 +25,9 @@
 
 | 编号 | 名称 | 适用 | 前提条件 |
 |---|---|---|---|
-| `slow_reaction` | 出枪慢 | 死亡、击杀 | `time_to_damage_s` 有值，`visibility_note` 不是 `smoke`；TTD > 该武器的职业逐次 75 分位；死亡时还要求对手的 TTD 比自己短 |
-| `poor_crosshair_placement` | 准星没提前放好 | 死亡、击杀 | `crosshair_placement_deg` > 该武器的职业 75 分位 |
-| `shot_while_moving` | 开枪时没停稳 | 死亡 | 交火第一枪没停稳（`first_shot_stopped` 为 False），并且没打中（`first_shot_hit` 为 False） |
+| `slow_reaction` | 出枪慢 | 死亡、击杀 | `time_to_damage_s` 有值，`visibility_note` 不是 `smoke`；TTD > 该武器的职业逐次 75 分位；死亡时还要求对手的 TTD 比自己短；看见前开枪少于 2 发 |
+| `poor_crosshair_placement` | 准星没提前放好 | 死亡、击杀 | `crosshair_placement_deg` > 该武器的职业 75 分位 × 1.10；看见前开枪少于 2 发 |
+| `shot_while_moving` | 开枪时没停稳 | 死亡 | 看见对手后的第一枪未停稳、未命中，且速度比 ≥ 0.34 × 1.10 = 0.374 |
 
 ### 1.2 交火处理
 
@@ -35,14 +36,14 @@
 | `peeked_into_held_angle` | 主动拉出撞上对手架点 | 死亡 | `contact_type == "peek"` | 零和指标，职业也常见 | 中：约一半交火判断不出拉出还是架点 |
 | `dry_peek_with_utility` | 身上有道具却直接拉出 | 死亡 | `contact_type == "peek"`；身上有闪光或烟；交火中对手没被闪 | 拉出被杀时身上还有道具：职业 41%，路人 51% | 中 |
 | `overpeek_in_advantage` | 人数优势时冒进 | 死亡 | `man_advantage`；`contact_type == "peek"`；没被补回 | 优势局阵亡中主动拉出：职业 8%，路人 9% | 中 |
-| `died_without_seeing` | 没看见对手就被打死 | 死亡 | `died_without_seeing`；不是穿墙或穿烟；死时没被闪 | — | **低：已发现"看到部分模型却判为没看到"，视野修正前只作背景** |
+| `died_without_seeing` | 没看见对手就被打死 | 死亡 | `died_without_seeing`；不是穿墙、穿烟或道具击杀；死时没被闪 | — | **低：已发现"看到部分模型却判为没看到"，视野修正前只作背景** |
 | `turned_into_flash` | 被对手闪中后被击杀 | 死亡 | 死时被闪，且闪光不是队友扔的 | — | 中：ESL 的投掷者靠重建，可能不确定 |
 
 ### 1.3 道具与配合
 
 | 编号 | 名称 | 适用 | 前提条件 |
 |---|---|---|---|
-| `missed_trade` | 漏补枪 | 回合（`[[R5]]`） | `missed_trades` 中有该回合的记录 |
+| `missed_trade` | 漏补枪 | 回合（`[[R5]]`） | `missed_trades` 中有该回合的记录，且击杀者尚未被其他队友补上；原始记录照常保留 |
 | `post_plant_utility_unused` | 下包后带着火没用 | 死亡 | T 方；已下包；身上有燃烧瓶 |
 
 ### 1.4 只作背景，不能当作问题
@@ -62,7 +63,7 @@
 |---|---|---|
 | `good_trade` | 及时补枪 | `trade_kill` |
 | `flash_assist` | 闪光助攻 | 助攻瞬间的 `flash_assist` 为 True |
-| `won_duel_seen_first` | 先发现、先开枪赢下对枪 | 击杀；`saw_opponent_first` 和 `shot_first` |
+| `won_duel_seen_first` | 先发现、先开枪赢下对枪 | 击杀；`saw_opponent_first` 和 `shot_first`，两项领先各 ≥ 0.05 秒 |
 
 ---
 
@@ -146,7 +147,7 @@
 | 编号 | 名称 | 适用 | 前提条件 |
 |---|---|---|---|
 | `pistol_spam` | 连点过快，准度还没恢复 | 死亡 | 开枪时的散布（`fire_bullets` 的 `inaccuracy`）明显高于该武器站定、准度完全恢复时的值。**〔待开发〕**：`Shot` 里还没有这个字段，基准值要从 demo 实测。Deagle 最重要；Glock 近距离连点是正常打法，不判 |
-| `deagle_moving_shot` | 沙鹰移动开枪 | 死亡 | 第一枪没停稳。职业和路人的差距是所有武器里最大的（89% 对 76%） |
+| `deagle_moving_shot` | 沙鹰移动开枪 | 死亡 | 看见对手后的第一枪没停稳。职业和路人的差距是所有武器里最大的（89% 对 76%） |
 | `glock_long_range` | 用 Glock 远距离对枪 | 死亡 | 距离 > X 米（职业交火中位 12.7 米，X 待定） |
 
 **各自的特性**（**〔待核实〕**）：

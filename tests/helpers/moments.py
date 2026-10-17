@@ -6,7 +6,7 @@ from tests.helpers.synthetic import A, C
 
 
 def make_shot(tick=90, weapon="ak47", recoil_index=0.0, hit=False, stopped=True, **overrides):
-    data = dict(tick=tick, weapon=weapon, speed=0.0, max_speed=215.0, speed_ratio=0.0,
+    data = dict(tick=tick, weapon=weapon, speed=0.0, max_speed=215.0, speed_ratio=0.5 if stopped is False else 0.0,
                 stopped=stopped, crouched=False, airborne=False, scoped=False,
                 recoil_index=recoil_index, hit=hit, seen_opponent=True)
     return Shot(**(data | overrides))
@@ -39,6 +39,20 @@ def make_moment(kind="death", weapon="ak47", **overrides):
             data[key] = data[key] | value
         else:
             data[key] = value
+    if isinstance(overrides.get("engagement"), dict):
+        changes = overrides["engagement"]
+        if "shots" not in changes and ("first_shot_stopped" in changes or "first_shot_hit" in changes):
+            first = data["engagement"]["shots"][0]
+            first = first.model_copy(update={
+                "stopped": changes.get("first_shot_stopped", first.stopped),
+                "hit": changes.get("first_shot_hit", first.hit),
+                "speed_ratio": 0.5 if changes.get("first_shot_stopped", first.stopped) is False else 0.0,
+            })
+            data["engagement"]["shots"] = [first]
+        seen = next((s for s in sorted(data["engagement"]["shots"], key=lambda s: s.tick)
+                     if s.seen_opponent is True), None)
+        data["engagement"].setdefault("first_seen_shot_stopped", seen.stopped if seen else None)
+        data["engagement"].setdefault("first_seen_shot_hit", seen.hit if seen else None)
     return Moment.model_validate(data)
 
 

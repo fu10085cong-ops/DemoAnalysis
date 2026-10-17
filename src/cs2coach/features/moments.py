@@ -190,6 +190,7 @@ def engagement(match: MatchData, p: _Params, sid: int, opponent: int, tick: int,
              for _, r in my_shots.iterrows()]
     cs = [x for x in shots if not x.crouched and not x.airborne and x.stopped is not None]
     first = shots[0] if shots else None
+    first_seen = next((shot for shot in shots if shot.seen_opponent is True), None)
     my_first = int(my_shots["tick"].min()) if len(my_shots) else None
     opp_first = int(opp_shots["tick"].min()) if len(opp_shots) else None
     return Engagement(
@@ -201,6 +202,8 @@ def engagement(match: MatchData, p: _Params, sid: int, opponent: int, tick: int,
         first_shot_lead_s=p.secs(opp_first - my_first) if my_first is not None and opp_first is not None else None,
         counter_strafe_shots=len(cs), counter_strafe_stopped=sum(bool(x.stopped) for x in cs),
         first_shot_stopped=(first.stopped if first and first in cs else None),
+        first_seen_shot_stopped=first_seen.stopped if first_seen else None,
+        first_seen_shot_hit=first_seen.hit if first_seen else None,
         player_blind=blind_info(match, p, sid, sid, opponent, start, tick),
         opponent_blind=blind_info(match, p, opponent, sid, opponent, start, tick),
     )

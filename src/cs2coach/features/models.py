@@ -67,6 +67,8 @@ class Engagement(BaseModel):
     counter_strafe_shots: int
     counter_strafe_stopped: int
     first_shot_stopped: bool | None
+    first_seen_shot_stopped: bool | None = None  # 看见对手后的第一枪；没有则为空
+    first_seen_shot_hit: bool | None = None
     # —— 视野（地图几何射线检测，见 features/visibility.py）——
     player_first_seen_tick: int | None = None  # 目标玩家第一次看见对手（这段连续可见期的起点）
     opponent_first_seen_tick: int | None = None  # 对手第一次看见目标玩家

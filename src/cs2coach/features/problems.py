@@ -124,12 +124,41 @@ def detect_problems(mm: MatchMoments, baseline: dict | None, cfg: dict) -> Probl
     skipped: Counter = Counter()
     automatic = cfg["baseline"]["automatic_weapons"]
 
+    def exclusions(moment) -> set[str]:
+        if moment is None:
+            return set()
+        engagement = moment.engagement
+        active = set()
+        if moment.through_smoke:
+            active.add("through_smoke")
+        if moment.wallbang:
+            active.add("wallbang")
+        if engagement is not None:
+            if engagement.player_blind is not None:
+                active.add("player_blinded_in_fight")
+            if (engagement.opponent_blind is not None and
+                    engagement.opponent_blind.thrower_role in ("self", "teammate")):
+                active.add("opponent_blinded_by_own_side")
+            if (engagement.shots_before_seen is not None and
+                    engagement.shots_before_seen >= p["max_shots_before_seen"]):
+                active.add("fired_before_seen")
+        if moment.kind == "death" and moment.weapon in ("hegrenade", "inferno", "molotov", "incgrenade"):
+            active.add("killed_by_utility")
+        return active
+
     def missing(pid):
         if pid not in disabled:
             skipped[pid] += 1
 
-    def emit(pid, target, weapon, evidence, thresholds=None):
+    def emit(pid, target, weapon, evidence, thresholds=None, moment=None):
         if pid not in disabled:
+            excluded = exclusions(moment)
+            reasons = [condition for condition, ids in p["exclusions"].items()
+                       if condition in excluded and pid in ids]
+            if reasons:
+                for reason in reasons:
+                    skipped[f"{pid}/{reason}"] += 1
+                return
             hits.append(ProblemHit(problem=pid, target=target, weapon=weapon,
                                    evidence={"weapon": weapon, **evidence}, thresholds=thresholds or {}))
 
@@ -148,7 +177,7 @@ def detect_problems(mm: MatchMoments, baseline: dict | None, cfg: dict) -> Probl
         audit = {"round": m.round, "tick": m.tick, "kind": m.kind}
 
         def hit(pid, evidence, thresholds=None):
-            emit(pid, m.id, w, audit | evidence, thresholds)
+            emit(pid, m.id, w, audit | evidence, thresholds, m)
 
         if m.kind in ("kill", "death"):
             if e is None:
@@ -174,9 +203,9 @@ def detect_problems(mm: MatchMoments, baseline: dict | None, cfg: dict) -> Probl
                     missing("poor_crosshair_placement")
                 else:
                     limit = threshold("poor_crosshair_placement", w, "crosshair_placement_deg", "p75")
-                    if limit is not None and cp > limit:
+                    if limit is not None and cp > limit * (1 + p["crosshair_margin_ratio"]):
                         hit("poor_crosshair_placement", {"crosshair_placement_deg": cp},
-                            {"crosshair_placement_deg": limit, "source": "pro_p75"})
+                            {"crosshair_placement_deg": limit, "margin_ratio": p["crosshair_margin_ratio"], "source": "pro_p75"})
 
                 if w in automatic:
                     eligible = [s for s in e.shots if s.weapon == w and _finite(s.recoil_index)
@@ -204,15 +233,22 @@ def detect_problems(mm: MatchMoments, baseline: dict | None, cfg: dict) -> Probl
 
         if m.kind == "death":
             if e is not None:
-                if e.shots and (e.first_shot_stopped is None or e.first_shot_hit is None):
+                if e.shots and (e.first_seen_shot_stopped is None or e.first_seen_shot_hit is None):
                     missing("shot_while_moving")
                 if e.contact_type is None:
                     missing("peeked_into_held_angle")
                     missing("dry_peek_with_utility")
                     if "man_advantage" in m.tags:
                         missing("overpeek_in_advantage")
-                if e.first_shot_stopped is False and e.first_shot_hit is False:
-                    hit("shot_while_moving", {"first_shot_stopped": False, "first_shot_hit": False})
+                first_seen = next((shot for shot in e.shots if shot.seen_opponent is True), None)
+                speed_limit = round(cfg["counter_strafe"]["accurate_speed_ratio"] *
+                                    (1 + p["moving_shot_margin"]), 10)
+                if (e.first_seen_shot_stopped is False and e.first_seen_shot_hit is False and
+                        first_seen is not None and _finite(first_seen.speed_ratio) and
+                        first_seen.speed_ratio >= speed_limit):
+                    hit("shot_while_moving", {"first_seen_shot_stopped": False, "first_seen_shot_hit": False,
+                        "first_seen_shot_speed_ratio": first_seen.speed_ratio},
+                        {"min_speed_ratio": speed_limit, "margin_ratio": p["moving_shot_margin"], "source": "config"})
                 if e.contact_type == "peek":
                     hit("peeked_into_held_angle", {"contact_type": e.contact_type})
                     if d is None:
@@ -224,8 +260,8 @@ def detect_problems(mm: MatchMoments, baseline: dict | None, cfg: dict) -> Probl
                             "unused_grenades": _json(d.unused_grenades), "opponent_blind": None})
                     if "man_advantage" in m.tags and m.trade is not None and m.trade.traded is False:
                         hit("overpeek_in_advantage", {"man_advantage": True, "contact_type": e.contact_type, "traded": False})
-                if w == "deagle" and e.first_shot_stopped is False:
-                    hit("deagle_moving_shot", {"first_shot_stopped": False})
+                if w == "deagle" and e.first_seen_shot_stopped is False:
+                    hit("deagle_moving_shot", {"first_seen_shot_stopped": False})
                 if w == "awp" and e.shots:
                     first = min(e.shots, key=lambda s: s.tick)
                     if first.scoped is False and not _finite(c.distance):
@@ -250,7 +286,7 @@ def detect_problems(mm: MatchMoments, baseline: dict | None, cfg: dict) -> Probl
                                     {"moving_ratio": p["spray_moving_ratio"], "min_shots": p["spray_moving_min_shots"],
                                      "min_recoil_index": p["spray_moving_min_recoil_index"], "source": "config"})
 
-            if "died_without_seeing" in m.tags and d is not None and not m.wallbang and not m.through_smoke and d.blinded is False:
+            if "died_without_seeing" in m.tags and d is not None and d.blinded is False:
                 hit("died_without_seeing", {"died_without_seeing": True, "wallbang": m.wallbang,
                     "through_smoke": m.through_smoke, "blinded": d.blinded})
             blind = e.player_blind if e is not None else None
@@ -281,12 +317,21 @@ def detect_problems(mm: MatchMoments, baseline: dict | None, cfg: dict) -> Probl
         if m.kind == "kill":
             if "trade_kill" in m.tags:
                 hit("good_trade", {"trade_kill": True})
-            if {"saw_opponent_first", "shot_first"}.issubset(m.tags):
-                hit("won_duel_seen_first", {"saw_opponent_first": True, "shot_first": True})
+            if ({"saw_opponent_first", "shot_first"}.issubset(m.tags) and e is not None and
+                    _finite(e.seen_first_lead_s) and _finite(e.first_shot_lead_s) and
+                    e.seen_first_lead_s >= p["highlight_min_lead_s"] and
+                    e.first_shot_lead_s >= p["highlight_min_lead_s"]):
+                hit("won_duel_seen_first", {"saw_opponent_first": True, "shot_first": True,
+                    "seen_first_lead_s": e.seen_first_lead_s, "first_shot_lead_s": e.first_shot_lead_s},
+                    {"min_lead_s": p["highlight_min_lead_s"], "source": "config"})
         if m.kind == "assist" and m.assist is not None and m.assist.flash_assist:
             hit("flash_assist", {"flash_assist": True})
 
     for record in mm.missed_trades:
+        if p["missed_trade_exclude_traded_by_other"] and record.killer_traded_by_other:
+            if "missed_trade" not in disabled:
+                skipped["missed_trade/killer_traded_by_other"] += 1
+            continue
         emit("missed_trade", f"R{record.round}", None, record.model_dump())
 
     for w, segments in (spray_stats([mm], cfg) if p["spray_match_enabled"] else {}).items():

@@ -285,6 +285,9 @@ def test_shots_before_seen_are_split_out():
     m.shots = build_shots(pd.DataFrame(fires), pd.DataFrame([bullet(f["tick"], A) for f in fires]), m)
     e = find_moments(m, A, CFG, sight=Sight(m, CFG, checker=WallChecker(500.0, -50.0))).moments[0].engagement
     assert e.shots_fired == 4 and e.shots_before_seen == 1
+    first_seen = next(s for s in e.shots if s.seen_opponent is True)
+    assert e.first_seen_shot_stopped == first_seen.stopped
+    assert e.first_seen_shot_hit == first_seen.hit
     assert e.seen_to_first_shot_s == pytest.approx(10 / 64, abs=1e-3)
     assert e.first_shot_to_damage_s == pytest.approx(5 / 64, abs=1e-3)
     assert e.seen_to_first_shot_s + e.first_shot_to_damage_s == pytest.approx(e.time_to_damage_s, abs=1e-3)

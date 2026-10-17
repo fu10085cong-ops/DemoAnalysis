@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import copy
 import json
+import re
 from datetime import date
 from pathlib import Path
 from time import perf_counter
@@ -62,8 +63,12 @@ def collect_one(path: Path, member: str | None, cfg: dict, calibration: dict, ba
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--date", default=date.today().isoformat())
+    parser.add_argument("--name", help="审计输出目录名，覆盖 --date")
     parser.add_argument("--config", type=Path)
     args = parser.parse_args(argv)
+    name = args.name or args.date
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]*", name):
+        parser.error("--name 必须是安全的单层目录名")
     cfg = load_config(args.config)
     baseline = load_baseline()
     if baseline is None:
@@ -72,7 +77,7 @@ def main(argv: list[str] | None = None) -> int:
     calibration["problems"]["disabled"] = []
     calibration["problems"]["spray_match_enabled"] = True
     sources = demo_sources(ROOT)
-    out = ROOT / "data/audit" / args.date
+    out = ROOT / "data/audit" / name
     out.mkdir(parents=True, exist_ok=True)
     rows, failures, players = [], [], 0
     started = perf_counter()
