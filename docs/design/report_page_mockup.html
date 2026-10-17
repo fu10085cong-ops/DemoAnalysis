@@ -1,0 +1,310 @@
+<title>cs2coach 报告草图</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&family=Barlow+Condensed:wght@500;600&family=JetBrains+Mono:wght@400&display=swap">
+<style>
+/* 布局：窄栏单列，自上而下 雷达 → 问题汇总 → 展开后的具体回合；数字用窄体，命令用等宽 */
+:root {
+  --bg: #f3f4f6; --panel: #ffffff; --fg: #15191f; --muted: #5d6673; --line: #dde1e7;
+  --you: #1f6fd1; --cmp: #7b8594; --bad: #c2412d; --warn: #c98a12; --good: #2f8a4c;
+  --chip: #eef1f5;
+  --f-body: "Noto Sans SC", system-ui, sans-serif;
+  --f-num: "Barlow Condensed", "Noto Sans SC", sans-serif;
+  --f-mono: "JetBrains Mono", ui-monospace, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #12151a; --panel: #1a1f26; --fg: #e7eaee; --muted: #9aa3ae; --line: #2c333d;
+  --you: #5aa2f5; --cmp: #8e98a6; --bad: #e46a54; --warn: #e0a83a; --good: #5cb67a; --chip: #232a33; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #12151a; --panel: #1a1f26; --fg: #e7eaee; --muted: #9aa3ae; --line: #2c333d;
+  --you: #5aa2f5; --cmp: #8e98a6; --bad: #e46a54; --warn: #e0a83a; --good: #5cb67a; --chip: #232a33; color-scheme: dark }
+* { box-sizing: border-box }
+body { background: var(--bg); color: var(--fg); font-family: var(--f-body); font-size: 15px; line-height: 1.6;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 24px 48px }
+.wrap { max-width: 860px; margin: 0 auto; display: flex; flex-direction: column; gap: 20px }
+.note { font-size: 13px; color: var(--muted); background: var(--chip); border-radius: 6px; padding: 8px 12px }
+h1 { font-size: 22px; margin: 0; text-wrap: balance }
+h2 { font-size: 17px; margin: 0 0 12px }
+.sub { color: var(--muted); font-size: 13px }
+.tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line) }
+.tabs button { font: inherit; background: none; border: 0; padding: 8px 14px; color: var(--muted); cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px }
+.tabs button[aria-selected="true"] { color: var(--fg); border-color: var(--you); font-weight: 500 }
+.tabs button:focus-visible, select:focus-visible, .row:focus-visible, .copy:focus-visible { outline: 2px solid var(--you); outline-offset: 2px }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 20px }
+.head { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; align-items: flex-end }
+.verdict { font-size: 18px; font-weight: 500; margin: 4px 0 0; text-wrap: balance }
+.radar-box { display: grid; grid-template-columns: minmax(0, 1fr) 220px; gap: 20px; align-items: center }
+@media (max-width: 640px) { .radar-box { grid-template-columns: 1fr } }
+svg.radar { width: 100%; max-width: 460px; height: auto; display: block; margin: 0 auto }
+.legend { display: flex; flex-direction: column; gap: 10px; font-size: 14px }
+.legend label { color: var(--muted); font-size: 12px; letter-spacing: .04em }
+select { font: inherit; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); color: var(--fg); width: 100% }
+.key { display: flex; align-items: center; gap: 8px }
+.sw { width: 22px; height: 0; border-top: 3px solid var(--you) }
+.sw.cmp { border-top: 2px dashed var(--cmp) }
+.axes-list { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; font-size: 13px; margin-top: 4px }
+.axes-list b { font-family: var(--f-num); font-size: 16px; font-weight: 600; font-variant-numeric: tabular-nums }
+.probs { display: flex; flex-direction: column }
+.row { display: grid; grid-template-columns: 22px minmax(0, 1.4fr) minmax(0, 1fr) 92px; gap: 12px; align-items: center; padding: 12px 4px; border-top: 1px solid var(--line); cursor: pointer }
+.row:first-of-type { border-top: 0 }
+.row .name { font-weight: 500 }
+.row .name small { display: block; color: var(--muted); font-weight: 400; font-size: 12px }
+.sev { width: 10px; height: 10px; border-radius: 50% }
+.bar { position: relative; height: 8px; background: var(--chip); border-radius: 4px }
+.bar i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 4px; background: var(--bad); opacity: .8 }
+.bar u { position: absolute; top: -4px; bottom: -4px; width: 2px; background: var(--fg) }
+.rate { font-family: var(--f-num); font-size: 17px; text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap }
+.rate span { color: var(--muted); font-size: 13px }
+.detail { padding: 4px 0 16px 34px }
+.detail p { margin: 0 0 10px; font-size: 14px }
+.tbl { overflow-x: auto }
+table { border-collapse: collapse; width: 100%; font-size: 13px; min-width: 560px }
+th, td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--line); vertical-align: top }
+th { color: var(--muted); font-weight: 500; font-size: 12px }
+td.num { font-variant-numeric: tabular-nums; white-space: nowrap }
+code { font-family: var(--f-mono); font-size: 12px; background: var(--chip); padding: 2px 6px; border-radius: 4px; white-space: nowrap }
+.copy { font: inherit; font-size: 12px; border: 1px solid var(--line); background: var(--panel); color: var(--fg); border-radius: 4px; padding: 2px 8px; cursor: pointer; margin-left: 6px }
+.chev { color: var(--muted); font-size: 12px; transition: transform .15s }
+.row[aria-expanded="true"] .chev { transform: rotate(90deg) }
+@media (prefers-reduced-motion: reduce) { .chev { transition: none } }
+.bar i.good { background: var(--good) }
+.hl { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px }
+.card { border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; display: flex; flex-direction: column; gap: 6px; min-width: 0 }
+.card .tag { align-self: flex-start; font-size: 12px; padding: 1px 8px; border-radius: 10px; background: var(--chip); color: var(--fg) }
+.card .big { font-family: var(--f-num); font-size: 22px; font-weight: 600; line-height: 1.2 }
+.card .meta { font-size: 12px; color: var(--muted) }
+.card .what { font-size: 14px }
+@media (max-width: 560px) { .row { grid-template-columns: 22px minmax(0, 1fr) 84px } .row .bar { grid-column: 2 / 4 } }
+</style>
+
+<div class="wrap">
+  <div class="note">页面草图：所有数字都是示意用的假数据，用来讨论版式，不对应任何真实玩家。</div>
+  <div class="tabs" role="tablist">
+    <button role="tab" id="tab-sum" aria-selected="true">多场汇总</button>
+    <button role="tab" id="tab-one" aria-selected="false">单场报告</button>
+  </div>
+
+  <section class="panel">
+    <div class="head">
+      <div>
+        <h1 id="title">示例玩家 · 近 18 场</h1>
+        <div class="sub" id="subtitle">2026-09-18 至 2026-10-14 · 5E 与完美 · 432 回合</div>
+        <p class="verdict" id="verdict">最该练的是急停：开枪时没停稳的比例，排在目标分段的后 20%。</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>能力雷达</h2>
+    <div class="radar-box">
+      <svg class="radar" id="radar" viewBox="0 0 460 420" role="img" aria-label="能力雷达图"></svg>
+      <div class="legend">
+        <div class="key"><span class="sw"></span>你</div>
+        <div class="key"><span class="sw cmp"></span><span id="cmp-name">目标分段中位</span></div>
+        <div>
+          <label for="cmp">虚线对比</label>
+          <select id="cmp"></select>
+        </div>
+        <div>
+          <label for="tier">目标分段（雷达的刻度）</label>
+          <select id="tier">
+            <option>业余（临时，24 场）</option>
+            <option>5E 1800–2000（示意）</option>
+            <option>职业（26 场）</option>
+          </select>
+        </div>
+        <div class="axes-list" id="axes-list"></div>
+        <div class="sub">数值是在目标分段里排到百分之几，越往外越好；50 = 该分段中位。</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>做得好的方向</h2>
+    <div class="sub" style="margin-bottom:8px">领先目标分段最多的几项。竖线：目标分段中位。点开看具体回合。</div>
+    <div class="probs" id="goods"></div>
+  </section>
+
+  <section class="panel">
+    <h2>问题汇总</h2>
+    <div class="sub" style="margin-bottom:8px">按差距和出现次数排序。条形：你每 10 回合出现几次；竖线：目标分段中位。点开看具体回合。</div>
+    <div class="probs" id="probs"></div>
+  </section>
+
+  <section class="panel">
+    <h2>高光回合</h2>
+    <div class="sub" style="margin-bottom:8px">程序按固定规则挑出：多杀、残局获胜、首杀并赢下回合、闪光助攻击杀。</div>
+    <div class="hl" id="hl"></div>
+  </section>
+</div>
+
+<script>
+const AXES = ["出枪速度", "准星位置", "急停", "压枪", "补枪配合", "道具使用"];
+const DATA = {
+  sum: {
+    title: "示例玩家 · 近 18 场", subtitle: "2026-09-18 至 2026-10-14 · 5E 与完美 · 432 回合",
+    verdict: "最该练的是急停：开枪时没停稳的比例，排在目标分段的后 20%。",
+    you: [58, 41, 19, 47, 66, 35],
+    cmps: { "目标分段中位": [50, 50, 50, 50, 50, 50] },
+  },
+  one: {
+    title: "示例玩家 · Dust2 16:14", subtitle: "完美 · 2026-10-12 · 30 回合 · Rating 1.08（本场第 3）",
+    verdict: "这场输掉的关键对枪，多数是拉出时没停稳就开枪。",
+    you: [62, 38, 22, 51, 70, 30],
+    cmps: { "本场平均": [49, 47, 44, 45, 52, 48], "本场最佳（Rating 1.41）": [77, 69, 58, 63, 55, 61], "目标分段中位": [50, 50, 50, 50, 50, 50] },
+  },
+};
+const PROBS = {
+  sum: [
+    { name: "开枪时没停稳", axis: "急停", you: 3.1, tier: 1.4, count: 134, sev: "bad",
+      text: "你在移动中开出第一枪的交火占 41%，目标分段是 22%。这类交火你的胜率是 31%，停稳后开枪是 58%。",
+      rows: [
+        ["Dust2 10-12", "R7", "1:12", "对手 B 在 LongA，距离 18 米", "你速度 180 时开第一枪，未命中，被击杀", "example_demo", 41230],
+        ["Mirage 10-09", "R15", "0:48", "对手 C 在 Connector，距离 11 米", "你速度 205 时开第一枪，5 枪中 1，被击杀", "example_demo", 88410],
+        ["Dust2 10-08", "R3", "1:31", "对手 D 在 Mid，距离 24 米", "你速度 150 时开第一枪，未命中，被击杀", "example_demo", 12960],
+      ] },
+    { name: "准星没提前放好", axis: "准星位置", you: 2.4, tier: 1.6, count: 104, sev: "warn",
+      text: "第一次看见对手时，准星离对手头部平均 1.9 米，目标分段中位是 1.3 米。",
+      rows: [
+        ["Inferno 09-29", "R21", "0:55", "对手 E 在 Banana，距离 14 米", "看见时准星偏 2.6 米，转过去用了 420 毫秒", "example_demo", 70210],
+        ["Dust2 10-12", "R11", "1:05", "对手 B 在 Tunnels，距离 9 米", "看见时准星偏 2.1 米，被先手击杀", "example_demo", 60125],
+      ] },
+    { name: "漏补枪", axis: "补枪配合", you: 0.9, tier: 0.8, count: 39, sev: "ok",
+      text: "和目标分段接近。队友阵亡时你在附近、击杀者在你屏幕里，而你没有补上的情况，每 10 回合 0.9 次。",
+      rows: [
+        ["Dust2 10-12", "R19", "0:37", "队友 甲 被对手 F 击杀，离你 6 米", "补枪窗口内击杀者在你屏幕里 1.2 秒，你没开枪", "example_demo", 101880],
+      ] },
+  ],
+  one: [
+    { name: "开枪时没停稳", axis: "急停", you: 4.0, tier: 1.4, count: 12, sev: "bad",
+      text: "本场 12 次在移动中开第一枪，其中 8 次输掉对枪。",
+      rows: [
+        ["本场", "R7", "1:12", "对手 B 在 LongA，距离 18 米", "你速度 180 时开第一枪，未命中，被击杀", "example_demo", 41230],
+        ["本场", "R12", "0:41", "对手 G 在 ShortA，距离 10 米", "你速度 196 时开第一枪，4 枪中 0，被击杀", "example_demo", 66310],
+      ] },
+    { name: "准星没提前放好", axis: "准星位置", you: 2.7, tier: 1.6, count: 8, sev: "warn",
+      text: "本场 8 次看见对手时准星明显偏离，多集中在 Tunnels 一带。",
+      rows: [
+        ["本场", "R11", "1:05", "对手 B 在 Tunnels，距离 9 米", "看见时准星偏 2.1 米，被先手击杀", "example_demo", 60125],
+      ] },
+  ],
+};
+const GOODS = {
+  sum: [
+    { name: "及时补枪", axis: "补枪配合", you: 2.2, tier: 1.5, unit: "次", sev: "ok", count: 95,
+      text: "队友阵亡后 3 秒内击杀对手，每 10 回合 2.2 次，排在目标分段前 25%。",
+      rows: [["Dust2 10-12", "R9", "1:20", "队友 乙 在 BombsiteB 阵亡，离你 8 米", "1.1 秒后你用 AK-47 击杀对手 B", "example_demo", 52210]] },
+    { name: "出枪速度", axis: "出枪速度", you: 545, tier: 610, unit: "毫秒", sev: "ok", count: 0, lowerBetter: true,
+      text: "从看见对手到造成伤害的中位时间 545 毫秒，比目标分段快 65 毫秒。",
+      rows: [["Mirage 10-09", "R4", "0:22", "对手 H 在 Window，距离 22 米", "看见后 312 毫秒命中头部", "example_demo", 18830]] },
+  ],
+  one: [
+    { name: "及时补枪", axis: "补枪配合", you: 3.0, tier: 1.5, unit: "次", sev: "ok", count: 9,
+      text: "本场 9 次补枪，其中 6 次让回合人数重新打平。",
+      rows: [["本场", "R9", "1:20", "队友 乙 在 BombsiteB 阵亡，离你 8 米", "1.1 秒后你用 AK-47 击杀对手 B", "example_demo", 52210]] },
+  ],
+};
+const HL = {
+  sum: [
+    { tag: "1v3 残局", big: "R23 残局获胜", meta: "Dust2 10-12 · 1:31 · 已下包", what: "守包 1 打 3，AK-47 连杀 3 人，回合比分追到 12:11", demo: "example_demo", tick: 140220 },
+    { tag: "4 杀", big: "R16 四杀", meta: "Mirage 10-09 · 0:58 · 回防", what: "回防 B 点，12 秒内 4 杀，其中 2 个爆头", demo: "example_demo", tick: 97340 },
+    { tag: "首杀", big: "R2 首杀并赢下", meta: "Inferno 09-29 · 1:45 · 手枪局后", what: "Banana 首杀，打开局面，全队 5v4 拿下回合", demo: "example_demo", tick: 9020 },
+    { tag: "闪光助攻", big: "R27 闪光助攻", meta: "Dust2 10-08 · 0:33", what: "给 LongA 扔闪，队友在对手被闪 1.4 秒内击杀", demo: "example_demo", tick: 158800 },
+  ],
+  one: [
+    { tag: "1v3 残局", big: "R23 残局获胜", meta: "1:31 · 已下包", what: "守包 1 打 3，AK-47 连杀 3 人，回合比分追到 12:11", demo: "example_demo", tick: 140220 },
+    { tag: "3 杀", big: "R5 三杀", meta: "1:02 · 进攻 B", what: "B 洞口连杀 3 人，带队下包", demo: "example_demo", tick: 29410 },
+  ],
+};
+const SEV = { bad: "var(--bad)", warn: "var(--warn)", ok: "var(--good)" };
+let view = "sum";
+
+function pt(i, v, cx, cy, r) {
+  const a = -Math.PI / 2 + i * 2 * Math.PI / AXES.length;
+  return [cx + Math.cos(a) * r * v / 100, cy + Math.sin(a) * r * v / 100];
+}
+function poly(vals, cx, cy, r) { return vals.map((v, i) => pt(i, v, cx, cy, r).map(n => n.toFixed(1)).join(",")).join(" "); }
+
+function drawRadar() {
+  const d = DATA[view], cmpKey = document.getElementById("cmp").value, cmp = d.cmps[cmpKey];
+  const cx = 230, cy = 210, r = 150, ns = "http://www.w3.org/2000/svg";
+  let s = "";
+  [25, 50, 75, 100].forEach(v => {
+    s += `<polygon points="${poly(AXES.map(() => v), cx, cy, r)}" fill="none" stroke="var(--line)" stroke-width="${v === 50 ? 1.5 : 1}"/>`;
+  });
+  AXES.forEach((a, i) => {
+    const [x, y] = pt(i, 100, cx, cy, r), [lx, ly] = pt(i, 122, cx, cy, r);
+    s += `<line x1="${cx}" y1="${cy}" x2="${x}" y2="${y}" stroke="var(--line)"/>`;
+    const anchor = Math.abs(lx - cx) < 5 ? "middle" : lx > cx ? "start" : "end";
+    s += `<text x="${lx}" y="${ly + 5}" text-anchor="${anchor}" font-size="14" fill="var(--fg)">${a}</text>`;
+  });
+  s += `<text x="${cx + 4}" y="${cy - r * .5 - 3}" font-size="11" fill="var(--muted)">50</text>`;
+  s += `<polygon points="${poly(cmp, cx, cy, r)}" fill="none" stroke="var(--cmp)" stroke-width="2" stroke-dasharray="6 5"/>`;
+  s += `<polygon points="${poly(d.you, cx, cy, r)}" fill="var(--you)" fill-opacity=".14" stroke="var(--you)" stroke-width="2.5"/>`;
+  d.you.forEach((v, i) => { const [x, y] = pt(i, v, cx, cy, r); s += `<circle cx="${x}" cy="${y}" r="4" fill="var(--you)"><title>${AXES[i]}：你 ${v}，${cmpKey} ${cmp[i]}</title></circle>`; });
+  document.getElementById("radar").innerHTML = s;
+  document.getElementById("cmp-name").textContent = cmpKey;
+  document.getElementById("axes-list").innerHTML = AXES.map((a, i) => {
+    const diff = d.you[i] - cmp[i];
+    const col = diff <= -20 ? "var(--bad)" : diff < 0 ? "var(--warn)" : "var(--good)";
+    return `<span>${a}</span><span><b style="color:${col}">${d.you[i]}</b> <span class="sub">/ ${cmp[i]}</span></span>`;
+  }).join("");
+}
+
+function drawHL() {
+  document.getElementById("hl").innerHTML = HL[view].map(h => {
+    const cmd = `playdemo replays/${h.demo}; demo_gototick ${h.tick}`;
+    return `<div class="card"><span class="tag">${h.tag}</span><span class="big">${h.big}</span><span class="meta">${h.meta}</span><span class="what">${h.what}</span><span><code>demo_gototick ${h.tick}</code><button class="copy" data-cmd="${cmd}">复制</button></span></div>`;
+  }).join("");
+  bindCopy(document.getElementById("hl"));
+}
+function bindCopy(root) {
+  root.querySelectorAll(".copy").forEach(b => b.addEventListener("click", e => {
+    e.stopPropagation();
+    const done = () => { b.textContent = "已复制"; setTimeout(() => b.textContent = "复制", 1500); };
+    navigator.clipboard.writeText(b.dataset.cmd).then(done, () => { b.textContent = "请手动复制"; });
+  }));
+}
+function drawProbs() { drawList("probs", PROBS[view], true); drawList("goods", GOODS[view], false); }
+function drawList(boxId, list, openFirst) {
+  const max = Math.max(...list.map(p => Math.max(p.you, p.tier))) * 1.15;
+  const box = document.getElementById(boxId);
+  box.innerHTML = "";
+  list.forEach((p, k) => {
+    const row = document.createElement("div");
+    row.className = "row"; row.tabIndex = 0; row.setAttribute("role", "button"); row.setAttribute("aria-expanded", "false");
+    row.innerHTML = `<span class="sev" style="background:${SEV[p.sev]}"></span>
+      <span class="name">${p.name}<small>${p.axis}${p.count ? ` · 共 ${p.count} 次` : ""}</small></span>
+      <span class="bar" title="你 ${p.you}，目标分段中位 ${p.tier}"><i style="width:${p.you / max * 100}%;background:${SEV[p.sev]}"></i><u style="left:${p.tier / max * 100}%"></u></span>
+      <span class="rate">${p.you}<span> / ${p.tier} ${p.unit || "次"}</span> <span class="chev">▶</span></span>`;
+    const det = document.createElement("div");
+    det.className = "detail"; det.hidden = true;
+    det.innerHTML = `<p>${p.text}</p><div class="tbl"><table><thead><tr><th>比赛</th><th>回合</th><th>时间</th><th>局面</th><th>发生了什么</th><th>游戏内跳转</th></tr></thead><tbody>${
+      p.rows.map(r => {
+        const cmd = `playdemo replays/${r[5]}; demo_gototick ${r[6]}`;
+        return `<tr><td class="num">${r[0]}</td><td class="num">${r[1]}</td><td class="num">${r[2]}</td><td>${r[3]}</td><td>${r[4]}</td><td class="num"><code>demo_gototick ${r[6]}</code><button class="copy" data-cmd="${cmd}">复制</button></td></tr>`;
+      }).join("")}</tbody></table></div>`;
+    const toggle = () => { det.hidden = !det.hidden; row.setAttribute("aria-expanded", String(!det.hidden)); };
+    row.addEventListener("click", toggle);
+    row.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggle(); } });
+    box.append(row, det);
+    if (k === 0 && openFirst) toggle();
+  });
+  bindCopy(box);
+}
+
+function render() {
+  const d = DATA[view];
+  ["title", "subtitle", "verdict"].forEach(k => document.getElementById(k).textContent = d[k]);
+  const sel = document.getElementById("cmp");
+  sel.innerHTML = Object.keys(d.cmps).map(k => `<option>${k}</option>`).join("");
+  drawRadar(); drawProbs(); drawHL();
+}
+document.getElementById("cmp").addEventListener("change", drawRadar);
+document.getElementById("tier").addEventListener("change", drawRadar);
+[["tab-sum", "sum"], ["tab-one", "one"]].forEach(([id, v]) => document.getElementById(id).addEventListener("click", () => {
+  view = v;
+  document.querySelectorAll(".tabs button").forEach(b => b.setAttribute("aria-selected", String(b.id === id)));
+  render();
+}));
+render();
+</script>
