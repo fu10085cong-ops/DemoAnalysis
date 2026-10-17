@@ -47,13 +47,13 @@ def bullets(n=6, start=3, hit=False, stopped=True, weapon="ak47"):
 # 每个已实现的瞬间规则有一个命中与一个仅改变必要条件的不命中样本。
 CASES = [
     ("slow_reaction", dict(engagement={"time_to_damage_s": .6}), dict(engagement={"time_to_damage_s": .5})),
-    ("poor_crosshair_placement", dict(engagement={"crosshair_initial_offset_m": 2.3}), dict(engagement={"crosshair_initial_offset_m": 2.1})),
+    ("poor_crosshair_placement", dict(engagement={"crosshair_initial_offset_m": 2.6}), dict(engagement={"crosshair_initial_offset_m": 2.4})),
     ("shot_while_moving", dict(engagement={"first_shot_stopped": False}), dict(engagement={"first_shot_stopped": False, "first_shot_hit": True})),
     ("peeked_into_held_angle", dict(engagement={"contact_type": "peek"}), dict(engagement={"contact_type": "held"})),
     ("dry_peek_with_utility", dict(engagement={"contact_type": "peek"}, death={"unused_grenades": ["flashbang"]}),
      dict(engagement={"contact_type": "peek", "opponent_blind": blind()}, death={"unused_grenades": ["flashbang"]})),
-    ("overpeek_in_advantage", dict(tags=["man_advantage"], engagement={"contact_type": "peek"}),
-     dict(tags=["man_advantage"], engagement={"contact_type": "peek"}, trade={"traded": True})),
+    ("overpeek_in_advantage", dict(tags=["man_advantage"], engagement={"contact_type": "peek"}, context={"round_time_s": 30}),
+     dict(tags=["man_advantage"], engagement={"contact_type": "peek"}, context={"round_time_s": 30}, trade={"traded": True})),
     ("died_without_seeing", dict(tags=["died_without_seeing"], engagement={"opponent_off_screen": True}),
      dict(tags=["died_without_seeing"], engagement={"opponent_off_screen": False})),
     ("turned_into_flash", dict(engagement={"player_blind": blind()}), dict(engagement={"player_blind": blind("teammate")})),
@@ -128,9 +128,9 @@ def test_missed_trade_new_conditions(cfg, baseline, changes, skip):
 
 
 def test_missed_trade_react_time_boundary_and_missing_visibility(cfg, baseline):
-    # 窗口 5 秒、反应时间 1 秒：4.0 秒内第一次看到才判
-    assert detect_problems(make_mm(missed_trades=[_trade(killer_first_in_view_s=3.9)]), baseline, cfg).hits
-    assert not detect_problems(make_mm(missed_trades=[_trade(killer_first_in_view_s=4.1)]), baseline, cfg).hits
+    # 窗口 5 秒、反应时间 3 秒（035）：2.0 秒内第一次看到才判
+    assert detect_problems(make_mm(missed_trades=[_trade(killer_first_in_view_s=1.9)]), baseline, cfg).hits
+    assert not detect_problems(make_mm(missed_trades=[_trade(killer_first_in_view_s=2.1)]), baseline, cfg).hits
     report = detect_problems(make_mm(missed_trades=[_trade(killer_in_view_s=None, killer_first_in_view_s=None)]), baseline, cfg)
     assert report.hits == [] and report.skipped["missed_trade"] == 1
 
@@ -173,8 +173,8 @@ def test_first_seen_shot_and_threshold_margins(cfg, baseline):
     assert "shot_while_moving" not in problems([unseen, seen_slow.model_copy(update={"hit": True})])
     assert "deagle_moving_shot" not in {h.problem for h in detect_problems(make_mm([
         make_moment(weapon="deagle", engagement={"shots": [unseen]})]), baseline, cfg).hits}
-    assert "poor_crosshair_placement" not in problems([seen_slow], crosshair_initial_offset_m=2.19)
-    assert "poor_crosshair_placement" in problems([seen_slow], crosshair_initial_offset_m=2.21)
+    assert "poor_crosshair_placement" not in problems([seen_slow], crosshair_initial_offset_m=2.49)
+    assert "poor_crosshair_placement" in problems([seen_slow], crosshair_initial_offset_m=2.51)
     # 031：旧口径的转角很大（跟枪）但初始偏差小，不判；空中看见不判
     assert "poor_crosshair_placement" not in problems([seen_slow], crosshair_placement_deg=40.0, crosshair_initial_offset_m=0.5)
     assert "poor_crosshair_placement" not in problems([seen_slow], crosshair_initial_offset_m=3.0, airborne_near_seen=True)
@@ -326,11 +326,12 @@ def test_slow_reaction_filters(eng, cfg, baseline):
     assert "slow_reaction" not in {h.problem for h in report.hits}
 
 
-def test_slow_reaction_kill_does_not_require_opponent_ttd(cfg, baseline):
+def test_slow_reaction_kill_requires_opponent_ttd(cfg, baseline):
+    # 035：击杀瞬间对手没打中过你，出枪慢不值得提醒
     m = make_moment(kind="kill", engagement={"time_to_damage_s": .8, "opponent_time_to_damage_s": None})
-    h = next(h for h in detect_problems(make_mm([m]), baseline, cfg).hits if h.problem == "slow_reaction")
-    assert h.evidence["ttd_ms"] == 800 and h.evidence["opponent_ttd_ms"] is None
-    assert h.thresholds == {"seen_to_first_shot_ms": 500, "source": "pro_p75", "ttd_max_seconds": 1.0, "ttd_max_source": "config"}
+    report = detect_problems(make_mm([m]), baseline, cfg)
+    assert "slow_reaction" not in {h.problem for h in report.hits}
+    assert report.skipped["slow_reaction/opponent_no_damage"] == 1
 
 
 @pytest.mark.parametrize("role,at_event", [("self", True), (None, True), ("enemy", False), ("teammate", True)])
