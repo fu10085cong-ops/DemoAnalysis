@@ -19,7 +19,7 @@
 ## 背景（必须读）
 
 - `CLAUDE.md`、`AGENTS.md`
-- `docs/tasks/009-structured-diagnosis.md`：现有流程
+- `docs/tasks/features/009-structured-diagnosis.md`：现有流程
 - `src/cs2coach/ai/diagnose.py`、`ai/prompts.py`、`tools/digest.py`、`tools/checker.py`、`tools/submission.py`
 - 上面 3 份 `_submission.json`
 

@@ -1,6 +1,6 @@
 # S02 对战平台数据对照：把平台的局内数据固定成回归检查
 
-状态：待做（结构性任务，说明见 `docs/tasks/README.md` 的"两条任务线"）
+状态：待做（结构性任务，说明见 `docs/tasks/README.md` 的"三类任务"）
 
 ## 目标
 
@@ -11,7 +11,7 @@
 ## 背景（必须读）
 
 - `CLAUDE.md`、`AGENTS.md`、`docs/tasks/README.md`
-- `docs/tasks/025-report-summary-card-lobby-table.md`、`docs/tasks/026-trade-window-spray-seen-range-words.md`：其中"已验证的口径"一节和补枪验收表
+- `docs/tasks/features/025-report-summary-card-lobby-table.md`、`docs/tasks/fixes/026-trade-window-spray-seen-range-words.md`：其中"已验证的口径"一节和补枪验收表
 - `src/cs2coach/features/lobby.py`、`src/cs2coach/features/models.py`：`LobbyLine`
 - `src/cs2coach/features/moments.py`：`traded` / `not_traded` 标签，`DeathState.unused_grenades`
 - `src/cs2coach/parsing/match.py`：`blinds`、`grenades` 两张表

@@ -12,7 +12,7 @@
 
 - `CLAUDE.md`、`AGENTS.md`
 - `docs/product.md` 的"数据与隐私"
-- `docs/tasks/017-checker-maps-percent-drills.md` 的审查意见：fixture 里含真实信息的提醒
+- `docs/tasks/fixes/017-checker-maps-percent-drills.md` 的审查意见：fixture 里含真实信息的提醒
 - `tests/fixtures/`：全部 6 个文件
 - `tests/helpers/synthetic.py`：现有的虚构 steamid，例如 `76561198000000001`
 - `src/cs2coach/baselines/pro_sample.json`：职业选手的 steamid，这份清单里的都不用改

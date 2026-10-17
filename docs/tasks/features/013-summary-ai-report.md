@@ -18,7 +18,7 @@
 ## 背景（必须读）
 
 - `CLAUDE.md`、`AGENTS.md`
-- `docs/tasks/012-summary-program.md`、`docs/tasks/009-structured-diagnosis.md`、`docs/tasks/010-diagnosis-fixes-round1.md`、`docs/tasks/011-prominence-checker-output.md`：单场结构化诊断的设计和修正
+- `docs/tasks/features/012-summary-program.md`、`docs/tasks/features/009-structured-diagnosis.md`、`docs/tasks/fixes/010-diagnosis-fixes-round1.md`、`docs/tasks/fixes/011-prominence-checker-output.md`：单场结构化诊断的设计和修正
 - `src/cs2coach/summary/aggregate.py`：`PlayerSummary`、`MatchSummary`、`SummaryFrequencyRow`、`detail(number)`（取回每场的 `MatchMoments` 和 `ProblemReport`）
 - `src/cs2coach/summary/render.py`、`cli.py` 的 `summary` 命令
 - `src/cs2coach/ai/diagnose.py`、`ai/prompts.py`、`tools/submission.py`、`tools/checker.py`、`tools/digest.py`、`tools/queries.py`

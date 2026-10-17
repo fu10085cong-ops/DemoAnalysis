@@ -5,7 +5,7 @@
 ## 必读
 
 1. `CLAUDE.md`：项目规则（产品目标、架构原则、技术约定、demoparser2 陷阱）。**对你同样适用**，与本文件冲突时以 CLAUDE.md 为准。
-2. 当前任务单：用户指定的 `docs/tasks/NNN-*.md`。格式和状态说明见 `docs/tasks/README.md`。
+2. 当前任务单：用户指定的 `docs/tasks/<features|fixes|structural>/` 下的任务单。格式和状态说明见 `docs/tasks/README.md`。
 3. 任务单"背景"里列出的文档和代码（常见：`docs/features.md` 指标定义，`docs/fields.md` 数据陷阱，`docs/parsing.md` 解析层输出格式）。
 
 ## 工作规则

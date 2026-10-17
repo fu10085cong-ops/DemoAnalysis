@@ -21,7 +21,7 @@
 
 已确认的数据事实：
 
-- `blinds` 表的列和剩余致盲时间的算法，见 `docs/tasks/001-flash-and-utility-data.md` 的"背景"一节；
+- `blinds` 表的列和剩余致盲时间的算法，见 `docs/tasks/features/001-flash-and-utility-data.md` 的"背景"一节；
 - 时长低于 `[moments].min_blind_seconds` 的致盲不算。
 
 ## 要做的事
