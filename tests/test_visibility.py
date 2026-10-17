@@ -12,6 +12,7 @@ import pytest
 
 from cs2coach.config import ConfigError, load_config
 from cs2coach.features.moments import find_moments
+from cs2coach.features.problems import detect_problems
 from cs2coach.features.visibility import PlayerState, Sight, angle_between
 from cs2coach.parsing.match import build_blinds, build_bomb, build_damages, build_grenades, build_kills, build_shots
 from tests.helpers.synthetic import A, B, C, D, WallChecker, make_match, make_round, make_ticks, sid
@@ -426,13 +427,14 @@ def test_blind_filter_uses_configured_remaining_threshold():
 # ---------- 031：准星初始偏差、空中排除 ----------
 
 
-def _duel_with(extra):
+def _duel_with(extra, cfg=CFG, return_mm=False):
     m = make_match(ticks(a_yaw={80: 10.0}, extra=extra), rounds=[make_round(freeze_end=10, end=110, last=120)])
     m.kills = build_kills(pd.DataFrame([death(100, A, C)]), m)
     m.damages = build_damages(pd.DataFrame([hurt(95, A, C, 30, 70), hurt(100, A, C, 120, 0)]), m)
     fires = [fire(90, A), fire(95, A), fire(100, A)]
     m.shots = build_shots(pd.DataFrame(fires), pd.DataFrame([bullet(f["tick"], A) for f in fires]), m)
-    return find_moments(m, A, CFG, sight=Sight(m, CFG, checker=WallChecker(wall_x=500.0, wall_y_max=-50.0))).moments[0].engagement
+    mm = find_moments(m, A, cfg, sight=Sight(m, cfg, checker=WallChecker(wall_x=500.0, wall_y_max=-50.0)))
+    return mm if return_mm else mm.moments[0].engagement
 
 
 def test_crosshair_initial_offset_horizontal():
@@ -459,3 +461,39 @@ def test_airborne_near_seen_window(tick, expected):
     y = -200.0 if tick < 80 else 0.0
     e = _duel_with({(A, tick): {"Y": y, "yaw": 10.0 if tick == 80 else 0.0, "is_airborne": True}})
     assert e.airborne_near_seen is expected
+
+
+# ---------- 036：转身把一直有视线的对手带入屏幕 ----------
+
+
+def _crosshair_turn(visible_before, cfg=CFG, return_mm=False):
+    # 玩家在屏幕外朝 90°；A 与 C 的射线在墙前被挡住，或从指定 tick 起无遮挡。
+    start = 80 - visible_before
+    extra = {(A, t): {"Y": -200.0 if t < start else 0.0, "yaw": 90.0}
+             for t in range(1, 80)}
+    extra[(A, 80)] = {"Y": 0.0, "yaw": 40.0}
+    return _duel_with(extra, cfg, return_mm=return_mm)
+
+
+def test_crosshair_wall_peek_has_no_prior_sight():
+    e = _crosshair_turn(0)
+    assert e.player_first_seen_tick == 80
+    assert e.opponent_in_sight_before_view_ticks == 0
+
+
+@pytest.mark.parametrize("prior,expected", [(7, 7), (8, 8), (79, 64)])
+def test_crosshair_turn_boundary_and_lookback(prior, expected):
+    e = _crosshair_turn(prior)
+    assert e.player_first_seen_tick == 80
+    assert e.crosshair_initial_offset_m is not None
+    assert e.opponent_in_sight_before_view_ticks == expected
+
+
+@pytest.mark.parametrize("prior,excluded", [(0, False), (7, False), (8, True)])
+def test_crosshair_turn_exclusion(prior, excluded):
+    mm = _crosshair_turn(prior, return_mm=True)
+    baseline = {"weapons": {"ak47": {"crosshair_initial_offset_m": {"p75": 1.0}}}}
+    report = detect_problems(mm, baseline, CFG)
+    hits = [h for h in report.hits if h.problem == "poor_crosshair_placement"]
+    assert bool(hits) is not excluded
+    assert report.skipped.get("poor_crosshair_placement/turned_into_view", 0) == int(excluded)

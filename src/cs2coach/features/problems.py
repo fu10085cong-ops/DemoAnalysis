@@ -148,6 +148,9 @@ def detect_problems(mm: MatchMoments, baseline: dict | None, cfg: dict) -> Probl
                 active.add("fired_before_seen")
             if engagement.airborne_near_seen is True:
                 active.add("airborne_near_seen")
+            if (engagement.opponent_in_sight_before_view_ticks is not None and
+                    engagement.opponent_in_sight_before_view_ticks >= p["crosshair_turn_min_ticks"]):
+                active.add("turned_into_view")
         if moment.kind == "death" and moment.weapon in ("hegrenade", "inferno", "molotov", "incgrenade"):
             active.add("killed_by_utility")
         return active

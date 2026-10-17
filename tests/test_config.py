@@ -41,6 +41,15 @@ def test_reload_min_ammo_left_requires_positive_integer(tmp_path, value):
         load_config(path)
 
 
+@pytest.mark.parametrize("key", ["crosshair_turn_lookback_ticks", "crosshair_turn_min_ticks"])
+@pytest.mark.parametrize("value", ["0", "1.5", "true"])
+def test_crosshair_turn_ticks_require_positive_integer(tmp_path, key, value):
+    path = tmp_path / "crosshair.toml"
+    path.write_text(f"[problems]\n{key} = {value}\n", encoding="utf-8")
+    with pytest.raises(ConfigError, match=f"problems.{key}"):
+        load_config(path)
+
+
 def test_extra_pro_steamids_override_requires_integer_list(tmp_path):
     path = tmp_path / "pro.toml"
     path.write_text("[training]\nextra_pro_steamids = [76561198113666193]\n", encoding="utf-8")
