@@ -19,6 +19,7 @@ from cs2coach.features.problems import detect_problems
 from cs2coach.features.visibility import Sight
 from cs2coach.parsing.loader import resolve_demo
 from cs2coach.parsing.match import parse_match
+from cs2coach.parallel import default_jobs, map_ordered
 from cs2coach.summary.discover import _members, _supported
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -65,11 +66,14 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--date", default=date.today().isoformat())
     parser.add_argument("--name", help="审计输出目录名，覆盖 --date")
     parser.add_argument("--config", type=Path)
+    parser.add_argument("--jobs", type=int, default=None,
+                        help="并行进程数（默认取配置 tools.jobs 与 CPU 核数的较小值）")
     args = parser.parse_args(argv)
     name = args.name or args.date
     if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]*", name):
         parser.error("--name 必须是安全的单层目录名")
     cfg = load_config(args.config)
+    jobs = args.jobs if args.jobs is not None else default_jobs(cfg)
     baseline = load_baseline()
     if baseline is None:
         raise FileNotFoundError("缺少职业基准，无法判定规则命中")
@@ -79,20 +83,29 @@ def main(argv: list[str] | None = None) -> int:
     sources = demo_sources(ROOT)
     out = ROOT / "data/audit" / name
     out.mkdir(parents=True, exist_ok=True)
-    rows, failures, players = [], [], 0
     started = perf_counter()
-    for index, (path, member) in enumerate(sources, 1):
+
+    def report_progress(index: int, outcome) -> None:
+        path, member = sources[index]
         label = f"{path.relative_to(ROOT)} :: {member or '原始 demo'}"
-        print(f"[{index}/{len(sources)}] {label}", flush=True)
-        try:
-            batch, count = collect_one(path, member, cfg, calibration, baseline)
+        print(f"[{index + 1}/{len(sources)}] {label}", flush=True)
+        if outcome.error is None:
+            batch, count = outcome.value
+            print(f"  {count} 人，{len(batch)} 条命中", flush=True)
+        else:
+            print(f"  失败：{outcome.error}", flush=True)
+
+    outcomes = map_ordered(collect_one, sources, jobs, args=(cfg, calibration, baseline),
+                           on_done=report_progress)
+    rows, failures, players = [], [], 0
+    for (path, member), outcome in zip(sources, outcomes):
+        if outcome.error is None:
+            batch, count = outcome.value
             rows.extend(batch)
             players += count
-            print(f"  {count} 人，{len(batch)} 条命中", flush=True)
-        except Exception as exc:
+        else:
             failures.append({"demo": path.relative_to(ROOT).as_posix(), "member": member,
-                             "error": f"{type(exc).__name__}: {exc}"})
-            print(f"  失败：{failures[-1]['error']}", flush=True)
+                             "error": outcome.error})
     elapsed = perf_counter() - started
     write_hits(out / "hits.jsonl", rows)
     (out / "suspicious.md").write_text(suspicious_summary(rows, cfg), encoding="utf-8")

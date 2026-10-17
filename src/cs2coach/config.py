@@ -30,7 +30,13 @@ def load_config(path: Path | None = None) -> dict[str, Any]:
     _validate_radar(cfg["radar"])
     if type(cfg["baseline"]["min_metric_samples"]) is not int or cfg["baseline"]["min_metric_samples"] < 1:
         raise ConfigError("配置项 baseline.min_metric_samples 应为正整数")
+    _validate_tools(cfg["tools"])
     return cfg
+
+
+def _validate_tools(cfg: dict[str, Any]) -> None:
+    if type(cfg["jobs"]) is not int or cfg["jobs"] < 1:
+        raise ConfigError("配置项 tools.jobs 应为正整数")
 
 
 def _validate_radar(cfg: dict[str, Any]) -> None:

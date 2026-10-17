@@ -793,3 +793,7 @@ effort = "high"
 max_tokens = 16000
 # 模型因安全策略拒绝时，由服务端自动换推荐的备用模型重试
 server_fallback = true
+
+[tools]
+# 逐场处理的脚本同时运行的进程数；每个进程约占 1.3 GB 内存
+jobs = 6

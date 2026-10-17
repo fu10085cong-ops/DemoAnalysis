@@ -192,11 +192,12 @@ def test_build_script_skips_failed_demos_and_low_coverage_players(tmp_path, monk
         seen.append(sid)
         return make_mm([make_moment()])
     monkeypatch.setattr(script, "find_moments", find)
-    assert script.main([str(tmp_path / "bad.dem"), str(tmp_path / "good.dem"), "--out", str(out)]) == 0
+    assert script.main([str(tmp_path / "bad.dem"), str(tmp_path / "good.dem"), "--out", str(out),
+                        "--jobs", "1"]) == 0
     b = json.loads(out.read_text(encoding="utf-8"))
     assert b["version"] == 2 and len(b["demos"]) == 1 and seen == [A]
     assert b["players"] == [{"steamid": A, "name": "alice"}]
     assert "1 人次" in b["source"]
     previous = out.read_bytes()
-    assert script.main([str(tmp_path / "bad.dem"), "--out", str(out)]) == 1
+    assert script.main([str(tmp_path / "bad.dem"), "--out", str(out), "--jobs", "1"]) == 1
     assert out.read_bytes() == previous

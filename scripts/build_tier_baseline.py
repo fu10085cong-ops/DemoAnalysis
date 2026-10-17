@@ -20,11 +20,36 @@ from cs2coach.features.radar import RADAR_METRICS, player_metrics
 from cs2coach.features.visibility import Sight
 from cs2coach.parsing.loader import resolve_demo
 from cs2coach.parsing.match import parse_match
+from cs2coach.parallel import default_jobs, map_ordered
 from cs2coach.summary.discover import _match_id, _members, _supported
 
 ROOT = Path(__file__).resolve().parents[1]
 TIER_CONFIG = ROOT / "config/tiers.toml"
 TIER_DIR = ROOT / "src/cs2coach/baselines/tiers"
+
+
+def parse_one_tier_demo(path: Path, member: str | None, cfg: dict) -> tuple[list, list[float]]:
+    """解析一场分段 demo，返回 (该场全部合格玩家的瞬间列表, 跳过的覆盖率列表)。
+
+    本子进程不打印；跳过的覆盖率供主进程按原内容和顺序打印。
+    """
+    match = parse_match(resolve_demo(path, member=member), cfg)
+    sight = Sight(match, cfg)
+    if not sight.available:
+        raise ValueError(f"视野计算不可用：{sight.unavailable_reason}")
+    shots = match.shots.join(shot_targets(match, cfg)[["target", "target_angle"]])
+    inputs = _lobby_inputs(match, cfg)
+    game, skipped = [], []
+    for sid, player in match.players.items():
+        if player.coverage < cfg["parsing"]["min_target_coverage"]:
+            skipped.append(player.coverage)
+            continue
+        mm = find_moments(match, sid, cfg, sight=sight, shots_with_targets=shots)
+        mm.lobby = [lobby_line(match, sid, cfg, mm, inputs=inputs)]
+        game.append(mm)
+    if not game:
+        raise ValueError("没有合格玩家")
+    return game, skipped
 
 
 def build_tier_baseline(tier: dict, mms: list, demo_count: int,
@@ -70,41 +95,34 @@ def main(argv: list[str] | None = None) -> int:
     choice.add_argument("--tier")
     choice.add_argument("--all", action="store_true")
     parser.add_argument("--config", type=Path)
+    parser.add_argument("--jobs", type=int, default=None,
+                        help="并行进程数（默认取配置 tools.jobs 与 CPU 核数的较小值）")
     args = parser.parse_args(argv)
     tiers = tomllib.loads(TIER_CONFIG.read_text(encoding="utf-8"))["tier"]
     selected = tiers if args.all else [t for t in tiers if t["id"] == args.tier]
     if not selected:
         parser.error("分段 id 不存在")
     cfg, pro = load_config(args.config), load_baseline()
+    jobs = args.jobs if args.jobs is not None else default_jobs(cfg)
     if pro is None:
         print("缺少职业基准，无法按职业阈值统计问题频率", file=sys.stderr)
         return 1
     failed = False
     for tier in selected:
         entries = demo_entries(tier)
+
+        def report_progress(index: int, outcome, _tier=tier) -> None:
+            print(f"{_tier['id']} [{index + 1}/{len(entries)}] 解析中", flush=True)
+
+        outcomes = map_ordered(parse_one_tier_demo, entries, jobs, args=(cfg,), on_done=report_progress)
         mms, successful = [], 0
-        for index, (path, member) in enumerate(entries, 1):
-            print(f"{tier['id']} [{index}/{len(entries)}] 解析中", flush=True)
-            try:
-                match = parse_match(resolve_demo(path, member=member), cfg)
-                sight = Sight(match, cfg)
-                if not sight.available:
-                    raise ValueError(f"视野计算不可用：{sight.unavailable_reason}")
-                shots = match.shots.join(shot_targets(match, cfg)[["target", "target_angle"]])
-                inputs = _lobby_inputs(match, cfg)
-                game = []
-                for sid, player in match.players.items():
-                    if player.coverage < cfg["parsing"]["min_target_coverage"]:
-                        print(f"  跳过覆盖率不足的玩家（{player.coverage:.1%}）", flush=True)
-                        continue
-                    mm = find_moments(match, sid, cfg, sight=sight, shots_with_targets=shots)
-                    mm.lobby = [lobby_line(match, sid, cfg, mm, inputs=inputs)]
-                    game.append(mm)
-                if not game:
-                    raise ValueError("没有合格玩家")
-            except Exception as exc:
-                print(f"  失败，跳过：{type(exc).__name__}", flush=True)
+        for outcome in outcomes:
+            if outcome.error is not None:
+                print(f"  失败，跳过：{outcome.error.split(':', 1)[0]}", flush=True)
                 continue
+            game, skipped = outcome.value
+            for coverage in skipped:
+                print(f"  跳过覆盖率不足的玩家（{coverage:.1%}）", flush=True)
             mms.extend(game)
             successful += 1
             print(f"  成功：{len(game)} 人次", flush=True)

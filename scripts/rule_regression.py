@@ -14,6 +14,8 @@ from pathlib import Path
 
 from cs2coach.audit import read_hits
 from cs2coach.baseline import BASELINE_FILE
+from cs2coach.config import load_config
+from cs2coach.parallel import default_jobs
 
 try:
     from scripts import audit_collect, build_baseline
@@ -113,6 +115,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--compare-to", required=True)
     ap.add_argument("--skip-baseline", action="store_true")
     ap.add_argument("--labels-from", type=Path, action="append", default=[])
+    ap.add_argument("--jobs", type=int, default=None, help="并行进程数（默认取配置 tools.jobs 与 CPU 核数的较小值）")
     args = ap.parse_args(argv)
     for value in (args.name, args.compare_to):
         if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]*", value):
@@ -128,23 +131,24 @@ def main(argv: list[str] | None = None) -> int:
         ap.error(f"输出目录已存在：{out}")
     old = read_hits(old_path)
     # 相对路径按审计目录解析：046 审查时传入目录名被当成相对当前目录，判定一条都没读到也没有报错
-    sources = [p if p.is_absolute() or p.exists() else AUDIT_ROOT / p for p in args.labels_from] or label_dirs(compare)
+    sources = [p if p.is_absolute() or p.exists() else AUDIT_ROOT / p for p in args.labels_from] or label_dirs(compare, AUDIT_ROOT)
     if args.labels_from and not any((p / "labels.toml").exists() for p in sources):
         ap.error("--labels-from 指定的目录里都没有 labels.toml：" + "、".join(str(p) for p in sources))
     labels = read_labels(sources)
     out.mkdir(parents=True)
     old_rates = new_rates = None
+    jobs = args.jobs if args.jobs is not None else default_jobs(load_config())
     if not args.skip_baseline:
         backup = out / "pro_sample.before.json"
         shutil.copy2(BASELINE_FILE, backup)
         old_rates = json.loads(backup.read_text(encoding="utf-8")).get("problem_rates", {})
         # 基准脚本会打印玩家名；只保留退出状态，避免在终端日志泄露姓名。
         with redirect_stdout(io.StringIO()):
-            status = build_baseline.main([])
+            status = build_baseline.main(["--jobs", str(jobs)])
         if status:
             raise RuntimeError("职业基准重建失败；备份保存在审计目录")
         new_rates = json.loads(BASELINE_FILE.read_text(encoding="utf-8")).get("problem_rates", {})
-    status = audit_collect.main(["--name", args.name])
+    status = audit_collect.main(["--name", args.name, "--jobs", str(jobs)])
     if status:
         raise RuntimeError("业余全量收集有失败项，请检查 collect_stats.json")
     new = read_hits(out / "hits.jsonl")

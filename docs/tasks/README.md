@@ -48,6 +48,7 @@ Claude 写任务单，实现方（Codex 或 Kimi，按难度分配）按任务�
 5. **按清单审查**：Claude 先看改动文件列表、跑测试，再细看任务单列出的关键点。
 6. **Claude 会话**：一个大阶段一个会话，进度写进 `docs/status.md`，新会话从那里接着做；验证过的数据结论写进 `docs/fields.md`，不重复验证。
 7. **Codex 思考强度**：全局默认 medium（`~/.codex/config.toml`），A 类任务启动时加 `-c model_reasoning_effort="high"`。
+8. **并行默认**：重建基准、跑回归时默认 6 进程并行（`tools.jobs`），用 `--jobs 1` 退回串行。
 
 ## 状态
 
