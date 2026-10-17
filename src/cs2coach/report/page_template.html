@@ -1,0 +1,366 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>cs2coach 复盘报告</title>
+<style>
+/* 布局：窄栏单列，自上而下 雷达 → 问题汇总 → 展开后的具体回合；数字用窄体，命令用等宽 */
+:root {
+  --bg: #f3f4f6; --panel: #ffffff; --fg: #15191f; --muted: #5d6673; --line: #dde1e7;
+  --you: #1f6fd1; --cmp: #7b8594; --bad: #c2412d; --warn: #c98a12; --good: #2f8a4c;
+  --chip: #eef1f5;
+  --f-body: "Microsoft YaHei", "PingFang SC", "Noto Sans SC", system-ui, sans-serif;
+  --f-num: var(--f-body);
+  --f-mono: Consolas, ui-monospace, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #12151a; --panel: #1a1f26; --fg: #e7eaee; --muted: #9aa3ae; --line: #2c333d;
+  --you: #5aa2f5; --cmp: #8e98a6; --bad: #e46a54; --warn: #e0a83a; --good: #5cb67a; --chip: #232a33; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #12151a; --panel: #1a1f26; --fg: #e7eaee; --muted: #9aa3ae; --line: #2c333d;
+  --you: #5aa2f5; --cmp: #8e98a6; --bad: #e46a54; --warn: #e0a83a; --good: #5cb67a; --chip: #232a33; color-scheme: dark }
+* { box-sizing: border-box }
+body { background: var(--bg); color: var(--fg); font-family: var(--f-body); font-size: 15px; line-height: 1.6;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 24px 48px }
+.wrap { max-width: 860px; margin: 0 auto; display: flex; flex-direction: column; gap: 20px }
+.note { font-size: 13px; color: var(--muted); background: var(--chip); border-radius: 6px; padding: 8px 12px }
+h1 { font-size: 22px; margin: 0; text-wrap: balance }
+h2 { font-size: 17px; margin: 0 0 12px }
+.sub { color: var(--muted); font-size: 13px }
+.tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line) }
+.tabs button { font: inherit; background: none; border: 0; padding: 8px 14px; color: var(--muted); cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px }
+.tabs button[aria-selected="true"] { color: var(--fg); border-color: var(--you); font-weight: 500 }
+.tabs button:focus-visible, select:focus-visible, .row:focus-visible, .copy:focus-visible { outline: 2px solid var(--you); outline-offset: 2px }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 20px }
+.head { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; align-items: flex-end }
+.verdict { font-size: 18px; font-weight: 500; margin: 4px 0 0; text-wrap: balance }
+.radar-box { display: grid; grid-template-columns: minmax(0, 1fr) 220px; gap: 20px; align-items: center }
+@media (max-width: 640px) { .radar-box { grid-template-columns: 1fr } }
+canvas.radar { width: 100%; max-width: 460px; height: auto; display: block; margin: 0 auto }
+.legend { display: flex; flex-direction: column; gap: 10px; font-size: 14px }
+.legend label { color: var(--muted); font-size: 12px; letter-spacing: .04em }
+select { font: inherit; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); color: var(--fg); width: 100% }
+.key { display: flex; align-items: center; gap: 8px }
+.sw { width: 22px; height: 0; border-top: 3px solid var(--you) }
+.sw.cmp { border-top: 2px dashed var(--cmp) }
+.axes-list { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; font-size: 13px; margin-top: 4px }
+.axes-list b { font-family: var(--f-num); font-size: 16px; font-weight: 600; font-variant-numeric: tabular-nums }
+.probs { display: flex; flex-direction: column }
+.row { display: grid; grid-template-columns: 22px minmax(0, 1.4fr) minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 12px 4px; border-top: 1px solid var(--line); cursor: pointer }
+.row:first-of-type { border-top: 0 }
+.row .name { font-weight: 500 }
+.row .name small { display: block; color: var(--muted); font-weight: 400; font-size: 12px }
+.sev { width: 10px; height: 10px; border-radius: 50% }
+.bar { position: relative; height: 8px; background: var(--chip); border-radius: 4px }
+.bar i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 4px; background: var(--bad); opacity: .8 }
+.bar u { position: absolute; top: -4px; bottom: -4px; width: 2px; background: var(--fg) }
+.rate { font-family: var(--f-num); font-size: 17px; text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap }
+.rate span { color: var(--muted); font-size: 13px }
+.detail { padding: 4px 0 16px 34px }
+.detail p { margin: 0 0 10px; font-size: 14px }
+.tbl { overflow-x: auto }
+table { border-collapse: collapse; width: 100%; font-size: 13px; min-width: 560px }
+th, td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--line); vertical-align: top }
+th { color: var(--muted); font-weight: 500; font-size: 12px }
+td.num { font-variant-numeric: tabular-nums; white-space: nowrap }
+code { font-family: var(--f-mono); font-size: 12px; background: var(--chip); padding: 2px 6px; border-radius: 4px; white-space: nowrap }
+.copy { font: inherit; font-size: 12px; border: 1px solid var(--line); background: var(--panel); color: var(--fg); border-radius: 4px; padding: 2px 8px; cursor: pointer; margin-left: 6px }
+.chev { color: var(--muted); font-size: 12px; transition: transform .15s }
+.row[aria-expanded="true"] .chev { transform: rotate(90deg) }
+@media (prefers-reduced-motion: reduce) { .chev { transition: none } }
+.bar i.good { background: var(--good) }
+.hl { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px }
+.card { border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; display: flex; flex-direction: column; gap: 6px; min-width: 0 }
+.card .tag { align-self: flex-start; font-size: 12px; padding: 1px 8px; border-radius: 10px; background: var(--chip); color: var(--fg) }
+.card .big { font-family: var(--f-num); font-size: 22px; font-weight: 600; line-height: 1.2 }
+.card .meta { font-size: 12px; color: var(--muted) }
+.card .what { font-size: 14px }
+@media (max-width: 560px) { .row { grid-template-columns: 22px minmax(0, 1fr) auto } .row .bar { grid-column: 2 / 4 } }
+
+body { margin: 0; overflow-wrap: anywhere }
+.wrap, .panel, .legend, .radar-box > * { min-width: 0 }
+[hidden] { display: none !important }
+canvas.radar { aspect-ratio: 460 / 420 }
+.hl { grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr)) }
+code { white-space: normal; overflow-wrap: anywhere }
+.row { grid-template-columns: 10px minmax(0, 1.4fr) minmax(0, 1fr) minmax(92px, auto) }
+.rate { white-space: normal; font-size: 15px }
+.tbl { overflow: visible }
+table { min-width: 0; table-layout: fixed }
+th, td { overflow-wrap: anywhere }
+@media (max-width: 640px) {
+  .panel { padding: 16px }
+  .row { grid-template-columns: 10px minmax(0, 1fr); gap: 8px }
+  .row .bar, .row .rate { grid-column: 2; text-align: left }
+  .detail { padding-left: 18px }
+  table, tbody, tr, td { display: block; width: 100% }
+  thead { display: none }
+  tr { margin-bottom: 12px; border: 1px solid var(--line); border-radius: 6px }
+  td::before { content: attr(data-label); display: block; font-size: 12px; color: var(--muted) }
+  td:last-child { border-bottom: 0 }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <section class="panel">
+    <div class="head">
+      <div>
+        <h1 id="title"></h1>
+        <div class="sub" id="subtitle"></div>
+        <p class="verdict" id="verdict"></p>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>能力雷达</h2>
+    <p id="no-tiers" hidden>还没有构建分段基准：<code>python scripts/build_tier_baseline.py --all</code></p>
+    <div class="radar-box" id="radar-box">
+      <canvas class="radar" id="radar" width="920" height="840" role="img" aria-label="能力雷达图"></canvas>
+      <div class="legend">
+        <div class="key"><span class="sw"></span>你</div>
+        <div class="key"><span class="sw cmp"></span><span id="cmp-name">目标分段中位</span></div>
+        <div>
+          <label for="cmp">虚线对比</label>
+          <select id="cmp"></select>
+        </div>
+        <div>
+          <label for="tier">目标分段（雷达的刻度）</label>
+          <select id="tier"></select>
+        </div>
+        <div class="axes-list" id="axes-list"></div>
+        <div class="sub">数值是在目标分段里排到百分之几，越往外越好；50 = 该分段中位。</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>做得好的方向</h2>
+    <div class="sub" style="margin-bottom:8px">领先默认目标分段最多的几项。竖线：默认目标分段中位。点开看具体回合。</div>
+    <div class="probs" id="goods"></div>
+  </section>
+
+  <section class="panel">
+    <h2>问题汇总</h2>
+    <div class="sub" style="margin-bottom:8px">按差距和出现次数排序。条形：你每 10 回合出现几次；竖线：目标分段中位。点开看具体回合。</div>
+    <div class="probs" id="probs"></div>
+  </section>
+
+  <section class="panel">
+    <h2>高光回合</h2>
+    <div class="sub" style="margin-bottom:8px">程序按固定规则挑出：多杀、残局获胜、首杀并赢下回合、闪光助攻击杀。</div>
+    <div class="hl" id="hl"></div>
+  </section>
+</div>
+
+<script type="application/json" id="page-data">__PAGE_DATA__</script>
+<script>
+"use strict";
+const page = JSON.parse(document.getElementById("page-data").textContent);
+const $ = id => document.getElementById(id);
+const colors = {bad: "var(--bad)", warn: "var(--warn)", ok: "var(--good)"};
+// 指标值：10 以上保留 1 位小数，以下保留 2 位；雷达百分位取整（审查 044：汇总里出现过 1.552511 这种长小数）
+const number = value => value == null ? "—" : Number(value.toFixed(Math.abs(value) >= 10 ? 1 : 2)).toString();
+// 数值加单位：% 和 ° 紧跟数字，$ 放在前面，其余隔一个空格
+const withUnit = (value, unit) => value == null ? "—" : unit === "$" ? `$${number(value)}`
+  : ["%", "°"].includes(unit) ? `${number(value)}${unit}` : `${number(value)} ${unit}`;
+const pct = value => value == null ? "—" : String(Math.round(value));
+let tier = page.tiers.find(t => t.id === page.default_tier) || page.tiers[0];
+
+// 所有数据文字都通过 textContent 写入，避免名字或命令被当作标签。
+function node(tag, text, className) {
+  const element = document.createElement(tag);
+  if (text != null) element.textContent = text;
+  if (className) element.className = className;
+  return element;
+}
+function options(select, items, selected) {
+  select.replaceChildren(...items.map(item => {
+    const option = node("option", item.name);
+    option.value = item.id;
+    option.selected = item.id === selected;
+    return option;
+  }));
+}
+function commandCell(command) {
+  const box = node("span");
+  const button = node("button", "复制", "copy");
+  button.type = "button";
+  button.addEventListener("click", async event => {
+    event.stopPropagation();
+    try {
+      await navigator.clipboard.writeText(`${command.playdemo}; ${command.jump}`);
+      button.textContent = "已复制";
+      setTimeout(() => { button.textContent = "复制"; }, 1500);
+    } catch {
+      button.textContent = "请手动复制";
+    }
+  });
+  box.append(node("code", command.jump), button);
+  return box;
+}
+function examplesTable(examples) {
+  const wrapper = node("div", null, "tbl");
+  const table = node("table");
+  const labels = ["比赛", "回合", "时间", "局面", "发生了什么", "游戏内跳转"];
+  const head = node("thead"), heading = node("tr"), body = node("tbody");
+  labels.forEach(label => heading.append(node("th", label)));
+  head.append(heading);
+  examples.forEach(example => {
+    const tr = node("tr");
+    [example.match_label, `R${example.round}`, example.time, example.situation, example.what, null]
+      .forEach((text, index) => {
+        const td = node("td", text);
+        td.dataset.label = labels[index];
+        if (index === 5) td.append(commandCell(example.command));
+        tr.append(td);
+      });
+    body.append(tr);
+  });
+  table.append(head, body);
+  wrapper.append(table);
+  return wrapper;
+}
+// 与 page_data 一致：红色要求倍数够高且多出的次数够多；切换分段时按该分段重算
+function problemSeverity(item, target) {
+  if (target == null) return "warn";
+  const excess = item.count - target * page.rounds_played / 10;
+  return item.you >= page.problem_bad_ratio * target && excess >= page.problem_min_excess ? "bad" : excess > 0 ? "warn" : "ok";
+}
+function drawList(id, list, problems) {
+  const box = $(id);
+  box.replaceChildren();
+  if (!list.length) {
+    box.append(node("p", problems ? "暂未发现需要列出的问题" : "暂无可列出的优势方向", "sub"));
+  }
+  list.forEach((item, index) => {
+    const target = problems ? (tier?.problem_targets[item.id] ?? null) : item.target;
+    const severity = problems ? problemSeverity(item, target) : item.severity;
+    const row = node("div", null, "row");
+    row.tabIndex = 0;
+    row.setAttribute("role", "button");
+    row.setAttribute("aria-expanded", String(problems && index === 0));
+    row.setAttribute("aria-controls", `${id}-detail-${index}`);
+    const dot = node("span", null, "sev");
+    dot.style.background = colors[severity];
+    dot.title = {bad: "差距较大", warn: "需要关注", ok: "达到基准"}[severity];
+    const name = node("span", item.name, "name");
+    const axis = page.axes.find(axis => axis.id === item.axis)?.name || "";
+    name.append(node("small", [item.measure, problems && item.count ? `共 ${item.count} 次` : ""].filter(Boolean).join(" · ")));
+    const bar = node("span", null, "bar");
+    bar.title = `你 ${withUnit(item.you, item.unit)}，分段 ${withUnit(target, item.unit)}`;
+    const max = Math.max(item.you, target ?? 0, 1e-9) * 1.15;
+    const fill = node("i");
+    fill.style.width = `${Math.max(0, item.you) / max * 100}%`;
+    fill.style.background = colors[severity];
+    bar.append(fill);
+    if (target != null) {
+      const marker = node("u");
+      marker.style.left = `${Math.max(0, target) / max * 100}%`;
+      bar.append(marker);
+    }
+    const rate = node("span", null, "rate");
+    rate.append(node("span", "你 "), withUnit(item.you, item.unit), node("span", ` · 分段 ${withUnit(target, item.unit)}`), node("span", " ▶", "chev"));
+    row.append(dot, name, bar, rate);
+    const detail = node("div", null, "detail");
+    detail.id = `${id}-detail-${index}`;
+    detail.hidden = !(problems && index === 0);
+    detail.append(node("p", item.text), examplesTable(item.examples));
+    const toggle = () => {
+      detail.hidden = !detail.hidden;
+      row.setAttribute("aria-expanded", String(!detail.hidden));
+    };
+    row.addEventListener("click", toggle);
+    row.addEventListener("keydown", event => {
+      if (event.key === "Enter" || event.key === " ") { event.preventDefault(); toggle(); }
+    });
+    box.append(row, detail);
+  });
+}
+function drawRadar() {
+  if (!tier) return;
+  const comparison = tier.comparisons.find(c => c.id === $("cmp").value);
+  $("cmp-name").textContent = comparison?.name || "暂无对比数据";
+  const values = comparison?.values || page.axes.map(() => null);
+  const canvas = $("radar"), ctx = canvas.getContext("2d");
+  const style = getComputedStyle(document.documentElement);
+  const color = key => style.getPropertyValue(`--${key}`).trim();
+  ctx.setTransform(2, 0, 0, 2, 0, 0);
+  ctx.clearRect(0, 0, 460, 420);
+  const point = (i, value) => {
+    const angle = -Math.PI / 2 + i * 2 * Math.PI / page.axes.length;
+    const radius = 140 * (value ?? 0) / 100;
+    return [230 + Math.cos(angle) * radius, 210 + Math.sin(angle) * radius];
+  };
+  const polygon = (values, stroke, width, dashed = false, filled = false) => {
+    ctx.beginPath();
+    values.forEach((value, i) => { const p = point(i, value); i ? ctx.lineTo(...p) : ctx.moveTo(...p); });
+    ctx.closePath();
+    ctx.strokeStyle = color(stroke);
+    ctx.lineWidth = width;
+    ctx.setLineDash(dashed ? [6, 5] : []);
+    if (filled) { ctx.globalAlpha = .14; ctx.fillStyle = color(stroke); ctx.fill(); ctx.globalAlpha = 1; }
+    ctx.stroke();
+  };
+  [25, 50, 75, 100].forEach(value => polygon(page.axes.map(() => value), "line", value === 50 ? 1.5 : 1));
+  ctx.font = '14px "Microsoft YaHei", "PingFang SC", "Noto Sans SC", system-ui, sans-serif';
+  page.axes.forEach((axis, i) => {
+    const [x, y] = point(i, 100), [lx, ly] = point(i, 120);
+    ctx.beginPath(); ctx.moveTo(230, 210); ctx.lineTo(x, y);
+    ctx.strokeStyle = color("line"); ctx.stroke();
+    ctx.fillStyle = color("fg");
+    ctx.textAlign = Math.abs(lx - 230) < 5 ? "center" : lx > 230 ? "left" : "right";
+    ctx.fillText(axis.name, lx, ly + 5, 110);
+  });
+  ctx.textAlign = "left"; ctx.fillStyle = color("muted"); ctx.fillText("50", 234, 137);
+  polygon(values, "cmp", 2, true);
+  polygon(tier.you, "you", 2.5, false, true);
+  ctx.setLineDash([]);
+  tier.you.forEach((value, i) => {
+    ctx.beginPath(); ctx.arc(...point(i, value), 4, 0, Math.PI * 2);
+    ctx.fillStyle = color("you"); ctx.fill();
+  });
+  $("axes-list").replaceChildren();
+  page.axes.forEach((axis, i) => {
+    const pair = node("span");
+    pair.append(node("b", pct(tier.you[i])), node("span", ` / ${pct(values[i])}`, "sub"));
+    $("axes-list").append(node("span", axis.name), pair);
+  });
+}
+function selectTier() {
+  const previous = $("cmp").value;
+  tier = page.tiers.find(t => t.id === $("tier").value);
+  options($("cmp"), tier.comparisons, previous);
+  $("cmp").disabled = !tier.comparisons.length;
+  drawRadar();
+  drawList("probs", page.problems, true);
+}
+["title", "subtitle", "verdict"].forEach(key => { $(key).textContent = page[key]; });
+document.title = page.title;
+$("no-tiers").hidden = !!tier;
+$("radar-box").hidden = !tier;
+if (tier) {
+  options($("tier"), page.tiers, tier.id);
+  selectTier();
+} else {
+  drawList("probs", page.problems, true);
+}
+drawList("goods", page.strengths, false);
+$("hl").replaceChildren();
+if (!page.highlights.length) $("hl").append(node("p", "这段时间没有挑出高光回合", "sub"));
+page.highlights.forEach(highlight => {
+  const card = node("article", null, "card");
+  const label = {clutch: "残局获胜", multikill: "多杀", opening_win: "首杀并赢下", flash_assist: "闪光助攻"}[highlight.kind] || highlight.kind;
+  card.append(node("span", label, "tag"), node("span", highlight.title, "big"),
+    node("span", `${highlight.match_label} · R${highlight.round} · ${highlight.time}`, "meta"),
+    node("span", highlight.what, "what"), commandCell(highlight.command));
+  $("hl").append(card);
+});
+$("cmp").addEventListener("change", drawRadar);
+$("tier").addEventListener("change", selectTier);
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", drawRadar);
+</script>
+</body>
+</html>

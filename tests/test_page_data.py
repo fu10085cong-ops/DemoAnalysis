@@ -23,8 +23,8 @@ def report():
         evidence={}, thresholds={})], disabled=[], skipped={}, baseline_source=None)
 
 
-def frequency(you):
-    return [FrequencyRow(problem="slow_reaction", label="出枪慢", hits=3, per_10_rounds=you,
+def frequency(you, hits=3):
+    return [FrequencyRow(problem="slow_reaction", label="出枪慢", hits=hits, per_10_rounds=you,
         pro_per_10_rounds=1, ratio=you, prominent=True)]
 
 
@@ -34,18 +34,22 @@ def sample():
     return {data["id"]: data}
 
 
-@pytest.mark.parametrize("you,severity", [(1, "ok"), (2, "ok"), (2.5, "warn"), (3, "bad")])
-def test_severity_and_problem_template(you, severity):
-    mm = make_mm([make_moment()], lobby=[line()])
-    page = build_match_page(mm, report(), frequency(you), load_config(), sample())
+# 10 回合、分段每 10 回合 2 次 → 应有 2 次。红色要倍数 ≥ 1.5 且多出 ≥ 3 次；没有多出的问题不列。
+@pytest.mark.parametrize("hits,severity", [(2, None), (3, "warn"), (4, "warn"), (5, "bad")])
+def test_severity_and_problem_template(hits, severity):
+    mm = make_mm([make_moment()], lobby=[line()], rounds=10)
+    page = build_match_page(mm, report(), frequency(hits, hits), load_config(), sample())
+    if severity is None:
+        assert page.problems == []
+        return
     problem, = page.problems
-    assert problem.severity == severity and problem.target == 2 and problem.count == 3
+    assert problem.severity == severity and problem.target == 2 and problem.count == hits and problem.expected == 2
     assert "。" == problem.text[-1] and problem.text.count("。") == 1
     assert len(problem.examples) == 1
     assert problem.examples[0].match_label == "本场"
     assert problem.examples[0].situation == "T 方，2v2，未下包"
     if severity == "bad":
-        assert page.verdict == "最该练的是出枪慢：每 10 回合 3 次，业余（临时）是 2 次。"
+        assert page.verdict == "最该练的是出枪慢：这场出现 5 次，按业余（临时）的频率约 2 次。"
     else:
         assert page.verdict == "这场没有明显落后于业余（临时）的问题，最强的是补枪配合。"
 
@@ -231,3 +235,38 @@ def test_verdict_names_weakest_axis_when_nothing_is_bad():
     page = build_match_page(mm, report(), frequency(1), load_config(), data)
     assert page.verdict.startswith("这场没有明显落后于业余（临时）的问题，最强的是")
     assert "，最弱的是" in page.verdict
+
+
+def test_axis_listed_as_problem_is_not_a_strength_and_units_are_per_10_rounds():
+    """审查 044（另一名业余玩家）：准星中位数排 71%，规则又命中偏多，两边同时出现；按回合的次数换成每 10 回合。"""
+    from tests.test_summary import stats
+    mm = make_mm([make_moment("kill", tags=["trade_kill"])], lobby=[line(aim=stats(100))], rounds=10)
+    baseline = tier(time_to_damage_ms=[200, 300, 400], trade_kills_per_round=[0, .05, .1])
+    baseline["problem_rates"] = {"slow_reaction": {"per_10_rounds": 2}}
+    tiers = {baseline["id"]: baseline}
+    # 出枪慢没有命中偏多：出枪速度可以算优点
+    page = build_match_page(mm, report(), frequency(1, 1), load_config(), tiers)
+    assert {row.id for row in page.strengths} == {"time_to_damage_ms", "trade_kills_per_round"}
+    trade = next(row for row in page.strengths if row.id == "trade_kills_per_round")
+    assert trade.you == 2 and trade.target == .5 and trade.unit == "次" and "每 10 回合" in trade.measure
+    # 出枪慢命中偏多（warn）：出枪速度维度不再列为优点
+    page = build_match_page(mm, report(), frequency(3, 3), load_config(), tiers)
+    assert {row.id for row in page.strengths} == {"trade_kills_per_round"}
+    assert page.problems[0].measure == "每 10 回合出现的次数" and page.problems[0].unit == "次"
+
+
+def test_verdict_picks_largest_excess_not_largest_ratio():
+    """产品负责人 2026-10-18（另一名业余玩家）：压枪差 7 次、倍数 1.59 排到了准星 34 次、倍数 1.48 前面。"""
+    data = sample()
+    data["amateur_tmp"]["problem_rates"] = {"spray_control": {"per_10_rounds": 0.26},
+                                            "poor_crosshair_placement": {"per_10_rounds": 1.36}}
+    rows = [FrequencyRow(problem="spray_control", label="压枪差", hits=7, per_10_rounds=0.414,
+                         pro_per_10_rounds=0.07, ratio=5.97, prominent=True),
+            FrequencyRow(problem="poor_crosshair_placement", label="准星没提前放好", hits=34, per_10_rounds=2.012,
+                         pro_per_10_rounds=0.67, ratio=3.01, prominent=True)]
+    mm = make_mm([make_moment()], lobby=[line()], rounds=169)
+    page = build_match_page(mm, report(), rows, load_config(), data)
+    assert [p.id for p in page.problems] == ["poor_crosshair_placement", "spray_control"]
+    assert page.verdict == "最该练的是准星没提前放好：这场出现 34 次，按业余（临时）的频率约 23 次。"
+    # 压枪差倍数够高，但只多出约 2.6 次：黄色，不是红色
+    assert [p.severity for p in page.problems] == ["warn", "warn"]

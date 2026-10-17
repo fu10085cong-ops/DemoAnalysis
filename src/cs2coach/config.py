@@ -41,7 +41,7 @@ def _validate_radar(cfg: dict[str, Any]) -> None:
     for key in ("max_strengths", "max_problems", "max_examples", "max_highlights"):
         if type(cfg[key]) is not int or cfg[key] < 1:
             raise ConfigError(f"配置项 radar.{key} 应为正整数")
-    for key in ("strength_min_percentile", "problem_bad_ratio"):
+    for key in ("strength_min_percentile", "problem_bad_ratio", "problem_min_excess"):
         if type(cfg[key]) not in (int, float) or not math.isfinite(cfg[key]):
             raise ConfigError(f"配置项 radar.{key} 应为有限数")
     if not 0 <= cfg["strength_min_percentile"] <= 100 or cfg["problem_bad_ratio"] <= 1:

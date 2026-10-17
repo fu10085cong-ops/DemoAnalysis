@@ -385,6 +385,8 @@ max_examples = 5
 max_highlights = 6
 best_player_rule = "kills_minus_deaths"
 problem_bad_ratio = 1.5
+# 红色还要求比目标分段至少多出这么多次：只多一两次多半是偶然，不当作最该练的问题
+problem_min_excess = 3
 
 [[radar.axes]]
 id = "ttd"

@@ -31,7 +31,7 @@ def _output_folder(root: Path, demo: Path, name: str, steamid: int) -> Path:
     return player_dir / demo.stem
 
 
-def _archive_reports(folder: Path, names: tuple[str, ...] = ("report.md", "submission.json", "report_data.json")) -> None:
+def _archive_reports(folder: Path, names: tuple[str, ...] = ("report.md", "submission.json", "report_data.json", "report.html")) -> None:
     """重跑前保存指定文件；同一分钟内重跑也不覆盖历史版本。"""
     for name in names:
         old = folder / name
@@ -142,7 +142,7 @@ def _summary(args: argparse.Namespace) -> int:
     result = build_summary(steamid, refs, cfg, baseline)
     folder = _output_folder(args.out, Path("汇总.dem"), result.primary_name, steamid)
     folder.mkdir(parents=True, exist_ok=True)
-    _archive_reports(folder, ("problems.md", "summary.json", "basic_report.md", "report_data.json"))
+    _archive_reports(folder, ("problems.md", "summary.json", "basic_report.md", "report_data.json", "report.html"))
     problems = folder / "problems.md"
     summary_file = folder / "summary.json"
     problems.write_text(render_summary_problems(result), encoding="utf-8")
@@ -151,9 +151,11 @@ def _summary(args: argparse.Namespace) -> int:
     basic.write_text(render_summary_basic_report(result, build_summary_l0(result, cfg), baseline), encoding="utf-8")
     print(f"已写入 {basic}")
     from cs2coach.report.page_data import build_summary_page
+    from cs2coach.report.page_html import render_page
 
     page = build_summary_page(result, cfg, _page_tiers(cfg, args))
     (folder / "report_data.json").write_text(page.model_dump_json(indent=2) + "\n", encoding="utf-8")
+    (folder / "report.html").write_text(render_page(page), encoding="utf-8", newline="\n")
     print(f"汇总完成：{len(result.matches)} 场，在场 {result.rounds_played_total} 回合，"
           f"跳过 {len(result.skipped)} 场")
     if args.ai:
@@ -161,6 +163,7 @@ def _summary(args: argparse.Namespace) -> int:
         if outcome:
             return outcome
     print(f"输出目录：{folder}")
+    print(f"报告页：{folder / 'report.html'}")
     return 0
 
 
@@ -312,15 +315,19 @@ def _analyze(args: argparse.Namespace) -> int:
                                          match_score(match, player.steamid), baseline, cfg, detected), encoding="utf-8")
     print(f"已写入 {basic}")
     from cs2coach.report.page_data import build_match_page
+    from cs2coach.report.page_html import render_page
 
     page = build_match_page(moments, detected, frequencies, cfg, _page_tiers(cfg, args))
     (folder / "report_data.json").write_text(page.model_dump_json(indent=2) + "\n", encoding="utf-8")
+    (folder / "report.html").write_text(render_page(page), encoding="utf-8", newline="\n")
     if not args.ai:
         print("加上 --ai 生成 AI 复盘报告")
         print(f"输出目录：{folder}")
+        print(f"报告页：{folder / 'report.html'}")
         return 0
     result = _diagnose(match, moments, cfg, folder / "report.md")
     print(f"输出目录：{folder}")
+    print(f"报告页：{folder / 'report.html'}")
     return result
 
 

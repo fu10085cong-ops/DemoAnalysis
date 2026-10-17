@@ -35,7 +35,7 @@ def test_rerun_moves_both_ai_files_and_keeps_program_outputs(tmp_path, monkeypat
     stamp = 1792116840
     label = datetime.fromtimestamp(stamp).strftime("%Y%m%d-%H%M")
 
-    for name in ("report.md", "submission.json"):
+    for name in ("report.md", "submission.json", "report.html"):
         old = folder / name
         old.write_text("first " + name, encoding="utf-8")
         os.utime(old, (stamp, stamp))
@@ -45,7 +45,10 @@ def test_rerun_moves_both_ai_files_and_keeps_program_outputs(tmp_path, monkeypat
     archive = folder / "历史版本"
     assert (archive / f"report_{label}.md").read_text(encoding="utf-8") == "first report.md"
     assert (archive / f"submission_{label}.json").read_text(encoding="utf-8") == "first submission.json"
-    assert {p.name for p in folder.iterdir()} == {"moments.json", "facts.md", "problems.md", "basic_report.md", "report_data.json", "历史版本"}
+    assert (archive / f"report_{label}.html").read_text(encoding="utf-8") == "first report.html"
+    assert 'id="page-data"' in (folder / "report.html").read_text(encoding="utf-8")
+    assert b"\r\n" not in (folder / "report.html").read_bytes()
+    assert {p.name for p in folder.iterdir()} == {"moments.json", "facts.md", "problems.md", "basic_report.md", "report_data.json", "report.html", "历史版本"}
 
     for name in ("report.md", "submission.json"):
         old = folder / name
@@ -54,7 +57,8 @@ def test_rerun_moves_both_ai_files_and_keeps_program_outputs(tmp_path, monkeypat
     assert main(args) == 0
     assert (archive / f"report_{label}_2.md").read_text(encoding="utf-8") == "second report.md"
     assert (archive / f"submission_{label}_2.json").read_text(encoding="utf-8") == "second submission.json"
-    assert capsys.readouterr().out.rstrip().endswith(str(folder))
+    assert len(list(archive.glob("report_*.html"))) == 2
+    assert capsys.readouterr().out.rstrip().endswith(f"报告页：{folder / 'report.html'}")
 
 
 def test_target_selects_default_and_keeps_all_built_tiers(monkeypatch, capsys):
