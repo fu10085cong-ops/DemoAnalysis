@@ -1,0 +1,20 @@
+#!/bin/sh
+# 提交前自动运行隐私扫描（结构性改进 S06：不再依赖人记得扫描）。
+# 扫描出真实玩家名或 SteamID、或者读不到 demo 名单时，拒绝提交。
+# 确有必要跳过（例如只改了 .gitignore）：CS2COACH_SKIP_PRIVACY=1 git commit ...
+[ "$CS2COACH_SKIP_PRIVACY" = "1" ] && { echo "已跳过隐私扫描（CS2COACH_SKIP_PRIVACY=1）"; exit 0; }
+root=$(git rev-parse --show-toplevel)
+# 独立工作目录共用主仓库的 .git；主目录 = .git 的上一级，那里有 .venv 和 data/
+main=$(cd "$(git rev-parse --git-common-dir)/.." && pwd)
+if [ -x "$main/.venv/bin/python" ]; then py="$main/.venv/bin/python"
+elif [ -x "$main/.venv/Scripts/python.exe" ]; then py="$main/.venv/Scripts/python.exe"
+else echo "找不到 $main/.venv 里的 Python，无法隐私扫描，已拒绝提交。" >&2; exit 1; fi
+out=$(mktemp)
+CS2COACH_PRIVACY_DATA="$main/data" PYTHONPATH="$root/src" "$py" "$root/scripts/privacy_scan.py" > "$out" 2>&1
+status=$?
+if [ $status -ne 0 ]; then
+  cat "$out" >&2; rm -f "$out"
+  echo "隐私扫描未通过（退出码 ${status}），已拒绝提交。请把玩家名换成「（已匿名）」后重试。" >&2
+  exit 1
+fi
+tail -1 "$out"; rm -f "$out"

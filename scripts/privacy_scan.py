@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -15,7 +16,9 @@ from cs2coach.parsing.models import Team
 from cs2coach.summary.discover import _members, _supported
 
 ROOT = Path(__file__).resolve().parents[1]
-DEMO_DIRS = (ROOT / "data/demos/5e_demo", ROOT / "data/demos/perfectworld_demo")
+# 独立工作目录（git worktree）里没有 data/：提交钩子通过 CS2COACH_PRIVACY_DATA 指向主目录的 data/
+DATA = Path(os.environ.get("CS2COACH_PRIVACY_DATA") or ROOT / "data")
+DEMO_DIRS = (DATA / "demos/5e_demo", DATA / "demos/perfectworld_demo")
 TEXT_SUFFIXES = {".py", ".md", ".toml", ".json"}
 
 
@@ -65,6 +68,10 @@ def main() -> int:
         demos, names, steamids = _demo_rosters()
     except Exception as exc:
         print(f"读取 demo 名单失败：{exc}", file=sys.stderr)
+        return 2
+    if not demos:
+        # 一场 demo 都没读到时名单为空，任何文件都会"通过"：这等于没检查，按失败处理
+        print(f"没有在 {DATA / 'demos'} 找到 demo，无法收集玩家名单；隐私扫描不能当作通过。", file=sys.stderr)
         return 2
     print(f"已扫描 {demos} 场 demo，收集 {len(names)} 个非职业玩家名、{len(steamids)} 个 SteamID。")
     hits = 0
