@@ -206,6 +206,9 @@ def detect_problems(mm: MatchMoments, baseline: dict | None, cfg: dict) -> Probl
                             if m.kind == "kill" and not _finite(opp):
                                 # 035：击杀了根本没打到你的对手，出枪慢不值得提醒（第三轮审计）
                                 skipped["slow_reaction/opponent_no_damage"] += 1
+                            elif m.kind == "kill" and opp >= ttd:
+                                # 037：击杀时对手出枪比自己还慢，慢也没有代价（第四轮审计 2026-10-17）
+                                skipped["slow_reaction/opponent_slower"] += 1
                             elif m.kind == "kill" or opp < ttd:
                                 hit("slow_reaction", {"seen_to_first_shot_ms": react * 1000,
                                     "first_shot_to_damage_ms": (e.first_shot_to_damage_s * 1000
@@ -226,6 +229,12 @@ def detect_problems(mm: MatchMoments, baseline: dict | None, cfg: dict) -> Probl
                         # 035：近身遭遇的准星偏差不值得提醒（第三轮审计）；距离缺失时照常判
                         if c is not None and _finite(c.distance) and c.distance < p["crosshair_min_distance_m"]:
                             skipped["poor_crosshair_placement/close_range"] += 1
+                        elif (m.kind == "kill" and _finite(e.seen_to_first_shot_s)
+                              and (react_limit := weapon_threshold(baseline, w, "seen_to_first_shot_ms", "p75")) is not None
+                              and e.seen_to_first_shot_s * 1000 <= react_limit):
+                            # 037：击杀时"看见 → 开枪"不慢于职业 p75，准星偏了也没有代价（第四轮审计 2026-10-17）；
+                            # 阈值取不到时照常判，死亡瞬间不受影响
+                            skipped["poor_crosshair_placement/no_cost"] += 1
                         else:
                             hit("poor_crosshair_placement", {
                                 "crosshair_initial_offset_m": cp,
@@ -295,8 +304,10 @@ def detect_problems(mm: MatchMoments, baseline: dict | None, cfg: dict) -> Probl
                     # 035：T 方未下包的开局阶段拉出是正常进点（第三轮审计），CT 不受影响
                     t_early_round = (c.side == "T" and not c.bomb_planted and
                                      c.round_time_s < p["overpeek_t_min_round_time_s"])
+                    # 037：T 方未下包、只剩 1 名对手时本来就要主动找人（第四轮审计 2026-10-17）
+                    t_hunting_last = c.side == "T" and not c.bomb_planted and c.alive_enemy == 1
                     if ("man_advantage" in m.tags and m.trade is not None and m.trade.traded is False
-                            and not forced_retake and not t_early_round):
+                            and not forced_retake and not t_early_round and not t_hunting_last):
                         hit("overpeek_in_advantage", {"man_advantage": True, "contact_type": e.contact_type, "traded": False})
                 if (shot_weapon == "deagle" and e.first_seen_shot_stopped is False and
                         first_seen is not None and _finite(first_seen.speed_ratio) and
@@ -348,12 +359,19 @@ def detect_problems(mm: MatchMoments, baseline: dict | None, cfg: dict) -> Probl
             elif d is not None and d.blinded and d.blinded_by_teammate is None:
                 missing("turned_into_flash")
             if d is not None and d.reloading_at_death:
-                if d.ammo_before_reload is None:
+                if d.ammo_before_reload is None or d.magazine_size is None:
                     missing("died_while_reloading")
-                elif d.ammo_before_reload >= p["reload_min_ammo_left"]:
+                # 037：弹匣至少剩三成、且换弹开始至少 reload_min_seconds 秒后才阵亡才判（第四轮审计 2026-10-17：
+                # 只剩不到三成的换弹是必要的；刚开始换弹就阵亡的来不及反应）
+                elif (d.ammo_before_reload >= p["reload_min_ammo_left"]
+                      and d.ammo_before_reload >= d.magazine_size * p["reload_min_ammo_fraction"]
+                      and d.reload_started_s is not None and d.reload_started_s >= p["reload_min_seconds"]):
                     hit("died_while_reloading", {"reloading_at_death": True,
-                        "ammo_before_reload": d.ammo_before_reload, "reload_started_s": d.reload_started_s},
-                        {"min_ammo_left": p["reload_min_ammo_left"], "source": "config"})
+                        "ammo_before_reload": d.ammo_before_reload, "magazine_size": d.magazine_size,
+                        "reload_started_s": d.reload_started_s},
+                        {"min_ammo_left": p["reload_min_ammo_left"],
+                         "min_ammo_fraction": p["reload_min_ammo_fraction"],
+                         "min_seconds": p["reload_min_seconds"], "source": "config"})
             if (d is not None and c.side == "T" and c.bomb_planted and {"molotov", "incgrenade"}.intersection(d.unused_grenades)
                     and _finite(c.seconds_since_plant) and c.seconds_since_plant >= p["post_plant_min_alive_seconds"]):
                 hit("post_plant_utility_unused", {"side": c.side, "bomb_planted": c.bomb_planted,

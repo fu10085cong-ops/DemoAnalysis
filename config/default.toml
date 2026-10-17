@@ -317,7 +317,8 @@ overpeek_t_min_round_time_s = 25.0
 # 准星：首次看见前多少秒到首次命中之间有一刻在空中，就不判（031；游戏内确认的 2 条准星错判都是跳跃中看见）
 crosshair_airborne_lookback_seconds = 0.25
 # 漏补：补枪窗口内能看到击杀者（屏幕内、有视线）累计至少多少秒才判
-missed_trade_min_view_seconds = 0.25
+# （037：第四轮审计 2026-10-17，击杀者只在屏幕里一闪而过（0.27–0.34 秒）的不值得提醒，从 0.25 提到 0.4）
+missed_trade_min_view_seconds = 0.4
 # 漏补：第一次看到击杀者时，补枪窗口至少还剩多少秒反应时间
 # （035：第三轮审计 2026-10-17，击杀者 2 秒后才出现在屏幕里的不值得提醒，从 1.0 提到 3.0）
 missed_trade_min_react_seconds = 3.0
@@ -331,6 +332,10 @@ dry_peek_grenades = ["flashbang"]
 post_plant_min_alive_seconds = 10.0
 # 换弹时被打死：换弹前弹匣至少剩余多少发才算主动换弹
 reload_min_ammo_left = 1
+# 换弹时被打死：换弹前弹匣至少剩弹匣容量的这么多比例才判（037：第四轮审计 2026-10-17，只剩不到三成的换弹是必要的）
+reload_min_ammo_fraction = 0.30
+# 换弹时被打死：换弹开始至少这么多秒后阵亡才判（037：第四轮审计 2026-10-17，刚开始换弹就阵亡的来不及反应）
+reload_min_seconds = 0.3
 # Glock 远距离：只在击杀者用这些武器时判（032）
 glock_long_range_opponent_weapons = ["ak47", "m4a1", "m4a1_silencer", "galilar", "famas", "aug", "sg556", "awp", "ssg08", "scar20", "g3sg1"]
 # 已被其他队友补上的记录不作为漏补枪问题

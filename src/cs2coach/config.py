@@ -78,6 +78,9 @@ def _validate_problems(cfg: dict[str, Any]) -> None:
             raise ConfigError(f"配置项 problems.{key} 应为正整数")
     if type(cfg["reload_min_ammo_left"]) is not int or cfg["reload_min_ammo_left"] < 1:
         raise ConfigError("配置项 problems.reload_min_ammo_left 应为正整数")
+    fraction = cfg["reload_min_ammo_fraction"]
+    if type(fraction) not in (int, float) or not math.isfinite(fraction) or not 0 < fraction <= 1:
+        raise ConfigError("配置项 problems.reload_min_ammo_fraction 应在 (0, 1] 内")
     thresholds = cfg["moving_shot_thresholds"]
     weapons = {"ak47", "galilar", "m4a1", "m4a1_silencer", "famas", "aug", "sg556", "deagle"}
     if (not isinstance(thresholds, dict) or set(thresholds) != weapons or any(
@@ -90,7 +93,7 @@ def _validate_problems(cfg: dict[str, Any]) -> None:
     for key in ("slow_reaction_margin_ratio", "crosshair_margin_ratio", "crosshair_min_distance_m",
                 "overpeek_t_min_round_time_s", "highlight_min_lead_s", "crosshair_airborne_lookback_seconds",
                 "missed_trade_min_view_seconds", "missed_trade_min_react_seconds", "missed_trade_other_fight_seconds",
-                "post_plant_min_alive_seconds"):
+                "post_plant_min_alive_seconds", "reload_min_seconds"):
         value = cfg[key]
         if type(value) not in (int, float) or not math.isfinite(value) or value < 0:
             raise ConfigError(f"配置项 problems.{key} 应为非负有限数")

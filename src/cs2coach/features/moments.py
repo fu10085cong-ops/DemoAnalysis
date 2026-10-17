@@ -98,6 +98,7 @@ class _Params:
         self.max_speed_scoped: dict[str, float] = cs["max_speed_scoped"]
         self.shots = match.shots  # find_moments 中替换为带 target 列的版本
         self.sight: Sight | None = None
+        self.magazine_max: dict[str, int | None] = {}  # 037：弹匣容量按武器缓存，不每次阵亡都扫描全部 tick
 
     def secs(self, ticks: float) -> float:
         return round(ticks / self.rate, 3)
@@ -495,6 +496,17 @@ def trade_info(match: MatchData, p: _Params, sid: int, opponent: int | None, tic
     )
 
 
+def _magazine_size(match: MatchData, p: _Params, weapon: Any) -> int | None:
+    """本场所有玩家持同名武器时 active_weapon_ammo 的最大值，作为弹匣容量（037，不写死容量）。"""
+    if weapon is None or pd.isna(weapon):
+        return None
+    weapon = str(weapon)
+    if weapon not in p.magazine_max:
+        ammo = match.ticks.loc[match.ticks["active_weapon_name"] == weapon, "active_weapon_ammo"].dropna()
+        p.magazine_max[weapon] = int(ammo.max()) if len(ammo) else None
+    return p.magazine_max[weapon]
+
+
 def death_state(match: MatchData, p: _Params, sid: int, tick: int, row: pd.Series) -> DeathState:
     b = match.blinds
     b = b[(b["victim"] == sid).fillna(False) & (b["tick"] <= tick) & (b["duration"] >= p.min_blind)]
@@ -515,7 +527,7 @@ def death_state(match: MatchData, p: _Params, sid: int, tick: int, row: pd.Serie
     # 死亡 tick 可能已清空玩家状态；优先从前一 tick 回溯连续的换弹状态。
     reload_tick = next((t for t in (tick - 1, tick)
                         if (st := match.state_at(sid, t)) is not None and bool(st["is_in_reload"])), None)
-    reload_started = ammo_before = None
+    reload_started = ammo_before = magazine = None
     if reload_tick is not None:
         first = reload_tick
         for t in range(reload_tick - 1, tick - round(5 * p.rate) - 1, -1):
@@ -525,8 +537,10 @@ def death_state(match: MatchData, p: _Params, sid: int, tick: int, row: pd.Serie
             first = t
         reload_started = p.secs(tick - first)
         before = match.state_at(sid, first - 1)
-        if before is not None and pd.notna(before["active_weapon_ammo"]):
-            ammo_before = int(before["active_weapon_ammo"])
+        if before is not None:
+            if pd.notna(before["active_weapon_ammo"]):
+                ammo_before = int(before["active_weapon_ammo"])
+            magazine = _magazine_size(match, p, before["active_weapon_name"])
     return DeathState(
         **ready,
         unused_grenades=list(grenades) if isinstance(grenades, list) else [],
@@ -534,7 +548,7 @@ def death_state(match: MatchData, p: _Params, sid: int, tick: int, row: pd.Serie
         blinded=best is not None, blind_remaining_s=round(best[0], 2) if best else None,
         blinded_by=blinded_by, blinded_by_teammate=by_mate,
         reloading_at_death=reload_tick is not None, reload_started_s=reload_started,
-        ammo_before_reload=ammo_before,
+        ammo_before_reload=ammo_before, magazine_size=magazine,
     )
 
 

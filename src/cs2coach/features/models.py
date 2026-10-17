@@ -151,6 +151,9 @@ class DeathState(BaseModel):
     reloading_at_death: bool = False
     reload_started_s: float | None = None  # 从换弹开始到阵亡
     ammo_before_reload: int | None = None  # 换弹开始前一 tick 的弹匣剩余
+    # 换弹开始前一 tick 手持武器的弹匣容量：本场所有玩家持同名武器（active_weapon_name）时
+    # active_weapon_ammo 的最大值（037）；只在换弹中阵亡时计算，没有数据时为 None
+    magazine_size: int | None = None
     # 武器是否来得及开枪：上一枪到阵亡的间隔小于该武器两枪的最短间隔时为 False（如 AWP 刚开过一枪还在拉栓）。
     # 没有上一枪或该武器没有配置最短间隔时为 None
     weapon_ready: bool | None = None
