@@ -52,8 +52,8 @@ def evidence_sentence(hit: ProblemHit) -> str:
     if pid == "shot_while_moving":
         if e.get("first_seen_shot_speed_ratio") is None or t.get("min_speed_ratio") is None:
             return "交火第一枪未停稳，且没有命中。"
-        return (f"看见对手后的第一枪未停稳，且没有命中；速度比 {e['first_seen_shot_speed_ratio']:.3f}，"
-                f"不低于配置下限 {t['min_speed_ratio']:.3f}。")
+        return (f"看见对手后的第一枪速度比 {e['first_seen_shot_speed_ratio']:.3f}，"
+                f"不低于 {t.get('weapon_name', weapon_label(hit.weapon))} 的阈值 {t['min_speed_ratio']:.3f}；这一枪未命中。")
     if pid == "peeked_into_held_angle":
         return "接触类型检测为主动拉出、对手架点（近似判断）。"
     if pid == "dry_peek_with_utility":
@@ -76,7 +76,8 @@ def evidence_sentence(hit: ProblemHit) -> str:
     if pid == "awp_unscoped_shot":
         return f"AWP 第一枪未开镜，距离 {_number(e.get('distance_m'))} 米，大于配置阈值 {_number(t.get('distance_m'))} 米。"
     if pid == "deagle_moving_shot":
-        return "沙鹰看见对手后的第一枪未停稳。"
+        return (f"看见对手后的第一枪速度比 {e['first_seen_shot_speed_ratio']:.3f}，"
+                f"不低于 {t.get('weapon_name', weapon_label(hit.weapon))} 的阈值 {t['min_speed_ratio']:.3f}。")
     if pid == "glock_long_range":
         return f"Glock 交火距离 {_number(e.get('distance_m'))} 米，高于职业距离 90 分位 {_number(t.get('distance_m'))} 米。"
     if pid == "spray_control":

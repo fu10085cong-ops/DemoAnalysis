@@ -2520,22 +2520,22 @@
   ],
   "problem_rates": {
     "slow_reaction": {
-      "hits": 689,
+      "hits": 676,
       "rounds": 5620,
-      "per_10_rounds": 1.23,
-      "player_share_pct": 90.0
+      "per_10_rounds": 1.2,
+      "player_share_pct": 89.6
     },
     "poor_crosshair_placement": {
-      "hits": 737,
+      "hits": 727,
       "rounds": 5620,
-      "per_10_rounds": 1.31,
+      "per_10_rounds": 1.29,
       "player_share_pct": 91.5
     },
     "shot_while_moving": {
-      "hits": 417,
+      "hits": 225,
       "rounds": 5620,
-      "per_10_rounds": 0.74,
-      "player_share_pct": 78.8
+      "per_10_rounds": 0.4,
+      "player_share_pct": 55.0
     },
     "peeked_into_held_angle": {
       "hits": 233,
@@ -2592,10 +2592,10 @@
       "player_share_pct": 0.8
     },
     "deagle_moving_shot": {
-      "hits": 13,
+      "hits": 5,
       "rounds": 5620,
-      "per_10_rounds": 0.02,
-      "player_share_pct": 5.0
+      "per_10_rounds": 0.01,
+      "player_share_pct": 1.9
     },
     "glock_long_range": {
       "hits": 30,
@@ -2604,16 +2604,16 @@
       "player_share_pct": 11.2
     },
     "spray_control": {
-      "hits": 48,
+      "hits": 39,
       "rounds": 5620,
-      "per_10_rounds": 0.09,
-      "player_share_pct": 16.9
+      "per_10_rounds": 0.07,
+      "player_share_pct": 13.5
     },
     "spray_while_moving": {
-      "hits": 5,
+      "hits": 4,
       "rounds": 5620,
       "per_10_rounds": 0.01,
-      "player_share_pct": 1.9
+      "player_share_pct": 1.5
     },
     "good_trade": {
       "hits": 697,
@@ -2628,10 +2628,10 @@
       "player_share_pct": 49.2
     },
     "won_duel_seen_first": {
-      "hits": 246,
+      "hits": 304,
       "rounds": 5620,
-      "per_10_rounds": 0.44,
-      "player_share_pct": 58.5
+      "per_10_rounds": 0.54,
+      "player_share_pct": 65.8
     }
   }
 }

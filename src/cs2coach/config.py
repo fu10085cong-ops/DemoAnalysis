@@ -61,7 +61,7 @@ def _validate_review(cfg: dict[str, Any]) -> None:
 def _validate_problems(cfg: dict[str, Any]) -> None:
     from cs2coach.features.problems import PROBLEMS
 
-    conditions = {"through_smoke", "wallbang", "player_blinded_in_fight",
+    conditions = {"through_smoke", "first_seen_through_smoke", "wallbang", "player_blinded_in_fight",
                   "opponent_blinded_by_own_side", "killed_by_utility", "fired_before_seen"}
     exclusions = cfg["exclusions"]
     if (not isinstance(exclusions, dict) or set(exclusions) != conditions or any(
@@ -72,7 +72,16 @@ def _validate_problems(cfg: dict[str, Any]) -> None:
         raise ConfigError("配置项 problems.exclusions 的条件名或问题编号无效")
     if type(cfg["max_shots_before_seen"]) is not int or cfg["max_shots_before_seen"] < 1:
         raise ConfigError("配置项 problems.max_shots_before_seen 应为正整数")
-    for key in ("moving_shot_margin", "crosshair_margin_ratio", "highlight_min_lead_s"):
+    thresholds = cfg["moving_shot_thresholds"]
+    weapons = {"ak47", "galilar", "m4a1", "m4a1_silencer", "famas", "aug", "sg556", "deagle"}
+    if (not isinstance(thresholds, dict) or set(thresholds) != weapons or any(
+            type(value) not in (int, float) or not math.isfinite(value) or not 0 < value <= 1
+            for value in thresholds.values())):
+        raise ConfigError("配置项 problems.moving_shot_thresholds 应包含八种武器的 (0, 1] 速度比")
+    distance = cfg["spray_max_distance_m"]
+    if type(distance) not in (int, float) or not math.isfinite(distance) or distance <= 0:
+        raise ConfigError("配置项 problems.spray_max_distance_m 应为正有限数")
+    for key in ("crosshair_margin_ratio", "highlight_min_lead_s"):
         value = cfg[key]
         if type(value) not in (int, float) or not math.isfinite(value) or value < 0:
             raise ConfigError(f"配置项 problems.{key} 应为非负有限数")

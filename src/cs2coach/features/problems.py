@@ -10,6 +10,7 @@ from typing import Literal
 from pydantic import BaseModel
 
 from cs2coach.baseline import EXCLUDED_TAGS, engagement_weapon, spray_segments, spray_stats, weapon_threshold
+from cs2coach.features.labels import weapon_label
 from cs2coach.features.models import MatchMoments
 
 
@@ -134,6 +135,8 @@ def detect_problems(mm: MatchMoments, baseline: dict | None, cfg: dict) -> Probl
         if moment.wallbang:
             active.add("wallbang")
         if engagement is not None:
+            if engagement.visibility_note == "smoke":
+                active.add("first_seen_through_smoke")
             if engagement.player_blind is not None:
                 active.add("player_blinded_in_fight")
             if (engagement.opponent_blind is not None and
@@ -176,8 +179,8 @@ def detect_problems(mm: MatchMoments, baseline: dict | None, cfg: dict) -> Probl
         w, e, d, c = engagement_weapon(m), m.engagement, m.death, m.context
         audit = {"round": m.round, "tick": m.tick, "kind": m.kind}
 
-        def hit(pid, evidence, thresholds=None):
-            emit(pid, m.id, w, audit | evidence, thresholds, m)
+        def hit(pid, evidence, thresholds=None, weapon=None):
+            emit(pid, m.id, weapon or w, audit | evidence, thresholds, m)
 
         if m.kind in ("kill", "death"):
             if e is None:
@@ -207,7 +210,7 @@ def detect_problems(mm: MatchMoments, baseline: dict | None, cfg: dict) -> Probl
                         hit("poor_crosshair_placement", {"crosshair_placement_deg": cp},
                             {"crosshair_placement_deg": limit, "margin_ratio": p["crosshair_margin_ratio"], "source": "pro_p75"})
 
-                if w in automatic:
+                if w in automatic and (not _finite(c.distance) or c.distance <= p["spray_max_distance_m"]):
                     eligible = [s for s in e.shots if s.weapon == w and _finite(s.recoil_index)
                                 and s.recoil_index >= p["spray_late_recoil_index"]]
                     late = [s for s in eligible if s.seen_opponent is True]
@@ -229,7 +232,8 @@ def detect_problems(mm: MatchMoments, baseline: dict | None, cfg: dict) -> Probl
                                     {"expected_hit_pct": expected, "source": "pro_segments_weighted",
                                      "pro_hit_pcts": _json([s["hit_pct"] for s in refs]),
                                      "margin_pct": p["spray_margin_pct"], "min_shots": p["spray_min_late_shots"],
-                                     "min_recoil_index": p["spray_late_recoil_index"], "limits_source": "config"})
+                                    "min_recoil_index": p["spray_late_recoil_index"],
+                                    "max_distance_m": p["spray_max_distance_m"], "limits_source": "config"})
 
         if m.kind == "death":
             if e is not None:
@@ -240,15 +244,17 @@ def detect_problems(mm: MatchMoments, baseline: dict | None, cfg: dict) -> Probl
                     missing("dry_peek_with_utility")
                     if "man_advantage" in m.tags:
                         missing("overpeek_in_advantage")
-                first_seen = next((shot for shot in e.shots if shot.seen_opponent is True), None)
-                speed_limit = round(cfg["counter_strafe"]["accurate_speed_ratio"] *
-                                    (1 + p["moving_shot_margin"]), 10)
+                first_seen = min((shot for shot in e.shots if shot.seen_opponent is True),
+                                 key=lambda shot: shot.tick, default=None)
+                shot_weapon = first_seen.weapon if first_seen is not None else None
+                speed_limit = p["moving_shot_thresholds"].get(shot_weapon)
                 if (e.first_seen_shot_stopped is False and e.first_seen_shot_hit is False and
-                        first_seen is not None and _finite(first_seen.speed_ratio) and
+                        speed_limit is not None and first_seen is not None and _finite(first_seen.speed_ratio) and
                         first_seen.speed_ratio >= speed_limit):
                     hit("shot_while_moving", {"first_seen_shot_stopped": False, "first_seen_shot_hit": False,
                         "first_seen_shot_speed_ratio": first_seen.speed_ratio},
-                        {"min_speed_ratio": speed_limit, "margin_ratio": p["moving_shot_margin"], "source": "config"})
+                        {"min_speed_ratio": speed_limit, "weapon_name": weapon_label(shot_weapon), "source": "config"},
+                        weapon=shot_weapon)
                 if e.contact_type == "peek":
                     hit("peeked_into_held_angle", {"contact_type": e.contact_type})
                     if d is None:
@@ -260,8 +266,13 @@ def detect_problems(mm: MatchMoments, baseline: dict | None, cfg: dict) -> Probl
                             "unused_grenades": _json(d.unused_grenades), "opponent_blind": None})
                     if "man_advantage" in m.tags and m.trade is not None and m.trade.traded is False:
                         hit("overpeek_in_advantage", {"man_advantage": True, "contact_type": e.contact_type, "traded": False})
-                if w == "deagle" and e.first_seen_shot_stopped is False:
-                    hit("deagle_moving_shot", {"first_seen_shot_stopped": False})
+                if (shot_weapon == "deagle" and e.first_seen_shot_stopped is False and
+                        first_seen is not None and _finite(first_seen.speed_ratio) and
+                        first_seen.speed_ratio >= speed_limit):
+                    hit("deagle_moving_shot", {"first_seen_shot_stopped": False,
+                        "first_seen_shot_speed_ratio": first_seen.speed_ratio},
+                        {"min_speed_ratio": speed_limit, "weapon_name": weapon_label(shot_weapon), "source": "config"},
+                        weapon=shot_weapon)
                 if w == "awp" and e.shots:
                     first = min(e.shots, key=lambda s: s.tick)
                     if first.scoped is False and not _finite(c.distance):

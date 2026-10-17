@@ -1,6 +1,6 @@
 # 029 审计第二轮的修正：按武器设移动开枪阈值、看见时隔烟、压枪距离上限
 
-状态：待做
+状态：完成
 执行机器：Mac，分支 `task/029-detector-fixes-round2`
 
 ## 目标
@@ -116,8 +116,63 @@
 ## 完成报告（GPT 填写）
 
 - 改动的文件及原因：
-- 测试结果：
-- 真实 demo 验证（如有）：
+  - `config/default.toml`、`src/cs2coach/config.py`：按武器配置并严格校验移动首枪速度比阈值，删除旧余量；新增 30 米压枪上限、首次看见隔烟排除，出枪慢的看见前开枪上限改为 1，沙鹰规则增加交火中被闪排除。
+  - `src/cs2coach/features/problems.py`、`src/cs2coach/report/evidence.py`：移动首枪按实际所用武器取阈值并写出武器名、速度比和阈值；压枪差限制单次交火距离；统一排除条件计数。
+  - `scripts/calibrate_moving_shots.py`：按 demo 来源、距离和速度比分段统计首枪命中率、样本数及 Wilson 95% 区间；排除隔烟、蹲下、空中射击。
+  - `docs/features.md`、`docs/problem_catalog.md`：同步新检测口径及业余校准依据。`tests/test_problems.py`、`tests/test_calibrate_moving_shots.py`：覆盖阈值、换枪、排除、距离、分段和区间。
+  - `src/cs2coach/baselines/pro_sample.json`：按最终代码重建职业问题频率。`docs/tasks/README.md`：同步状态索引。未新增依赖。
+- 测试结果：`.venv/bin/python -m pytest -q`：749 passed，3 skipped；`git diff --check` 通过。未调用付费或本地模型 API。
+- 真实 demo 验证：
+  - 校准使用 `data/demos/5e_demo/` 全部 15 场、`data/demos/perfectworld_demo/` 全部 9 场，以及 `src/cs2coach/baselines/pro_demos.toml` 所列全部 26 份职业 demo。均成功；业余 240 人次，职业基准 260 人次。完整逐武器结果含样本数和 Wilson 95% 区间，保存在 `data/audit/2026-10-17-after029/calibration-amateur.md` 与 `calibration-pro.md`。下表为任务单所列武器的命中率，速度比分段依次为 `<0.34`、`0.34–0.45`、`0.45–0.70`、`0.70–1.01`：
+
+    | 武器 | 业余四档命中率 | 职业四档命中率 |
+    |---|---|---|
+    | AK-47 | 40.8 / 26.1 / 17.9 / 11.1% | 40.0 / 31.9 / 18.8 / 18.0% |
+    | M4A4 | 44.3 / 40.0 / 23.5 / 15.4% | 43.8 / 23.8 / 20.4 / 9.1% |
+    | M4A1-S | 38.5 / 32.7 / 18.8 / 15.5% | 44.9 / 34.4 / 16.4 / 12.8% |
+    | 沙鹰 | 52.0 / 60.0 / 40.0 / 27.3% | 47.6 / 50.0 / 40.0 / 0.0% |
+    | Glock | 32.1 / 27.3 / 32.6 / 34.9% | 37.2 / 42.9 / 39.5 / 40.8% |
+    | USP-S | 31.2 / 28.0 / 38.5 / 35.7% | 47.2 / 29.0 / 29.2 / 42.3% |
+    | MAC-10 | 18.6 / 26.7 / 33.3 / 18.7% | 38.1 / 60.0 / 26.7 / 25.0% |
+    | MP9 | 34.3 / 26.9 / 31.8 / 28.3% | 42.6 / 22.2 / 15.8 / 38.1% |
+
+  - `scripts/build_baseline.py`：26/26 份成功、5620 在场回合；`metrics`、`weapons`、`spray` 与旧基准逐项相同。各问题职业频率为每 10 回合，括号内为命中数：
+
+    | 问题 | 改前 → 改后 |
+    |---|---:|
+    | slow_reaction | 1.23 (689) → 1.20 (676) |
+    | poor_crosshair_placement | 1.31 (737) → 1.29 (727) |
+    | shot_while_moving | 0.74 (417) → 0.40 (225) |
+    | peeked_into_held_angle | 0.41 (233) → 0.41 (233) |
+    | dry_peek_with_utility | 0.14 (76) → 0.14 (76) |
+    | overpeek_in_advantage | 0.08 (47) → 0.08 (47) |
+    | died_without_seeing | 0.36 (201) → 0.36 (201) |
+    | turned_into_flash | 0.43 (244) → 0.43 (244) |
+    | missed_trade | 0.66 (372) → 0.66 (372) |
+    | post_plant_utility_unused | 0.02 (10) → 0.02 (10) |
+    | weapon_not_ready | 0.31 (177) → 0.31 (177) |
+    | awp_unscoped_shot | 0.00 (2) → 0.00 (2) |
+    | deagle_moving_shot | 0.02 (13) → 0.01 (5) |
+    | glock_long_range | 0.05 (30) → 0.05 (30) |
+    | spray_control | 0.09 (48) → 0.07 (39) |
+    | spray_while_moving | 0.01 (5) → 0.01 (4) |
+    | good_trade | 1.24 (697) → 1.24 (697) |
+    | flash_assist | 0.35 (199) → 0.35 (199) |
+    | won_duel_seen_first | 0.44 (246) → 0.54 (304) |
+
+  - `audit_collect.py --name 2026-10-17-after029`：24/24 场、240 人次、5380 条命中、失败 0；`audit_report.py --name 2026-10-17-after029 --labels-from 2026-10-17-after027` 只读复用旧判定。已判定命中前→后：出枪慢 20→10（移除 wrong 5、unsure 5，准确率 98%→100%）；开枪时没停稳 20→8（移除 wrong 12，40%→100%）；沙鹰移动开枪 20→11（移除 wrong 2、correct 7，90%→100%）；压枪差 20→9（移除 wrong 11，改后分层准确率样本不足）；扫射时移动 12→10（移除 unsure 2）。其余问题没有已判定命中被移除。按旧标签原因，移除移动开枪的“口径不符”9/9、“贴阈值”3/3，出枪慢“看见前已开枪”9 条和“非可避免”1 条，压枪差“穿烟视野”9 条、“远距离扫射”2 条，沙鹰“交火中被闪”2 条。完整对比见新审计目录 `precision.md`。
+  - 被移除的 correct 共 7 条，均为 `deagle_moving_shot`：`deagle_moving_shot-37037e64c04a15d66f8486cc`、`deagle_moving_shot-8760e5bfbf198332835b5401`、`deagle_moving_shot-9af53371aa8744ac0f729d4e`、`deagle_moving_shot-a87b3197119643899ed29010`、`deagle_moving_shot-82f6f5293542735adf8ac4bf`、`deagle_moving_shot-32c7ef12375f8304cee4b741`、`deagle_moving_shot-8849be5237cbd4155de989f4`。任务单要求超过 3 条即停下交审，故保留配置阈值，不再调整。报告中玩家名均以“（已匿名）”处理；旧 `labels.toml` 校验值与运行前相同。
 - 遗留问题 / 需要确认的地方：
+  - 沙鹰规则移除 7 条旧判 correct，超过停线。旧审计判定未记录首枪速度比，需复查这些样本是否应按新的 0.45 命中率口径重判；目前不自行改阈值。
+  - 职业 M4A4 在 0.34–0.45 档已从 43.8% 降到 23.8%，业余同档仅从 44.3% 降到 40.0%；两者拐点不同，默认仍按任务单的 0.45。
+  - `won_duel_seen_first` 职业频率重建后 0.44→0.54；任务开始前配置已为 `highlight_min_lead_s = 0.045`，该规则本次只新增隔烟排除，旧基准生成配置与现配置是否一致需复核。本任务没有调整该规则。
 
 ## 审查意见（Claude 填写）
+
+**审查通过（2026-10-17）。** 用第二轮判定验证：开枪时没停稳 40%→100%（移除 wrong 12），出枪慢 98%→100%，压枪差移除 wrong 11 条（隔烟 9、远距离 2），沙鹰移动开枪移除 wrong 2 条。`labels.toml` 的校验值不变，749 个测试通过。
+
+对完成报告三条遗留问题的判断：
+1. **沙鹰移除的 7 条 correct**：这 7 条是 Claude 第二轮按旧口径（只要没停稳就算）判的。新统计显示，沙鹰速度比在 0.34–0.45 时命中率为 56–60%，不低于停稳时，按新口径本来就不算问题。这是**口径变化，不是误删**，不需要调整阈值。
+2. **职业 M4A4 在 0.34–0.45 段就明显下降**：职业这一段样本少，先维持 0.45，数据多了再用 `calibrate_moving_shots.py` 复查。
+3. **先发现先开枪的职业频率从 0.44 变为 0.54**：Claude 审查 027 时把 `highlight_min_lead_s` 改为 0.045 后没有重建基准，这次重建才反映出来，属于正常结果。
+

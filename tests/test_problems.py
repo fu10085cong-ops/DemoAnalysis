@@ -110,7 +110,7 @@ def test_missed_trade_records_are_preserved(cfg, baseline):
         "opponent_blind": blind("teammate")}}),
     ("killed_by_utility", "died_without_seeing", {"weapon": "inferno", "tags": ["died_without_seeing"]}),
     ("fired_before_seen", "slow_reaction", {"engagement": {"time_to_damage_s": .8,
-        "shots_before_seen": 2}}),
+        "shots_before_seen": 1}}),
 ])
 def test_each_exclusion_and_counter(condition, pid, positive, cfg, baseline):
     cfg["problems"]["disabled"] = []
@@ -151,6 +151,71 @@ def test_smoke_does_not_exclude_moving_shot_rules(cfg, baseline):
         report = detect_problems(make_mm([moment]), baseline, cfg)
         assert pid in {h.problem for h in report.hits}
         assert f"{pid}/through_smoke" not in report.skipped
+
+
+@pytest.mark.parametrize(("weapon", "ratio", "expected"), [
+    ("ak47", .38, True), ("m4a1", .38, False), ("m4a1", .50, True),
+    ("glock", .90, False), ("deagle", .40, False), ("deagle", .50, True),
+])
+def test_moving_shot_weapon_thresholds(cfg, baseline, weapon, ratio, expected):
+    shot = make_shot(weapon=weapon, stopped=False, speed_ratio=ratio)
+    moment = make_moment(weapon=weapon, engagement={"shots": [shot]})
+    report = detect_problems(make_mm([moment]), baseline, cfg)
+    found = {hit.problem: hit for hit in report.hits}
+    assert ("shot_while_moving" in found) is expected
+    if weapon == "deagle":
+        assert ("deagle_moving_shot" in found) is expected
+    if expected:
+        from cs2coach.features.labels import weapon_label
+        from cs2coach.report.evidence import evidence_sentence
+        sentence = evidence_sentence(found["shot_while_moving"])
+        assert f"不低于 {weapon_label(weapon)} 的阈值" in sentence
+        assert f"{ratio:.3f}" in sentence
+
+
+def test_moving_threshold_uses_first_seen_shot_weapon(cfg, baseline):
+    before = make_shot(tick=80, weapon="glock", seen_opponent=False)
+    after = make_shot(tick=90, weapon="ak47", stopped=False, speed_ratio=.38)
+    moment = make_moment(weapon="glock", engagement={"shots": [before, after],
+                         "first_seen_shot_stopped": False, "first_seen_shot_hit": False})
+    found = [hit for hit in detect_problems(make_mm([moment]), baseline, cfg).hits
+             if hit.problem == "shot_while_moving"]
+    assert len(found) == 1
+    assert found[0].weapon == "ak47"
+
+
+def test_first_seen_smoke_exclusion_and_counter(cfg, baseline):
+    moment = make_moment(engagement={"visibility_note": "smoke", "shots": bullets()})
+    report = detect_problems(make_mm([moment]), baseline, cfg)
+    assert "spray_control" not in {hit.problem for hit in report.hits}
+    assert report.skipped["spray_control/first_seen_through_smoke"] == 1
+    cfg["problems"]["exclusions"]["first_seen_through_smoke"] = []
+    assert "spray_control" in {hit.problem for hit in detect_problems(make_mm([moment]), baseline, cfg).hits}
+
+
+@pytest.mark.parametrize(("distance", "expected"), [(29.0, True), (31.0, False)])
+def test_spray_distance_limit(cfg, baseline, distance, expected):
+    moment = make_moment(context={"distance": distance}, engagement={"shots": bullets()})
+    found = {hit.problem for hit in detect_problems(make_mm([moment]), baseline, cfg).hits}
+    assert ("spray_control" in found) is expected
+
+
+def test_deagle_blinded_in_fight_exclusion(cfg, baseline):
+    moment = make_moment(weapon="deagle", engagement={"first_shot_stopped": False, "player_blind": blind()})
+    report = detect_problems(make_mm([moment]), baseline, cfg)
+    assert "deagle_moving_shot" not in {hit.problem for hit in report.hits}
+    assert report.skipped["deagle_moving_shot/player_blinded_in_fight"] == 1
+
+
+def test_moving_threshold_config_validation(tmp_path):
+    from cs2coach.config import ConfigError
+    for content in ('[problems.moving_shot_thresholds]\nak47 = 0\n',
+                    '[problems.moving_shot_thresholds]\nglock = 0.5\n',
+                    '[problems]\nspray_max_distance_m = -1\n'):
+        path = tmp_path / "invalid.toml"
+        path.write_text(content, encoding="utf-8")
+        with pytest.raises(ConfigError):
+            load_config(path)
 
 
 def test_fact_card_distinguishes_first_seen_shot():
@@ -266,7 +331,7 @@ def test_weapon_recognition_is_shared_and_uses_earliest_shot(cfg, baseline):
     from cs2coach.baseline import engagement_weapon as common
     assert engagement_weapon is common
     m = make_moment(weapon="awp", engagement={"shots": [make_shot(tick=95, weapon="awp"), make_shot(tick=90, weapon="deagle", stopped=False)],
-                                            "first_shot_stopped": False})
+                                                "first_shot_stopped": False, "first_seen_shot_stopped": False})
     assert "deagle_moving_shot" in {h.problem for h in detect_problems(make_mm([m]), baseline, cfg).hits}
 
 
