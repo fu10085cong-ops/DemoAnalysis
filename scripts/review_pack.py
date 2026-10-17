@@ -1,4 +1,10 @@
-"""生成、安装和回填游戏内复盘包。"""
+"""生成、安装和回填游戏内复盘包。
+
+标准答案集生成示例（以下参数接在同一条命令后）：
+    python scripts/review_pack.py build --audit 2026-10-18-after046 --pick stratified
+      --rules poor_crosshair_placement,slow_reaction,shot_while_moving,missed_trade,died_without_seeing,saw_but_no_shot
+      --per-rule 5 --seed 20261018 --blind --name 2026-10-18-gold
+"""
 
 from __future__ import annotations
 
@@ -7,6 +13,7 @@ import filecmp
 import hashlib
 import json
 import os
+import random
 import re
 import shutil
 import tomllib
@@ -21,6 +28,7 @@ ROOT = Path(__file__).resolve().parents[1]
 NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]*\Z")
 SECTION = re.compile(r'^\[labels\."((?:[^"\\]|\\.)*)"\][^\n]*$', re.M)
 RESULTS = {"对": "correct", "不对": "wrong", "看不出": "unsure"}
+WORTH = {"值得": "yes", "不值得": "no"}
 
 
 def _string(value: str) -> str:
@@ -69,20 +77,33 @@ def _find_audit(root: Path, keys: list[str]) -> str:
 
 
 def _selected(args: argparse.Namespace, root: Path) -> tuple[str, list[dict], dict]:
+    stratified = args.pick == "stratified" and not args.keys
+    if stratified:
+        rules = [rule.strip() for rule in (args.rules or "").split(",")]
+        if (not args.audit or not all(rules) or len(rules) != len(set(rules)) or
+                args.per_rule is None or args.per_rule <= 0):
+            raise ValueError("分层抽样须指定 --audit、--rules（非空且不重复）和 --per-rule（正整数）")
     if args.keys:
         keys = [line.strip() for line in Path(args.keys).read_text(encoding="utf-8").splitlines() if line.strip()]
         if not keys or len(keys) != len(set(keys)):
             raise ValueError("--keys 文件不能为空或含重复 hit_key")
         audit = args.audit or _find_audit(root, keys)
     else:
-        if not args.audit or args.pick != "ingame":
-            raise ValueError("请选择 --keys，或同时指定 --audit 和 --pick ingame")
+        if not args.audit or args.pick not in ("ingame", "stratified"):
+            raise ValueError("请选择 --keys，或同时指定 --audit 和 --pick ingame/stratified")
         audit = args.audit
         keys = None
     directory = _audit_dir(root, audit)
     rows = read_hits(directory / "hits.jsonl")
-    labels = _load_labels(directory / "labels.toml")
-    if keys is None:
+    label_path = directory / "labels.toml"
+    labels = _load_labels(label_path) if label_path.exists() or not stratified else {}
+    if stratified:
+        rng = random.Random(args.seed)
+        selected = []
+        for rule in rules:
+            candidates = sorted((row for row in rows if row["problem"] == rule), key=lambda row: row["hit_key"])
+            selected.extend(rng.sample(candidates, args.per_rule) if len(candidates) > args.per_rule else candidates)
+    elif keys is None:
         selected = [row for row in rows if (label := labels.get(row["hit_key"], {})).get("needs_ingame") is True
                     and (label.get("verdict") == "unsure" or "推断" in label.get("note", ""))]
     else:
@@ -136,6 +157,7 @@ def build(args: argparse.Namespace, root: Path, cfg: dict) -> Path:
     stems = _demo_stems(rows)
     review = cfg["review"]
     md = ["# 游戏内复盘清单", "", "先把 review.toml 的 result 填成‘对’、‘不对’或‘看不出’，可在 comment 写备注。",
+          "worth 填‘值得’或‘不值得’，表示如果你是教练，会不会因为这一条提醒玩家。",
           "在 CS2 控制台先输入 `exec cs2coach_review` 一次；每条先输入 `p1` 等加载 demo，等加载完成后再输入 `r1` 等跳转。",
           "result 记的是“这条检测对不对”：问题只是帮你判断；如果认为这条不该算作问题（例如当时在换弹、在跳跃），"
           "填‘不对’并写明原因。", ""]
@@ -157,15 +179,18 @@ def build(args: argparse.Namespace, root: Path, cfg: dict) -> Path:
             raise ValueError("CS2 命令不能包含引号或换行")
         aliases.append(f'alias p{index} "{play}"')
         aliases.append(f'alias {ident} "{jump}{"; " + follow if follow else ""}"')
-        label = labels[row["hit_key"]]
+        label = labels.get(row["hit_key"], {})
         question = review["questions"].get(row["problem"], review["questions"]["generic"])
         md += [f"## {ident} · {row['map']}", "", f"- Demo：`{stem}.dem`（来源：`{Path(row['demo']).name}`）",
                f"- 看谁的视角：{row['player_name']}；回合：{row['evidence'].get('round', row['target'])}",
                *[f"- {line}" for line in _scene(row.get("fact_card", ""))],
-               f"- 要确认：{question}", f"- Claude 原判：{label.get('verdict') or '未判'}",
-               f"- 原备注：{label.get('note') or '无'}", f"- 加载：`p{index}`（{play}）", f"- 跳转：`{ident}`（{jump}）", ""]
+               f"- 要确认：{question}",
+               "- 值得提醒吗：如果你是教练，会因为这一条提醒玩家吗？在 review.toml 的 worth 填‘值得’或‘不值得’。"]
+        if not args.blind:
+            md += [f"- Claude 原判：{label.get('verdict') or '未判'}", f"- 原备注：{label.get('note') or '无'}"]
+        md += [f"- 加载：`p{index}`（{play}）", f"- 跳转：`{ident}`（{jump}）", ""]
         toml += ["[[items]]", f"id = {_string(ident)}", f"hit_key = {_string(row['hit_key'])}",
-                 'result = ""', 'comment = ""', ""]
+                 'result = ""', 'worth = ""', 'comment = ""', ""]
     output.mkdir(parents=True, exist_ok=True)
     # 复盘包放在两台电脑共享的目录里：一律写 LF，避免 Windows 默认的 CRLF 让文件来回改换行符
     (output / "checklist.md").write_text("\n".join(md), encoding="utf-8", newline="\n")
@@ -228,25 +253,30 @@ def apply(args: argparse.Namespace, root: Path) -> None:
     pack = _read_pack(root / "data" / "review" / _name(args.name))
     path = _audit_dir(root, pack["audit"]) / "labels.toml"
     # 按原样读写换行符：判定文件在两台电脑间共享，Windows 默认写法会把整份文件改成 CRLF
-    with path.open(encoding="utf-8", newline="") as f:
-        original = f.read()
+    original = ""
+    if path.exists():
+        with path.open(encoding="utf-8", newline="") as f:
+            original = f.read()
     labels = tomllib.loads(original).get("labels", {})
     updates = {}
     for item in pack["items"]:
         result = item["result"].strip()
+        worth = item.get("worth", "").strip()
+        if worth and worth not in WORTH:
+            raise ValueError(f"{item['id']} 的 worth 无效：{worth}")
+        if worth and not result:
+            raise ValueError(f"{item['id']} 填写 worth 时必须同时填写 result")
         if not result:
             print(f"跳过未填写：{item['id']}")
             continue
         if result not in RESULTS:
             raise ValueError(f"{item['id']} 的 result 无效：{result}")
         key = item["hit_key"]
-        if key not in labels:
-            raise ValueError(f"labels.toml 缺少 {key}")
-        note = labels[key].get("note", "")
+        note = labels.get(key, {}).get("note", "")
         addition = f"游戏内确认（{datetime.now().date().isoformat()}）：{result}"
         if item.get("comment", "").strip():
             addition += f"，{item['comment'].strip()}"
-        updates[key] = (RESULTS[result], note + ("；" if note else "") + addition)
+        updates[key] = (RESULTS[result], note + ("；" if note else "") + addition, WORTH.get(worth))
     if not updates:
         print("没有需要写回的结果")
         return
@@ -258,22 +288,42 @@ def apply(args: argparse.Namespace, root: Path) -> None:
         block = original[match.start():end]
         key = json.loads('"' + match.group(1) + '"')
         if key in updates:
-            verdict, note = updates[key]
+            verdict, note, worth = updates[key]
             block = _replace_field(block, "verdict", verdict)
             block = _replace_field(block, "reason", "游戏内确认")
             block = _replace_field(block, "note", note)
+            if worth is not None:
+                if "worth" in labels[key]:
+                    block = _replace_field(block, "worth", worth)
+                else:
+                    # 在 verdict 后插入，并沿用该条目的换行符。
+                    pattern = re.compile(r'^([ \t]*verdict[^\r\n]*)(\r?\n|$)', re.M)
+                    block = pattern.sub(lambda m: m.group(1) + (m.group(2) or "\n") +
+                                        f"worth = {_string(worth)}" + (m.group(2) or "\n"), block, count=1)
             found.add(key)
         chunks.append(block)
-    if found != set(updates):
-        raise ValueError(f"labels.toml 无法定位条目：{set(updates) - found}")
-    backup = path.with_name(f"labels.toml.bak-{datetime.now().strftime('%Y%m%d-%H%M%S-%f')}")
-    with backup.open("w", encoding="utf-8", newline="") as f:
-        f.write(original)
+    missing = (set(updates) & set(labels)) - found
+    if missing:
+        raise ValueError(f"labels.toml 无法定位条目：{missing}")
+    newline = "\r\n" if "\r\n" in original else "\n"
+    for key, (verdict, note, worth) in updates.items():
+        if key in found:
+            continue
+        fields = [f"[labels.{_string(key)}]", f"verdict = {_string(verdict)}",
+                  'reason = "游戏内确认"', "needs_ingame = false", f"note = {_string(note)}",
+                  'selection = "ingame-gold"']
+        if worth is not None:
+            fields.append(f"worth = {_string(worth)}")
+        chunks.append(newline * 2 + newline.join(fields) + newline)
+    if path.exists():
+        backup = path.with_name(f"labels.toml.bak-{datetime.now().strftime('%Y%m%d-%H%M%S-%f')}")
+        with backup.open("w", encoding="utf-8", newline="") as f:
+            f.write(original)
+        print(f"已备份：{backup}")
     with path.open("w", encoding="utf-8", newline="") as f:
         f.write("".join(chunks))
-    print(f"已备份：{backup}")
-    for key, (verdict, _) in updates.items():
-        print(f"{key}：{labels[key].get('verdict', '')} → {verdict}")
+    for key, (verdict, _, _) in updates.items():
+        print(f"{key}：{labels.get(key, {}).get('verdict', '')} → {verdict}")
 
 
 def main(argv: list[str] | None = None, root: Path = ROOT) -> int:
@@ -282,7 +332,11 @@ def main(argv: list[str] | None = None, root: Path = ROOT) -> int:
     commands = parser.add_subparsers(dest="command", required=True)
     builder = commands.add_parser("build", help="生成复盘包")
     builder.add_argument("--audit", help="审计目录名")
-    builder.add_argument("--pick", choices=["ingame"])
+    builder.add_argument("--pick", choices=["ingame", "stratified"])
+    builder.add_argument("--rules", help="分层抽样的规则，以逗号分隔")
+    builder.add_argument("--per-rule", type=int, help="每条规则最多抽取的条数")
+    builder.add_argument("--seed", type=int, default=0, help="分层抽样的随机种子，默认 0")
+    builder.add_argument("--blind", action="store_true", help="清单隐藏 Claude 原判和原备注")
     builder.add_argument("--keys", type=Path, help="每行一个 hit_key")
     builder.add_argument("--name", help="复盘包目录名")
     installer = commands.add_parser("install", help="复制 demo 和 cfg 到 CS2")

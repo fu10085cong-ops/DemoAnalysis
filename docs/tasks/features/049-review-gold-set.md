@@ -1,8 +1,8 @@
 # 049 标准答案集：复盘包支持分层抽样、盲审和"值不值得提醒"
 
-状态：待做
+状态：完成
 难度：B（只改 `scripts/review_pack.py` 和配置；已预写测试）
-执行：Kimi（`C:\Users\David\.kimi-code\bin\kimi.exe -p`，独立工作目录）
+执行：Codex（medium）。原定 Kimi，但 5 小时额度用完；改派 MiMo，被它的网关以"high risk"拒绝；最后由 Codex 完成
 分支：`task/049-review-gold`（工作目录 `C:\Users\David\DemoAnalysis-049`）
 
 ## 目标
@@ -65,9 +65,9 @@ C:\Users\David\DemoAnalysis\.venv\Scripts\python.exe -m pytest -q -p no:cachepro
 
 ## 验收标准
 
-- [ ] `tests/test_review_gold.py` 全部通过（不得修改这个文件）；`tests/test_review_pack.py` 全部通过。
-- [ ] 全部测试通过（命令同上，去掉文件名），报告只贴最后一行。
-- [ ] 修改的文件为 LF 换行，不含真实玩家名或 SteamID。
+- [x] `tests/test_review_gold.py` 全部通过（不得修改这个文件）；`tests/test_review_pack.py` 全部通过。
+- [x] 全部测试通过（命令同上，去掉文件名），报告只贴最后一行。
+- [x] 修改的文件为 LF 换行，不含真实玩家名或 SteamID。
 
 ## 范围外（不要做）
 
@@ -78,8 +78,10 @@ C:\Users\David\DemoAnalysis\.venv\Scripts\python.exe -m pytest -q -p no:cachepro
 
 ## 完成报告（实现方填写，尽量简短）
 
-- 改动的文件及原因：
-- 测试结果（最后一行）：
-- 遗留问题 / 需要确认的地方：
+- 改动的文件及原因：`scripts/review_pack.py` 增加固定种子的分层抽样、盲审和 worth 填写/校验/回填；支持追加缺失判定和新建判定文件，保留旧包兼容、原备注、备份及已有文件换行符；模块说明补生成命令示例。本任务单更新状态和完成报告；未修改测试或新增依赖。
+- 测试结果（最后一行）：相关测试 `16 passed in 0.77s`；全量测试 `1037 passed, 4 skipped in 30.68s`。
+- 遗留问题 / 需要确认的地方：无。默认临时目录权限不足，测试使用 `--basetemp` 指向工作目录外 `%TEMP%` 下独立目录；未访问主目录 data 或使用真实 demo。未提交、未切换分支。
 
 ## 审查意见（Claude 填写）
+
+（2026-10-18，Windows）**通过**。分层抽样先按 `hit_key` 排序，再用同一个 `Random(seed)` 依次抽取，可以复现；`--blind` 只去掉两行；`apply` 兼容旧复盘包、保留原有换行符、追加缺失的条目，判定文件不存在时会新建。全部测试 1037 通过。
