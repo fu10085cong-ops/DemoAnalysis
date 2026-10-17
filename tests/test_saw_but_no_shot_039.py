@@ -76,3 +76,9 @@ def test_features_seen_to_death_and_recent_shots():
     d = moment(find_moments(quiet, A, CFG), "R1-death")
     assert d.death.shots_last_2s == 0
     assert d.engagement.seen_to_death_s is not None and 0.5 <= d.engagement.seen_to_death_s <= 1.0
+
+
+def test_holding_utility_is_not_hesitation(cfg, baseline):
+    """040：死时手上拿的是道具（没切枪），不算"看见却没开枪"。"""
+    smoke = _death(0.8, weapon="smokegrenade", context={"own_weapon": "Smoke Grenade"})
+    assert "saw_but_no_shot" not in found(smoke, baseline, cfg)
