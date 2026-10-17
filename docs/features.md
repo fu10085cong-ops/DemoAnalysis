@@ -131,9 +131,9 @@
 
 当前 v2（2026-10-17 按 5 秒补枪窗口和逐枪视野过滤重建）来自 ESL Pro League S24、Esports World Cup 2026、FISSURE Playground 3、Stake Ranked Episode 4 的 9 组对局、26 份 demo，共 260 人次、5620 回合；全部成功，覆盖率为 0 的非选手不计入。地图：Mirage 6、Dust2 6、Nuke 4、Ancient 3、Anubis 3、Inferno 2、Cache 2。整场 TTD 职业中位数 391 ms，准星移动中位数 3.71°。各武器交火样本：AK 2490、M4A1-S 945、M4A4 677、AWP 663、Glock 433、Galil 386、USP 337、沙鹰 287、MP9 172、Tec-9 159、MAC-10 123、Five-SeveN 120、FAMAS 108、双枪 89、P250 68、MP7 32、SSG 08 31（不足 30 的武器不输出阈值，UMP-45 等仍缺）。扩充前（15 份）的数值见 git 历史。具体分布和每项有效样本数见 `baselines/pro_sample.json`。上方 30 人次表格是旧算法的早期核对记录。
 
-- `metrics` 保留每人每份 demo 的整场枪法分布，原 `compare()` 接口兼容。
+- `metrics` 保留每人每份 demo 的整场枪法分布，原 `compare()` 接口兼容；四分位数使用 inclusive 方法，不向样本值范围外推。
 - `weapons` 按交火第一枪的武器归组；没开枪时从手持显示名反查规范名，查不到则跳过。只含击杀、死亡且有交火的数据，不含回合结束后、误杀、bot 和世界伤害；交火少于 `baseline.min_engagements`（默认 30）的武器不输出。
-- 每把武器记录交火数，TTD、准星移动、初始偏差米数、距离的 p50/p75/p90 和 n；分位数使用线性插值。TTD 排除 ≥ 1 秒以及烟雾、被闪白的样本，准星排除烟雾和被闪白，初始偏差另外排除空中交火和转身才将对手转进屏幕的交火；首枪停稳率、命中率分别排除 None，并各自记录分母 `first_shot_stopped_n` / `first_shot_hit_n`。
+- 每把武器记录交火数，TTD、准星移动、初始偏差米数、距离的 p50/p75/p90 和 n；分位数使用线性插值。每项指标独立检查有效值数量，少于 `baseline.min_metric_samples`（默认 20）时保留实际 `n`，p50/p75/p90 均为 None；检测规则将其视为缺少阈值并跳过对应判断。TTD 排除 ≥ 1 秒以及烟雾、被闪白的样本，准星排除烟雾和被闪白，初始偏差另外排除空中交火和转身才将对手转进屏幕的交火；首枪停稳率、命中率分别排除 None，并各自记录分母 `first_shot_stopped_n` / `first_shot_hit_n`。
 - `spray` 只取上述交火中开枪前一 tick 看见这次交火对手的子弹，按每发实际使用的自动武器归组；视野不可用或没看见对手的子弹不计入。`recoil_index` 从 0 开始，分段起点来自配置，默认 0、1、3、6、10、15，最后一段不封顶。每段记录 from/to、shots、hit_pct，空段命中率为 None，缺失连射序号的子弹不计入。
 - `weapon_threshold()` 和 `spray_segments()` 提供读取接口，旧基准、缺失武器或指标返回 None / 空列表。
 - `problem_rates` 使用同一次生成的新武器/压枪阈值，对每名职业选手逐图运行问题检测；仅统计实际已实现规则，包含默认停用项及亮点供后续校准，不含待开发项和 `other`。只计 target 不是 `match` 的命中，回合数为全部人次的在场回合数（`rounds_played`）之和，每十回合频率保留两位小数；至少命中一次的人次占比保留一位小数。

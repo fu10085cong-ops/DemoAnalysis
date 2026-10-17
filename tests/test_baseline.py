@@ -17,6 +17,7 @@ from tests.helpers.synthetic import A, B
 def config(minimum=1):
     cfg = load_config()
     cfg["baseline"]["min_engagements"] = minimum
+    cfg["baseline"]["min_metric_samples"] = 1
     return cfg
 
 
@@ -70,6 +71,41 @@ def test_ttd_filter_and_blind_smoke_exclusions():
     assert w["engagements"] == 6 and w["time_to_damage_ms"]["n"] == 1
     assert w["time_to_damage_ms"]["p75"] == 200
     assert w["crosshair_placement_deg"]["n"] == 4
+
+
+@pytest.mark.parametrize("valid_n", [0, 1, 19, 20])
+def test_weapon_metric_min_samples_checked_independently(valid_n):
+    cfg = load_config()
+    ms = [make_moment(engagement={
+        "time_to_damage_s": 0.2 if i < valid_n else None,
+        "seen_to_first_shot_s": 0.1 if i < valid_n else None,
+        "crosshair_placement_deg": 2.0 if i < valid_n else None,
+        "crosshair_initial_offset_m": 1.0 if i < valid_n else None,
+    }, context={"distance": 10.0 if i < valid_n else None}) for i in range(30)]
+    weapons = weapon_stats([make_mm(ms)], cfg)
+    assert weapons["ak47"]["engagements"] == 30
+    for metric, value in [("time_to_damage_ms", 200.0), ("seen_to_first_shot_ms", 100.0),
+                          ("crosshair_placement_deg", 2.0), ("crosshair_initial_offset_m", 1.0),
+                          ("distance_m", 10.0)]:
+        expected = value if valid_n >= 20 else None
+        assert weapons["ak47"][metric] == {
+            "n": valid_n, "p50": expected, "p75": expected, "p90": expected}
+        assert weapon_threshold({"weapons": weapons}, "ak47", metric, "p75") == expected
+
+
+def test_weapon_metric_min_samples_is_configurable():
+    cfg = config()
+    cfg["baseline"]["min_metric_samples"] = 2
+    ms = [make_moment(engagement={"time_to_damage_s": t}) for t in (0.2, None)]
+    weapon = weapon_stats([make_mm(ms)], cfg)["ak47"]
+    assert weapon["time_to_damage_ms"]["p75"] is None
+    assert weapon["crosshair_placement_deg"]["p75"] is not None
+
+
+def test_build_baseline_quartiles_stay_within_sample_range():
+    metric = build_baseline({"time_to_damage_ms": [0, 100]}, "synthetic")["metrics"]["time_to_damage_ms"]
+    assert metric["p25"] == 25
+    assert metric["p75"] == 75
 
 
 def test_crosshair_initial_baseline_excludes_turn_into_view():

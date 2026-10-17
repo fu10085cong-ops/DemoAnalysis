@@ -37,7 +37,7 @@ def build_baseline(values: dict[str, list[float]], source: str) -> dict[str, Any
         v = sorted(x for x in values.get(m, []) if x is not None)
         if not v:
             continue
-        q = statistics.quantiles(v, n=4) if len(v) >= 2 else [v[0], v[0], v[0]]
+        q = statistics.quantiles(v, n=4, method="inclusive") if len(v) >= 2 else [v[0], v[0], v[0]]
         out["metrics"][m] = {"median": round(statistics.median(v), 2), "p25": round(q[0], 2),
                              "p75": round(q[2], 2), "n": len(v), "values": [round(x, 2) for x in v]}
     return out
@@ -102,10 +102,10 @@ def iter_engagements(mms: list[MatchMoments]):
                 yield m
 
 
-def _distribution(values: list[float | None]) -> dict[str, Any]:
+def _distribution(values: list[float | None], min_n: int) -> dict[str, Any]:
     v = [x for x in values if x is not None and math.isfinite(x)]
-    if not v:
-        return {"p50": None, "p75": None, "p90": None, "n": 0}
+    if len(v) < min_n:
+        return {"p50": None, "p75": None, "p90": None, "n": len(v)}
     q = np.percentile(v, [50, 75, 90])
     return {**{key: round(float(x), 2) for key, x in zip(("p50", "p75", "p90"), q)}, "n": len(v)}
 
@@ -118,6 +118,7 @@ def weapon_stats(mms: list[MatchMoments], cfg: dict) -> dict:
         if w is not None:
             groups.setdefault(w, []).append(m)
     out = {}
+    min_n = cfg["baseline"]["min_metric_samples"]
     for w, ms in groups.items():
         if len(ms) < cfg["baseline"]["min_engagements"]:
             continue
@@ -129,19 +130,19 @@ def weapon_stats(mms: list[MatchMoments], cfg: dict) -> dict:
         stopped = [m.engagement.first_shot_stopped for m in ms if m.engagement.first_shot_stopped is not None]
         hit = [m.engagement.first_shot_hit for m in ms if m.engagement.first_shot_hit is not None]
         out[w] = {
-            "engagements": len(ms), "time_to_damage_ms": _distribution(ttd),
-            "seen_to_first_shot_ms": _distribution(seen_shot),
-            "crosshair_placement_deg": _distribution([e.crosshair_placement_deg for e in reliable]),
+            "engagements": len(ms), "time_to_damage_ms": _distribution(ttd, min_n),
+            "seen_to_first_shot_ms": _distribution(seen_shot, min_n),
+            "crosshair_placement_deg": _distribution([e.crosshair_placement_deg for e in reliable], min_n),
             "crosshair_initial_offset_m": _distribution([
                 e.crosshair_initial_offset_m for e in reliable
                 if e.airborne_near_seen is not True and
                 (e.opponent_in_sight_before_view_ticks is None or
-                 e.opponent_in_sight_before_view_ticks < cfg["problems"]["crosshair_turn_min_ticks"])]),
+                 e.opponent_in_sight_before_view_ticks < cfg["problems"]["crosshair_turn_min_ticks"])], min_n),
             "first_shot_stopped_pct": round(100 * sum(stopped) / len(stopped), 2) if stopped else None,
             "first_shot_stopped_n": len(stopped),
             "first_shot_hit_pct": round(100 * sum(hit) / len(hit), 2) if hit else None,
             "first_shot_hit_n": len(hit),
-            "distance_m": _distribution([m.context.distance for m in ms]),
+            "distance_m": _distribution([m.context.distance for m in ms], min_n),
         }
     return out
 

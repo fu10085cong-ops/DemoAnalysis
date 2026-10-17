@@ -4,7 +4,7 @@
   "metrics": {
     "time_to_damage_ms": {
       "median": 391.0,
-      "p25": 346.0,
+      "p25": 350.0,
       "p75": 422.0,
       "n": 256,
       "values": [
@@ -268,8 +268,8 @@
     },
     "crosshair_placement_deg": {
       "median": 3.71,
-      "p25": 2.75,
-      "p75": 4.95,
+      "p25": 2.76,
+      "p75": 4.94,
       "n": 256,
       "values": [
         0.55,
@@ -532,8 +532,8 @@
     },
     "counter_strafing_pct": {
       "median": 82.3,
-      "p25": 75.3,
-      "p75": 87.8,
+      "p25": 75.55,
+      "p75": 87.65,
       "n": 255,
       "values": [
         41.2,
@@ -795,8 +795,8 @@
     },
     "spray_accuracy_pct": {
       "median": 35.4,
-      "p25": 30.3,
-      "p75": 43.4,
+      "p25": 30.35,
+      "p75": 43.35,
       "n": 259,
       "values": [
         4.5,
@@ -1062,8 +1062,8 @@
     },
     "spotted_accuracy_pct": {
       "median": 34.25,
-      "p25": 30.13,
-      "p75": 38.98,
+      "p25": 30.17,
+      "p75": 38.92,
       "n": 260,
       "values": [
         9.4,
@@ -1330,7 +1330,7 @@
     },
     "headshot_accuracy_pct": {
       "median": 22.6,
-      "p25": 16.85,
+      "p25": 16.92,
       "p75": 28.9,
       "n": 258,
       "values": [
@@ -2238,15 +2238,15 @@
     "mp7": {
       "engagements": 32,
       "time_to_damage_ms": {
-        "p50": 344.0,
-        "p75": 398.5,
-        "p90": 543.6,
+        "p50": null,
+        "p75": null,
+        "p90": null,
         "n": 19
       },
       "seen_to_first_shot_ms": {
-        "p50": 234.0,
-        "p75": 289.0,
-        "p90": 331.2,
+        "p50": null,
+        "p75": null,
+        "p90": null,
         "n": 19
       },
       "crosshair_placement_deg": {
@@ -2256,9 +2256,9 @@
         "n": 20
       },
       "crosshair_initial_offset_m": {
-        "p50": 0.94,
-        "p75": 1.95,
-        "p90": 2.33,
+        "p50": null,
+        "p75": null,
+        "p90": null,
         "n": 18
       },
       "first_shot_stopped_pct": 61.54,
@@ -2349,27 +2349,27 @@
     "ssg08": {
       "engagements": 31,
       "time_to_damage_ms": {
-        "p50": 312.0,
-        "p75": 453.0,
-        "p90": 453.0,
+        "p50": null,
+        "p75": null,
+        "p90": null,
         "n": 12
       },
       "seen_to_first_shot_ms": {
-        "p50": 312.0,
-        "p75": 453.0,
-        "p90": 453.0,
+        "p50": null,
+        "p75": null,
+        "p90": null,
         "n": 12
       },
       "crosshair_placement_deg": {
-        "p50": 2.28,
-        "p75": 3.08,
-        "p90": 8.93,
+        "p50": null,
+        "p75": null,
+        "p90": null,
         "n": 13
       },
       "crosshair_initial_offset_m": {
-        "p50": 1.04,
-        "p75": 1.24,
-        "p90": 2.05,
+        "p50": null,
+        "p75": null,
+        "p90": null,
         "n": 13
       },
       "first_shot_stopped_pct": 100.0,
@@ -2724,15 +2724,15 @@
   ],
   "problem_rates": {
     "slow_reaction": {
-      "hits": 156,
+      "hits": 155,
       "rounds": 5620,
       "per_10_rounds": 0.28,
       "player_share_pct": 44.6
     },
     "poor_crosshair_placement": {
-      "hits": 376,
+      "hits": 373,
       "rounds": 5620,
-      "per_10_rounds": 0.67,
+      "per_10_rounds": 0.66,
       "player_share_pct": 73.5
     },
     "shot_while_moving": {
@@ -2766,10 +2766,10 @@
       "player_share_pct": 53.1
     },
     "saw_but_no_shot": {
-      "hits": 68,
+      "hits": 64,
       "rounds": 5620,
-      "per_10_rounds": 0.12,
-      "player_share_pct": 23.1
+      "per_10_rounds": 0.11,
+      "player_share_pct": 21.5
     },
     "turned_into_flash": {
       "hits": 244,

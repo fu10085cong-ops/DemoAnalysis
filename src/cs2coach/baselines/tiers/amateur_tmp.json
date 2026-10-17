@@ -1846,15 +1846,15 @@
   },
   "problem_rates": {
     "slow_reaction": {
-      "hits": 356,
+      "hits": 345,
       "rounds": 4930,
-      "per_10_rounds": 0.72,
-      "player_share_pct": 77.4
+      "per_10_rounds": 0.7,
+      "player_share_pct": 77.0
     },
     "poor_crosshair_placement": {
-      "hits": 672,
+      "hits": 655,
       "rounds": 4930,
-      "per_10_rounds": 1.36,
+      "per_10_rounds": 1.33,
       "player_share_pct": 91.3
     },
     "shot_while_moving": {

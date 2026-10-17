@@ -119,6 +119,8 @@ crouch_duck_amount = 0.5
 [baseline]
 # 某武器的有效交火少于此次数时，不生成该武器的逐次交火分布。
 min_engagements = 30
+# 单项指标的有效值少于此数时，仅记录 n，不生成分位数阈值。
+min_metric_samples = 20
 # 压枪分段只统计这些自动武器，每发按其实际武器归组。
 automatic_weapons = ["ak47", "m4a1", "m4a1_silencer"]
 # recoil_index 从 0 开始；每段从该值起，到下一段起点减 1，最后一段不封顶。

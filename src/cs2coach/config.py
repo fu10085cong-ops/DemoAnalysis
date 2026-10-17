@@ -28,6 +28,8 @@ def load_config(path: Path | None = None) -> dict[str, Any]:
     _validate_problems(cfg["problems"])
     _validate_economy(cfg["economy"])
     _validate_radar(cfg["radar"])
+    if type(cfg["baseline"]["min_metric_samples"]) is not int or cfg["baseline"]["min_metric_samples"] < 1:
+        raise ConfigError("配置项 baseline.min_metric_samples 应为正整数")
     return cfg
 
 
