@@ -173,6 +173,8 @@ def test_failure_keeps_audit_for_debugging(match, mm, tmp_path, monkeypatch):
     assert _diagnose(match, mm, CFG, tmp_path / "report.md") == 1
     saved = json.loads((tmp_path / "submission_failed.json").read_text(encoding="utf-8"))
     assert saved["error"] == str(info.value) and not (tmp_path / "submission.json").exists()
+    assert saved["run"]["turns"] == len(saved["usage_turns"]) == 3
+    assert saved["run"]["input_tokens"] == sum(u["input_tokens"] for u in saved["usage_turns"])
 
 
 def test_repeated_violation_drops_whole_finding_and_keeps_valid_one(match, mm):
@@ -389,6 +391,10 @@ def test_deepseek_diagnose_preserves_reasoning_and_tool_results(match, mm):
     d = diagnose(match, mm, CFG, BASELINE, OpenAICompatProvider("deepseek", CFG["ai"]["deepseek"], fake))
     assert d.provider == "deepseek" and d.repairs == 0
     assert d.usage.input_tokens == 200 and d.usage.cache_read_tokens == 120
+    assert len(d.usage_turns) == len(fake.calls) == 2
+    assert sum(u.input_tokens for u in d.usage_turns) == d.usage.input_tokens
+    assert sum(u.cache_read_tokens for u in d.usage_turns) == d.usage.cache_read_tokens
+    assert sum(u.output_tokens for u in d.usage_turns) == d.usage.output_tokens
     first, second = fake.calls
     assert first["extra_body"] == {"thinking": {"type": "enabled"}} and first["reasoning_effort"] == "high"
     assert {t["function"]["name"] for t in first["tools"]} == {"get_moment", "get_round", "submit_report"}
@@ -396,6 +402,38 @@ def test_deepseek_diagnose_preserves_reasoning_and_tool_results(match, mm):
     asst, tool = second["messages"][2], second["messages"][3]
     assert asst["reasoning_content"] == "先看第一回合" and asst["tool_calls"][0]["id"] == "c1"
     assert tool["role"] == "tool" and json.loads(tool["content"])["round"] == 1
+
+
+@pytest.mark.parametrize("fields, cached, reasoning", [
+    ({"prompt_cache_hit_tokens": 60, "completion_tokens_details": SimpleNamespace(reasoning_tokens=12)}, 60, 12),
+    ({"prompt_tokens_details": SimpleNamespace(cached_tokens=70),
+      "completion_tokens_details": SimpleNamespace(reasoning_tokens=15)}, 70, 15),
+    ({}, 0, 0),
+])
+def test_openai_usage_fields(fields, cached, reasoning):
+    response = oa_resp("完成", "stop")
+    response.usage = SimpleNamespace(prompt_tokens=100, completion_tokens=40, **fields)
+    provider = OpenAICompatProvider("deepseek", CFG["ai"]["deepseek"], FakeOpenAI([response]))
+    provider.start("固定提示词", ["摘要"], [])
+    usage = provider.send().usage
+    assert (usage.input_tokens, usage.cache_read_tokens, usage.output_tokens,
+            usage.reasoning_tokens) == (100, cached, 40, reasoning)
+
+
+def test_single_system_prompt_is_fixed_between_matches(match, mm):
+    other = copy.deepcopy(match)
+    other.map_name = "de_other"
+    other.players[A].name = "另一位玩家"
+    second_mm = copy.deepcopy(mm)
+    second_mm.map_name = "de_other"
+    first_provider, _ = claude([submit_response()])
+    second_provider, _ = claude([submit_response()])
+    diagnose(match, mm, CFG, BASELINE, first_provider)
+    diagnose(other, second_mm, CFG, BASELINE, second_provider)
+    assert first_provider.params["system"] == second_provider.params["system"]
+    assert "## 占位符" in first_provider.params["system"]
+    assert "## 训练练习图白名单" in first_provider.params["system"]
+    assert "## 训练练习图白名单" not in first_provider.messages[0]["content"][0]["text"]
 
 
 @pytest.mark.parametrize("name", ["get_moment", "submit_report"])

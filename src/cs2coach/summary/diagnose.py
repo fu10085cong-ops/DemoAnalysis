@@ -10,7 +10,7 @@ from cs2coach.ai.providers import ChatProvider, Usage, make_provider
 from cs2coach.features.problems import ProblemReport
 from cs2coach.summary.aggregate import PlayerSummary
 from cs2coach.summary.digest import build_summary_digest, summary_numbers
-from cs2coach.summary.prompts import SUMMARY_INSTRUCTION, SUMMARY_PROMPT
+from cs2coach.summary.prompts import SUMMARY_INSTRUCTION, summary_prompt
 from cs2coach.summary.queries import SUMMARY_TOOLS, run_summary_tool
 from cs2coach.tools.checker import Violation, check_summary_submission
 from cs2coach.tools.submission import ReportSubmission, submit_tool
@@ -30,6 +30,7 @@ class SummaryDiagnosis:
     usage: Usage = field(default_factory=Usage)
     repairs: int = 0
     prompt_tokens_history: list[int] = field(default_factory=list)
+    usage_turns: list[Usage] = field(default_factory=list)
     rendered_submission: dict[str, Any] = field(default_factory=dict)
 
 
@@ -47,7 +48,7 @@ def diagnose_summary(summary: PlayerSummary, cfg: dict, baseline: dict | None,
     deaths = sum(match.deaths for match in summary.matches)
     fallback = ("共 {match.rounds} 回合，在场 {match.rounds_played} 回合，"
                 "击杀 {count.kills} 次、死亡 {count.deaths} 次（AI 总览未通过检查，已替换）。")
-    result = run_diagnosis_loop(provider, cfg, SUMMARY_PROMPT, digest, SUMMARY_INSTRUCTION,
+    result = run_diagnosis_loop(provider, cfg, summary_prompt(cfg), digest, SUMMARY_INSTRUCTION,
         SUMMARY_TOOLS, tool,
         lambda sub: check_summary_submission(sub, summary, digest, cfg, numbers, baseline),
         lambda name, args: run_summary_tool(name, args, summary), fallback)
@@ -55,7 +56,7 @@ def diagnose_summary(summary: PlayerSummary, cfg: dict, baseline: dict | None,
         provider=provider.name, model=result.model, usage=result.usage,
         violations_history=result.violations_history, dropped=result.dropped,
         tool_calls=result.tool_calls, raw_calls=result.raw_calls, repairs=result.repairs,
-        prompt_tokens_history=result.prompt_tokens_history)
+        prompt_tokens_history=result.prompt_tokens_history, usage_turns=result.usage_turns)
     from cs2coach.summary.render_report import render_summary_diagnosis
     diagnosis.report = render_summary_diagnosis(diagnosis, summary, baseline, cfg)
     return diagnosis

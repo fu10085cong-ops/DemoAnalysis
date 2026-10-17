@@ -6,6 +6,7 @@ import argparse
 import json
 import re
 import sys
+from dataclasses import asdict
 from time import perf_counter
 from datetime import datetime
 from pathlib import Path
@@ -184,14 +185,16 @@ def _summary_ai(summary, cfg: dict, baseline: dict | None, folder: Path) -> int:
         "dropped": [item.model_dump() for item in d.dropped],
         "raw_calls": d.raw_calls,
         "run": _run_info(d),
-        **({"prompt_tokens_history": d.prompt_tokens_history} if name == "local" else {}),
+        "prompt_tokens_history": d.prompt_tokens_history,
+        "usage_turns": [asdict(turn) for turn in d.usage_turns],
     }, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     print("\n" + d.report)
     u = d.usage
     print(f"已写入 {report_file}")
     print(f"已写入 {audit_file}")
     print(f"{d.provider} / {d.model}，工具调用 {len(d.tool_calls)} 次，结论修正 {d.repairs} 次；"
-          f"输入 {u.input_tokens} tokens（其中缓存命中 {u.cache_read_tokens}），输出 {u.output_tokens} tokens")
+          f"{len(d.usage_turns)} 轮；输入 {u.input_tokens:,} tokens（其中缓存命中 {u.cache_read_tokens:,}）、"
+          f"输出 {u.output_tokens:,} tokens（其中思考 {u.reasoning_tokens:,}）")
     _local_time(name, started, provider)
     return 0
 
@@ -200,7 +203,9 @@ def _run_info(d) -> dict:
     """模型、修正次数、工具调用与 token 用量，供评测汇总（scripts/eval_batch.py）读取。"""
     u = d.usage
     return {"provider": d.provider, "model": d.model, "repairs": d.repairs, "tool_calls": len(d.tool_calls),
-            "input_tokens": u.input_tokens, "cache_read_tokens": u.cache_read_tokens, "output_tokens": u.output_tokens}
+            "turns": len(d.usage_turns), "input_tokens": u.input_tokens,
+            "cache_read_tokens": u.cache_read_tokens, "output_tokens": u.output_tokens,
+            "reasoning_tokens": u.reasoning_tokens}
 
 
 def _write_failed_audit(audit_path: Path, exc: Exception, provider: str = "?", model: str = "?") -> None:
@@ -208,7 +213,11 @@ def _write_failed_audit(audit_path: Path, exc: Exception, provider: str = "?", m
     audit = getattr(exc, "audit", None)
     if not audit:
         return
-    audit = {**audit, "run": {"provider": provider, "model": model}}
+    turns = audit.get("usage_turns", [])
+    audit = {**audit, "run": {"provider": provider, "model": model,
+             "turns": len(turns),
+             **{key: sum(turn.get(key, 0) for turn in turns)
+                for key in ("input_tokens", "cache_read_tokens", "output_tokens", "reasoning_tokens")}}}
     failed = audit_path.with_name("submission_failed.json")
     failed.parent.mkdir(parents=True, exist_ok=True)
     failed.write_text(json.dumps(audit, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
@@ -332,14 +341,16 @@ def _diagnose(match, moments, cfg, out: Path) -> int:
         "dropped": [item.model_dump() for item in d.dropped],
         "raw_calls": d.raw_calls,
         "run": _run_info(d),
-        **({"prompt_tokens_history": d.prompt_tokens_history} if name == "local" else {}),
+        "prompt_tokens_history": d.prompt_tokens_history,
+        "usage_turns": [asdict(turn) for turn in d.usage_turns],
     }, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     print("\n" + d.report)
     u = d.usage
     print(f"已写入 {out}")
     print(f"已写入 {audit}")
     print(f"{d.provider} / {d.model}，工具调用 {len(d.tool_calls)} 次，结论修正 {d.repairs} 次；"
-          f"输入 {u.input_tokens} tokens（其中缓存命中 {u.cache_read_tokens}），输出 {u.output_tokens} tokens")
+          f"{len(d.usage_turns)} 轮；输入 {u.input_tokens:,} tokens（其中缓存命中 {u.cache_read_tokens:,}）、"
+          f"输出 {u.output_tokens:,} tokens（其中思考 {u.reasoning_tokens:,}）")
     _local_time(name, started, provider)
     return 0
 

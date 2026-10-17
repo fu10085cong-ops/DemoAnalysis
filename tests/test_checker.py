@@ -339,6 +339,9 @@ def test_real_mirage_submissions_regression():
     # 019 起分析不能直接写数字：历史提交全部写的是数字，必须报 raw_number，其余规则照旧。
     numbers = {"raw_number", "chinese_number"}
     legacy = check(valid, mm, rep, data["digest"])
+    # 固定说明移到系统提示词后，摘要正文的变化不能改变检查结果。
+    moved = check(valid, mm, rep, "## 占位符\n### 计数：{count.名称}\n")
+    assert [v.model_dump() for v in moved] == [v.model_dump() for v in legacy]
     assert any(v.code == "raw_number" for v in legacy)
     assert [(v.path, v.code) for v in legacy if v.code not in numbers] == [
         ("findings[2].problem", "context_only"), ("findings[2].problem", "disabled_problem")]
@@ -348,6 +351,9 @@ def test_real_mirage_submissions_regression():
     before_032 = load_config()
     before_032["problems"]["disabled"] = [d for d in before_032["problems"]["disabled"] if d != "peeked_into_held_angle"]
     v = [x for x in check(invalid, mm, rep, data["digest"], cfg=before_032) if x.code not in numbers]
+    moved_invalid = [x for x in check(invalid, mm, rep, "## 占位符\n", cfg=before_032)
+                     if x.code not in numbers]
+    assert [x.model_dump() for x in moved_invalid] == [x.model_dump() for x in v]
     assert [x.code for x in v] == ["unknown_target", "precondition_failed", "duplicate_problem",
                                  "phrase_unsupported"]
     assert "28" in v[0].message
