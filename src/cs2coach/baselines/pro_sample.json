@@ -2724,16 +2724,16 @@
   ],
   "problem_rates": {
     "slow_reaction": {
-      "hits": 192,
+      "hits": 156,
       "rounds": 5620,
-      "per_10_rounds": 0.34,
-      "player_share_pct": 51.9
+      "per_10_rounds": 0.28,
+      "player_share_pct": 44.6
     },
     "poor_crosshair_placement": {
-      "hits": 557,
+      "hits": 376,
       "rounds": 5620,
-      "per_10_rounds": 0.99,
-      "player_share_pct": 85.4
+      "per_10_rounds": 0.67,
+      "player_share_pct": 73.5
     },
     "shot_while_moving": {
       "hits": 225,
@@ -2754,7 +2754,7 @@
       "player_share_pct": 18.8
     },
     "overpeek_in_advantage": {
-      "hits": 36,
+      "hits": 35,
       "rounds": 5620,
       "per_10_rounds": 0.06,
       "player_share_pct": 11.5
@@ -2772,16 +2772,16 @@
       "player_share_pct": 57.3
     },
     "died_while_reloading": {
-      "hits": 9,
+      "hits": 2,
       "rounds": 5620,
-      "per_10_rounds": 0.02,
-      "player_share_pct": 3.5
+      "per_10_rounds": 0.0,
+      "player_share_pct": 0.8
     },
     "missed_trade": {
-      "hits": 163,
+      "hits": 143,
       "rounds": 5620,
-      "per_10_rounds": 0.29,
-      "player_share_pct": 45.4
+      "per_10_rounds": 0.25,
+      "player_share_pct": 40.4
     },
     "post_plant_utility_unused": {
       "hits": 6,
