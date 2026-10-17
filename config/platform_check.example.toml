@@ -1,0 +1,39 @@
+# 虚构数据示例；demo 路径相对于仓库根目录
+platform = "示例平台"
+demo = "data/demos/example.zip"
+captured = "2026-10-17"
+# demo_member = "match.dem"
+
+[[compare]]
+platform_field = "opening_kills"
+ours = "opening_kills"
+kind = "exact"
+note = "每回合首个击杀"
+
+[[compare]]
+platform_field = "accuracy_pct"
+ours = "accuracy_pct"
+kind = "tolerance"
+tolerance = 1.0
+min_match_share = 0.9
+note = "允许 1 个百分点偏差"
+
+[[compare]]
+platform_field = "damage_time_ms"
+ours = "aim.time_to_damage_ms"
+kind = "info"
+note = "只看排序相关"
+
+[[player]]
+steamid = 76561198000000001
+name = "示例玩家甲"
+opening_kills = 2
+accuracy_pct = 20.0
+damage_time_ms = 250.0
+
+[[player]]
+steamid = 76561198000000002
+name = "示例玩家乙"
+opening_kills = 1
+accuracy_pct = 18.0
+damage_time_ms = 300.0

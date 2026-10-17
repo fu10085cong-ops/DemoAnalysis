@@ -240,6 +240,10 @@ class LobbyLine(BaseModel):
     trade_kills: int
     flash_assists: int
     utility_damage: int
+    traded_deaths: int = 0
+    wasted_utility_avg: float | None = None
+    enemies_flashed_per_flash: float | None = None
+    teammates_flashed_per_flash: float | None = None
 
 
 class MatchMoments(BaseModel):

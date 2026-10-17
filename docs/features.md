@@ -152,6 +152,8 @@
 
 单场 `MatchMoments.lobby` 包含全部真实玩家（含中途断线者）的 `LobbyLine`。按玩家第一次有阵营的 tick 记录上半场起手阵营；击杀、死亡、首杀、补枪击杀和闪光助攻沿用 `find_moments` 的瞬间及标签。命中率为打中敌人的枪械伤害事件数除以枪械开枪数，不含刀、电击枪与接管 bot 的开枪；没有枪械开枪时为空。道具伤害只取敌人受到的 `hegrenade`、`inferno`、`molotov`、`incgrenade` 的 `dmg_effective`（有效扣血），不是原始伤害。六项枪法与目标玩家共用地图几何视野及 `aim_stats` 口径。
 
+平台对照新增四项同场数据：`traded_deaths` 统计本人死亡瞬间带 `traded` 标签的次数；`wasted_utility_avg` 将每次死亡时未使用投掷物按 `economy.grenade_prices` 计价，再除以死亡次数，无死亡时为空；`enemies_flashed_per_flash` 和 `teammates_flashed_per_flash` 分别将本人闪光弹造成、持续至少 `moments.min_blind_seconds` 的敌人或队友致盲人次除以本人闪光弹数，自闪不计入队友，未扔闪光时为空。这四项仅作为数据字段，当前报告不展示。
+
 体检卡的七维名次仅在有数值的同场玩家中计算，并列同名次；按 `report.card.grade_cutoffs` 的百分位给五档等级，参与人数少于 `min_ranked` 时不给等级。职业百分位只是补充，问题提示仍按原职业基准检测和 L0 选题。两张同场表按起手阵营分队、队内按击杀降序，并在两队之间标出“对手”；各列的 ▲/▼ 按该列方向和 `mark_top` 标出同场前后名次，仅当整个并列组都处于标记名额内才标，全列相同则不标。高光先按配置的类型优先级选择，再在先发现赢对枪中选 TTD 最短、补枪中选用时最短的瞬间；TTD 超过 `highlight_show_ttd_max_ms` 时不在高光句中展示用时。两版单场报告共用程序生成的前页，原详细分析接在后面。
 
 `diagnose()` 先生成问题命中和频率，再把“问题频率”“检测到的问题”放入逐次瞬间列表之前。AI 可用 get_moment/get_round 核对细节，最终通过 submit_report 提交 overview、findings、patterns、highlights 和 training_plan；不以自由文本报告作为完成结果。

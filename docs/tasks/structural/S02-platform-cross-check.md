@@ -1,6 +1,6 @@
 # S02 对战平台数据对照：把平台的局内数据固定成回归检查
 
-状态：待做（结构性任务，说明见 `docs/tasks/README.md` 的"三类任务"）
+状态：完成（结构性任务，说明见 `docs/tasks/README.md` 的"三类任务"）
 
 ## 目标
 
@@ -109,9 +109,41 @@
 
 ## 完成报告（GPT 填写）
 
-- 改动的文件及原因：
-- 测试结果：
-- 真实 demo 验证（如有）：
-- 遗留问题 / 需要确认的地方：
+- 改动的文件及原因：`features/models.py`、`features/lobby.py` 增加四项同场数据，旧缓存可按默认值反序列化；`config/default.toml`、`config.py` 增加并校验六种道具价格；`scripts/platform_check.py` 实现单文件一次解析、逐项对照、Spearman 排序相关、缺失玩家提示与退出码；`config/platform_check.example.toml` 提供虚构模板；`tests/test_lobby.py`、`tests/test_config.py`、`tests/test_platform_check.py` 覆盖合成用例和真实样本；`docs/features.md` 记录新增指标口径。未增加依赖，未改平台数据、报告或检测规则。
+- 测量结果：改动前没有可重复执行的平台对照工具；现在对 1 场、10 名玩家的 15 项指标逐项检查，其中 9 项 `exact` / `tolerance` 全部达到各自的 `min_match_share`，6 项 `info` 输出排序相关。两项补枪各 9/10，其余判定项各 10/10。后续新增 TOML 文件即可纳入无参数对照。
+- 测试结果：`.venv/bin/python -m pytest -q`：712 passed，3 skipped（16.76 秒）；`git diff --check` 通过；`.venv/bin/python scripts/platform_check.py` 退出码 0。测试和脚本均未调用付费或本地模型 API。
+- 真实 demo 验证：使用只读 `data/demos/perfectworld_demo/9220525551542050188_0.zip`，对照只读 `data/eval/platform/9220525551542050188_0.toml`。命令 `.venv/bin/python scripts/platform_check.py` 输出如下（未输出玩家姓名）：
+
+  ```markdown
+  ## 9220525551542050188_0.toml
+
+  | 指标 | 对上/有值 | 结果 | 最大偏差 / Spearman |
+  |---|---:|---|---:|
+  | opening_kills | 10/10 | 通过 | 0 |
+  | flash_assists | 10/10 | 通过 | 0 |
+  | utility_damage | 10/10 | 通过 | 0 |
+  | trade_kills | 9/10 | 通过 | 1 |
+  | traded_deaths | 9/10 | 通过 | 1 |
+  | wasted_utility_avg | 10/10 | 通过 | 0.75 |
+  | accuracy_pct | 10/10 | 通过 | 1.63 |
+  | headshot_pct | 10/10 | 通过 | 2.3 |
+  | enemies_flashed_per_flash | 10/10 | 通过 | 0.0777778 |
+  | teammates_flashed_per_flash | 10/10 | 信息 | Spearman 0.631 |
+  | damage_time_ms | 10/10 | 信息 | Spearman 0.250 |
+  | crosshair_deg | 10/10 | 信息 | Spearman 0.503 |
+  | counter_strafe_pct | 10/10 | 信息 | Spearman 0.512 |
+  | spray_pct | 10/10 | 信息 | Spearman 0.652 |
+  | precision_pct | 10/10 | 信息 | Spearman 0.390 |
+  ```
+- 遗留问题 / 需要确认的地方：补枪击杀、被补回各有 1 人与平台相差 1 次，和任务单已验证的偏差一致；队友闪白与视野相关指标仍只供排序参考，由 Claude 判断口径差异。当前平台文件未修改。
 
 ## 审查意见（Claude 填写）
+
+**审查通过（2026-10-17）。**
+- 对照结果和 Claude 之前用临时脚本算的完全一致，包括各项最大偏差和 6 个排序相关系数；
+- Claude 自己运行 `platform_check.py`，退出码为 0；平台数据文件没有被改动；
+- 4 个新字段的口径符合任务单：致盲阈值读配置，价格表在配置中，自己闪到自己不计入；
+- 真实数据测试在缺少数据文件或 demo 时自动跳过；712 个测试通过。
+
+**以后的用法**：产品负责人提供新比赛的平台截图，Claude 录入到 `data/eval/platform/`，不带参数运行 `platform_check.py`，就会对照全部文件。
+

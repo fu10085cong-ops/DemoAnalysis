@@ -24,6 +24,15 @@ def test_unknown_key_is_rejected(tmp_path):
         load_config(p)
 
 
+def test_grenade_prices_are_validated(tmp_path):
+    path = tmp_path / "prices.toml"
+    path.write_text("[economy.grenade_prices]\nflashbang = -1\n", encoding="utf-8")
+    with pytest.raises(ConfigError, match="economy.grenade_prices"):
+        load_config(path)
+    path.write_text("[economy.grenade_prices]\nflashbang = 250\n", encoding="utf-8")
+    assert load_config(path)["economy"]["grenade_prices"]["flashbang"] == 250
+
+
 def test_extra_pro_steamids_override_requires_integer_list(tmp_path):
     path = tmp_path / "pro.toml"
     path.write_text("[training]\nextra_pro_steamids = [76561198113666193]\n", encoding="utf-8")

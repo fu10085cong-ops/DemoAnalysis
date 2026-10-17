@@ -32,6 +32,9 @@ def lobby_lines(match: MatchData, target: int, cfg: dict, sight: Sight,
     gun_damage = enemy_damage[enemy_damage["weapon"].map(is_gun)]
     utility_damage = enemy_damage[enemy_damage["weapon"].isin(_UTILITY)]
     shots = match.shots[match.shots["is_gun"] & ~match.shots["controlling_bot"]]
+    flashes = match.grenades[match.grenades["type"] == "flashbang"] if not match.grenades.empty else match.grenades
+    blinds = match.blinds[match.blinds["duration"] >= cfg["moments"]["min_blind_seconds"]] if not match.blinds.empty else match.blinds
+    prices = cfg["economy"]["grenade_prices"]
     for sid, player in match.players.items():
         if not sid or sid <= 0:
             continue
@@ -43,6 +46,20 @@ def lobby_lines(match: MatchData, target: int, cfg: dict, sight: Sight,
         mine = [m for m in mm.moments if m.kind in ("kill", "death")]
         fired = int((shots["steamid"] == sid).sum())
         hits = int((gun_damage["attacker"] == sid).sum())
+        deaths = [m for m in mine if m.kind == "death"]
+        wasted = [sum(prices[g] for g in m.death.unused_grenades) for m in deaths if m.death]
+        flash_count = int((flashes["thrower"] == sid).sum()) if not flashes.empty else 0
+        thrown_blinds = blinds[blinds["thrower"] == sid] if not blinds.empty else blinds
+        if thrown_blinds.empty:
+            enemies_flashed = teammates_flashed = 0
+        else:
+            known_teams = (thrown_blinds["thrower_team_num"].isin((2, 3))
+                           & thrown_blinds["victim_team_num"].isin((2, 3)))
+            other = thrown_blinds["victim"] != sid
+            enemies_flashed = int((known_teams & other & (thrown_blinds["victim_team_num"]
+                                                          != thrown_blinds["thrower_team_num"])).sum())
+            teammates_flashed = int((known_teams & other & (thrown_blinds["victim_team_num"]
+                                                            == thrown_blinds["thrower_team_num"])).sum())
         lines.append(LobbyLine(
             steamid=sid, name=player.name, team=team, is_target=sid == target,
             kills=sum(m.kind == "kill" for m in mine), deaths=sum(m.kind == "death" for m in mine),
@@ -54,5 +71,9 @@ def lobby_lines(match: MatchData, target: int, cfg: dict, sight: Sight,
                                 int("trade_kill" in m.tags)) for m in mine if m.kind == "kill"),
             flash_assists=sum("flash_assist" in m.tags for m in mm.moments),
             utility_damage=int(utility_damage.loc[utility_damage["attacker"] == sid, "dmg_effective"].sum()),
+            traded_deaths=sum("traded" in m.tags for m in deaths),
+            wasted_utility_avg=sum(wasted) / len(deaths) if deaths else None,
+            enemies_flashed_per_flash=enemies_flashed / flash_count if flash_count else None,
+            teammates_flashed_per_flash=teammates_flashed / flash_count if flash_count else None,
         ))
     return lines

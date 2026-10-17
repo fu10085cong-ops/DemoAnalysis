@@ -30,6 +30,7 @@ missed_trade_max_distance = 800
 key_assist_min_damage = 60
 # 死亡时算"被闪中"的最短致盲时长（秒）。不到 1 秒的多是擦边闪（docs/fields.md §7）
 min_blind_seconds = 1.0
+
 # 游戏内跳转：跳到交火开始前多少秒
 jump_lead_seconds = 5.0
 # 接触时刻（双方中较早看见对方的那一 tick）前这么多秒内的平均速度，用来判断谁在移动、谁在架点
@@ -38,6 +39,15 @@ contact_speed_window_seconds = 0.25
 # 依据：3 个 demo、878 个样本的速度分布有两个峰（0–10 和 200–220），中间 20–120 是过渡状态
 contact_still_speed = 40.0
 contact_moving_speed = 120.0
+
+[economy.grenade_prices]
+# 死亡时浪费的道具按平台购买价格计价（美元）
+flashbang = 200
+smokegrenade = 300
+hegrenade = 300
+molotov = 400
+incgrenade = 600
+decoy = 50
 
 [weapons.min_shot_interval_seconds]
 # 同一把枪两次开枪的最短间隔（秒）。用 10 个 5E / 完美 demo 中同一玩家同一把枪相邻两次开枪的间隔实测（1 分位），

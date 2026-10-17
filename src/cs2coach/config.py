@@ -24,7 +24,17 @@ def load_config(path: Path | None = None) -> dict[str, Any]:
     _validate_visibility(cfg["visibility"])
     _validate_report_card(cfg["report"]["card"])
     _validate_audit(cfg["audit"])
+    _validate_economy(cfg["economy"])
     return cfg
+
+
+def _validate_economy(cfg: dict[str, Any]) -> None:
+    from cs2coach.parsing.weapons import GRENADES
+
+    prices = cfg["grenade_prices"]
+    if (not isinstance(prices, dict) or set(prices) != GRENADES
+            or any(type(value) is not int or value <= 0 for value in prices.values())):
+        raise ConfigError("配置项 economy.grenade_prices 应包含六种道具的正整数价格")
 
 
 def _validate_audit(cfg: dict[str, Any]) -> None:
