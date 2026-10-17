@@ -93,7 +93,8 @@ def _validate_problems(cfg: dict[str, Any]) -> None:
     for key in ("slow_reaction_margin_ratio", "crosshair_margin_ratio", "crosshair_min_distance_m",
                 "overpeek_t_min_round_time_s", "highlight_min_lead_s", "crosshair_airborne_lookback_seconds",
                 "missed_trade_min_view_seconds", "missed_trade_min_react_seconds", "missed_trade_other_fight_seconds",
-                "post_plant_min_alive_seconds", "reload_min_seconds"):
+                "post_plant_min_alive_seconds", "reload_min_seconds", "no_shot_min_seen_seconds",
+                "no_shot_recent_seconds"):
         value = cfg[key]
         if type(value) not in (int, float) or not math.isfinite(value) or value < 0:
             raise ConfigError(f"配置项 problems.{key} 应为非负有限数")

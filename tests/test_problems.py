@@ -502,7 +502,7 @@ def test_nonautomatic_and_unknown_recoil_not_counted(cfg, baseline):
 
 
 def test_registry_context_and_markdown(cfg, baseline):
-    assert len(PROBLEMS) == 26
+    assert len(PROBLEMS) == 27  # 039 新增 saw_but_no_shot
     for pid in ("awp_close_range_duel", "awp_moving_shot", "overspray_at_range", "pistol_spam", "other"):
         assert pid in PROBLEMS
     assert {"unused_utility", "isolated_death", "opponent_saw_first", "opening_death", "man_advantage", "friendly_flash",

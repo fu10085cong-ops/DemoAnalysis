@@ -71,6 +71,7 @@ class Engagement(BaseModel):
     first_seen_shot_hit: bool | None = None
     # —— 视野（地图几何射线检测，见 features/visibility.py）——
     player_first_seen_tick: int | None = None  # 目标玩家第一次看见对手（这段连续可见期的起点）
+    seen_to_death_s: float | None = None  # 仅死亡瞬间：首次看见对手到阵亡的秒数
     opponent_first_seen_tick: int | None = None  # 对手第一次看见目标玩家
     player_seen_while_blind: bool | None = None  # 几何首次可见时本人是否正被闪白；无起点时为空
     opponent_seen_while_blind: bool | None = None
@@ -147,6 +148,7 @@ class Trade(BaseModel):
 
 class DeathState(BaseModel):
     unused_grenades: list[str]  # 死亡时身上没用掉的投掷物（规范名，重复保留）
+    shots_last_2s: int = 0  # 阵亡前配置时长内，本人朝任意目标的枪械开枪数
     thrown_grenades: list[str] = []  # 本回合阵亡 tick 之前投出的道具，按时间顺序、保留重复
     reloading_at_death: bool = False
     reload_started_s: float | None = None  # 从换弹开始到阵亡

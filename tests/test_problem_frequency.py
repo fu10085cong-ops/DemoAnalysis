@@ -109,7 +109,7 @@ def test_disabled_highlights_and_unimplemented_ids_are_not_listed():
     assert all(PROBLEMS[pid].category != "highlight" for pid in listed)
     assert listed <= set(DETECTED_PROBLEMS)
     assert "other" not in listed and "awp_close_range_duel" not in listed
-    assert len(DETECTED_PROBLEMS) == 20
+    assert len(DETECTED_PROBLEMS) == 21
 
 
 def test_match_hits_are_excluded_and_rounds_zero_is_safe():
