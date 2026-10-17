@@ -182,11 +182,17 @@ def test_missed_trade_card_and_complete_file():
     mt = mm.missed_trades[0]
     assert missed_trade_facts(mt, NAMES) == [
         "第 2 秒，T 方，下包前，队友阵亡后 1v1。",
-        "队友 bob 阵亡时离你 4 单位，你在补枪时间窗口内没有击杀击杀他的对手。"]
+        "队友 bob 阵亡时离你 4 单位，你在补枪时间窗口内没有击杀击杀他的对手。",
+        "补枪时间窗口内，击杀者没有出现在你的屏幕里。"]
     mt.killer_traded_by_other = True
+    # 034：多场汇总没有队友名字时不留空格；031 的屏幕内时长写进事实卡
+    mt.killer_in_view_s, mt.killer_first_in_view_s = 0.8, 0.3
     assert missed_trade_facts(mt, {}) == [
         "第 2 秒，T 方，下包前，队友阵亡后 1v1。",
-        "队友 阵亡时离你 4 单位，你在补枪时间窗口内没有击杀击杀他的对手；对手随后被其他队友击杀。"]
+        "队友阵亡时离你 4 单位，你在补枪时间窗口内没有击杀击杀他的对手；对手随后被其他队友击杀。",
+        "击杀者在队友阵亡 0.3 秒后出现在你的屏幕里，窗口内累计 0.8 秒。"]
+    mt.killer_in_view_s = mt.killer_first_in_view_s = None  # 地图视野不可用：不写这一行
+    assert len(missed_trade_facts(mt, {})) == 2
     text = render_facts_file(mm, NAMES)
     assert text.startswith("# 事实卡：alice · de_test\n\n共 1 回合，2 个瞬间。\n\n")
     assert text.count("### ") == len(mm.moments) + len(mm.missed_trades)

@@ -76,7 +76,9 @@ def evidence_sentence(hit: ProblemHit) -> str:
         context = missed_trade_context(e)
         return ("漏补枪记录：" + context
                 + f"离阵亡队友 {_number(e.get('distance'))} 单位；"
-                + ("其他队友随后补上。" if e.get("killer_traded_by_other") else "窗口内未由其他队友补上。"))
+                + ("其他队友随后补上。" if e.get("killer_traded_by_other") else "窗口内未由其他队友补上。")
+                + (f"击杀者在阵亡 {e['killer_first_in_view_s']:.1f} 秒后出现在你的屏幕里，累计 {e['killer_in_view_s']:.1f} 秒。"
+                   if e.get("killer_in_view_s") and e.get("killer_first_in_view_s") is not None else ""))
     if pid == "post_plant_utility_unused":
         since = f"下包后 {_number(e['seconds_since_plant'])} 秒阵亡，" if e.get("seconds_since_plant") is not None else ""
         return f"T 方已下包，{since}死亡时还携带：{_grenades(e.get('unused_grenades'))}。"
