@@ -496,6 +496,15 @@ range_weapon_words = [
 ]
 # "主要慢在哪一段"至少占 TTD 的比例
 segment_major_ratio = 0.5
+training_forbidden_patterns = [
+  '\d+(?:\.\d+)?\s*%|[一二三四五六七八九十两\d]+\s*成',
+  '(?:\d+|[一二三四五六七八九十两]+)\s*发\s*(?:中|里|至少|全部|全都)[^。；，]*(?:\d+|[一二三四五六七八九十两]+)\s*发|(?:\d+|[一二三四五六七八九十两]+)\s*发\s*全部',
+  '至少\s*中|命中率[^。；，]{0,20}(?:低于|不低于|达到|高于|超过|至少|\d)',
+]
+overview_crosshair_forbidden_patterns = [
+  '\{(?:match|pro)\.crosshair(?:\.[^{}]+)?\}',
+  '(?:准星|Crosshair Placement)[^。！？；\n]{0,24}(?:不差|不落后|优于)',
+]
 
 [checker.map_aliases]
 de_dust2 = ["de_dust2", "dust2", "沙二", "沙2", "炙热沙城"]
@@ -515,6 +524,16 @@ de_vertigo = ["de_vertigo", "vertigo", "殒命大厦"]
 # “没看到”类说法只允许几何视野明确未看到
 pattern = "没看到|没看见|没发现"
 require = "not_seen"
+
+[[checker.phrases]]
+# 同一句用初始位置描述 Leetify 转角，占位符口径不符
+pattern = '(?=[^。！？；\n]*(?:刚看见|看见对手时|初始|离头|偏差))(?=[^。！？；\n]*\{[^{}]+\.crosshair_turn\})[^。！？；\n]+'
+require = "crosshair_turn_context"
+
+[[checker.phrases]]
+# 同一句用转动幅度描述初始准星距离，占位符口径不符
+pattern = '(?=[^。！？；\n]*(?:转过|甩枪幅度))(?=[^。！？；\n]*\{[^{}]+\.crosshair_offset\})[^。！？；\n]+'
+require = "crosshair_offset_context"
 
 [[checker.phrases]]
 # 致盲说法需要交火或死亡致盲记录

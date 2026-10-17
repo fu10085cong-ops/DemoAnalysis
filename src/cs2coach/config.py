@@ -228,7 +228,7 @@ def _validate_training(cfg: dict[str, Any]) -> None:
 
 def _validate_checker(cfg: dict[str, Any]) -> None:
     """敏感说法允许配置扩展，但谓词名称和正则必须能被检查器执行。"""
-    from cs2coach.tools.checker import (DISTANCE_PREDICATES, PHRASE_SCOPES,
+    from cs2coach.tools.checker import (DISTANCE_PREDICATES, METRIC_MISMATCH_PREDICATES, PHRASE_SCOPES,
                                         PREDICATES, SEGMENT_PREDICATES, range_phrase_pattern)
     if type(cfg.get("finding_candidates")) is not int or cfg["finding_candidates"] < 1:
         raise ConfigError("配置项 checker.finding_candidates 应为正整数")
@@ -252,6 +252,15 @@ def _validate_checker(cfg: dict[str, Any]) -> None:
     labels = cfg["quantile_labels"]
     if not isinstance(labels, list) or any(type(value) is not int or value < 0 for value in labels):
         raise ConfigError("配置项 checker.quantile_labels 应为非负整数数组")
+    for key in ("training_forbidden_patterns", "overview_crosshair_forbidden_patterns"):
+        patterns = cfg.get(key)
+        if not isinstance(patterns, list) or not patterns or any(not isinstance(p, str) or not p for p in patterns):
+            raise ConfigError(f"配置项 checker.{key} 应为非空正则字符串数组")
+        try:
+            for pattern in patterns:
+                re.compile(pattern)
+        except re.error as exc:
+            raise ConfigError(f"配置项 checker.{key} 正则无效：{exc}") from None
     phrases = cfg["phrases"]
     if not isinstance(phrases, list):
         raise ConfigError("配置项 checker.phrases 应为表数组")
@@ -261,7 +270,7 @@ def _validate_checker(cfg: dict[str, Any]) -> None:
                 or not set(phrase) <= {"pattern", "require", "scope"}):
             raise ConfigError(f"{name} 必须包含 pattern、require，可选 scope")
         if (not isinstance(phrase["require"], str)
-                or phrase["require"] not in PREDICATES.keys() | DISTANCE_PREDICATES | SEGMENT_PREDICATES):
+                or phrase["require"] not in PREDICATES.keys() | DISTANCE_PREDICATES | SEGMENT_PREDICATES | METRIC_MISMATCH_PREDICATES):
             raise ConfigError(f"{name}.require 是未知谓词：{phrase['require']!r}")
         if phrase.get("scope", "any") not in PHRASE_SCOPES:
             raise ConfigError(f"{name}.scope 应为 any 或 all")

@@ -248,19 +248,19 @@ def test_plant_phrase_and_elapsed_round_time_for_moments():
 
 
 def test_match_is_only_valid_for_spray_and_uses_aggregate_evidence():
-    s = submit([finding(problem="spray_control", targets=["match"], analysis="该发数段命中率{match.value}。")])
+    s = submit([finding(problem="spray_control", targets=["match"], analysis="{match.basis}。")])
     r = report([hit("spray_control", "match", evidence={"hit_pct": 20})])
     assert check(s, rep=r) == []
 
 
 def test_match_sensitive_phrases_use_whole_match_without_allowing_individual_numbers():
-    s = submit([finding(problem="spray_control", targets=["match"], analysis="扫射命中率{match.value}。")])
+    s = submit([finding(problem="spray_control", targets=["match"], analysis="扫射：{match.basis}。")])
     r = report([hit("spray_control", "match", evidence={"hit_pct": 20})])
     mm = make_mm([make_moment(engagement={"shots": [make_shot(recoil_index=1)]})])
     assert check(s, mm, r) == []
     s.findings[0].analysis = "扫射用时300毫秒。"
     assert "raw_number" in codes(check(s, mm, r))
-    s.findings[0].analysis = "扫射命中率{match.value}。"
+    s.findings[0].analysis = "扫射命中率{match.basis}。"
     mm.moments[0].engagement.shots = [make_shot(recoil_index=0)]
     assert "phrase_unsupported" in codes(check(s, mm, r))
 

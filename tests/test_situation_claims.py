@@ -106,5 +106,5 @@ def test_range_words_and_segment_vs_threshold():
     # 评测实测的误伤：建议里的“拉近距离”不是在描述这次交火
     assert found("更好的处理是靠队友配合拉近距离，近距离时再打。") == set()
     assert "slot_misuse" in found("其中看见到开枪就占{R5-death.seen_to_shot}，高于职业同武器 75 分位{R5-death.threshold}。")
-    assert found("首次命中用了{R5-death.value}，高于职业同武器 75 分位{R5-death.threshold}，"
-                 "其中看见到开枪占{R5-death.seen_to_shot}。") == set()
+    assert "comparison_slot_removed" in found("首次命中用了{R5-death.value}，高于职业同武器 75 分位{R5-death.threshold}。")
+    assert found("{R5-death.basis}，其中看见到开枪占{R5-death.seen_to_shot}。") == set()
