@@ -501,12 +501,29 @@ def death_state(match: MatchData, p: _Params, sid: int, tick: int, row: pd.Serie
     s = p.shots
     thrown = s[(s["steamid"] == sid).fillna(False) & (s["round"] == int(row["round"]))
                & (s["tick"] < tick) & s["is_grenade"] & ~s["controlling_bot"]]
+    # 死亡 tick 可能已清空玩家状态；优先从前一 tick 回溯连续的换弹状态。
+    reload_tick = next((t for t in (tick - 1, tick)
+                        if (st := match.state_at(sid, t)) is not None and bool(st["is_in_reload"])), None)
+    reload_started = ammo_before = None
+    if reload_tick is not None:
+        first = reload_tick
+        for t in range(reload_tick - 1, tick - round(5 * p.rate) - 1, -1):
+            st = match.state_at(sid, t)
+            if st is None or not bool(st["is_in_reload"]):
+                break
+            first = t
+        reload_started = p.secs(tick - first)
+        before = match.state_at(sid, first - 1)
+        if before is not None and pd.notna(before["active_weapon_ammo"]):
+            ammo_before = int(before["active_weapon_ammo"])
     return DeathState(
         **ready,
         unused_grenades=list(grenades) if isinstance(grenades, list) else [],
         thrown_grenades=thrown.sort_values("tick", kind="stable")["weapon"].tolist(),
         blinded=best is not None, blind_remaining_s=round(best[0], 2) if best else None,
         blinded_by=blinded_by, blinded_by_teammate=by_mate,
+        reloading_at_death=reload_tick is not None, reload_started_s=reload_started,
+        ammo_before_reload=ammo_before,
     )
 
 

@@ -149,6 +149,7 @@
 ## 5. 已验证的 tick 级玩家字段
 
 `is_in_reload` 已在完美、5E、ESL 三种来源的 `parse_ticks` 中验证为逐 tick 布尔字段；ESL 没有 `weapon_reload` 事件，换弹状态须读取此字段。
+`active_weapon_ammo` 已在完美、5E、ESL 三种来源验证为逐 tick 数值字段，表示当前弹匣剩余子弹；拿刀或道具时为空，解析后保留 NaN。
 
 | 分组 | 字段 |
 |---|---|

@@ -32,7 +32,7 @@ PLAYER_PROPS = [
     "X", "Y", "Z", "pitch", "yaw",
     "team_num", "health", "armor_value", "is_alive",
     "is_airborne", "is_walking", "duck_amount", "is_scoped", "is_in_reload",
-    "active_weapon_name", "flash_duration", "last_place_name",
+    "active_weapon_name", "active_weapon_ammo", "flash_duration", "last_place_name",
     "approximate_spotted_by",
     "CCSPlayerController.m_bControllingBot",
 ]

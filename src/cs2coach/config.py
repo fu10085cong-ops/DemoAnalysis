@@ -72,6 +72,8 @@ def _validate_problems(cfg: dict[str, Any]) -> None:
         raise ConfigError("配置项 problems.exclusions 的条件名或问题编号无效")
     if type(cfg["max_shots_before_seen"]) is not int or cfg["max_shots_before_seen"] < 1:
         raise ConfigError("配置项 problems.max_shots_before_seen 应为正整数")
+    if type(cfg["reload_min_ammo_left"]) is not int or cfg["reload_min_ammo_left"] < 1:
+        raise ConfigError("配置项 problems.reload_min_ammo_left 应为正整数")
     thresholds = cfg["moving_shot_thresholds"]
     weapons = {"ak47", "galilar", "m4a1", "m4a1_silencer", "famas", "aug", "sg556", "deagle"}
     if (not isinstance(thresholds, dict) or set(thresholds) != weapons or any(

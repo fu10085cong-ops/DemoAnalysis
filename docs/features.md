@@ -76,6 +76,7 @@
 - `unused_grenades`：死亡前一 tick 背包里的投掷物。
 - `thrown_grenades`：目标玩家在本回合、阵亡 tick 之前已经投出的道具规范名，来自 `shots.is_grenade`，按时间顺序且保留重复；不含接管 bot 时的投掷。
 - `blinded`：死亡时仍处于致盲中，且这次致盲时长 ≥ `min_blind_seconds`；附剩余时长、投掷者、是否队友闪的。
+- `reloading_at_death`：阵亡 tick − 1 或阵亡 tick 的 `is_in_reload` 为真。向前最多回看 5 秒连续换弹的首 tick，`reload_started_s` 为首 tick 到阵亡的秒数；`ammo_before_reload` 取首 tick 前一 tick 的 `active_weapon_ammo`，缺失时为 None。弹匣未打空（默认至少剩 1 发）且非道具击杀才判 `died_while_reloading`。
 
 ### 交火中的闪光 `engagement.player_blind` / `opponent_blind`
 

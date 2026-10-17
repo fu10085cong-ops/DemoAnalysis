@@ -57,6 +57,8 @@ CASES = [
     ("died_without_seeing", dict(tags=["died_without_seeing"], engagement={"opponent_off_screen": True}),
      dict(tags=["died_without_seeing"], engagement={"opponent_off_screen": False})),
     ("turned_into_flash", dict(engagement={"player_blind": blind()}), dict(engagement={"player_blind": blind("teammate")})),
+    ("died_while_reloading", dict(death={"reloading_at_death": True, "ammo_before_reload": 1, "reload_started_s": 0.25}),
+     dict(death={"reloading_at_death": True, "ammo_before_reload": 0, "reload_started_s": 0.25})),
     ("post_plant_utility_unused", dict(context={"bomb_planted": True, "seconds_since_plant": 10.0}, death={"unused_grenades": ["molotov"]}),
      dict(context={"bomb_planted": True, "side": "CT"}, death={"unused_grenades": ["molotov"]})),
     ("weapon_not_ready", dict(tags=["weapon_not_ready"]), dict(tags=[])),
@@ -87,6 +89,26 @@ def test_each_moment_rule_has_both_sides(pid, positive, negative, cfg, baseline)
     hit = next(h for h in yes.hits if h.problem == pid)
     assert hit.target.startswith("R1-")
     assert {"weapon", "round", "tick", "kind"} <= hit.evidence.keys()
+
+
+def test_died_while_reloading_missing_utility_and_evidence(cfg, baseline):
+    from cs2coach.report.evidence import evidence_sentence
+
+    cfg["problems"]["disabled"] = []
+    death = {"reloading_at_death": True, "ammo_before_reload": 12, "reload_started_s": 0.25}
+    report = detect_problems(make_mm([make_moment(death=death)]), baseline, cfg)
+    hit = next(h for h in report.hits if h.problem == "died_while_reloading")
+    assert hit.evidence["ammo_before_reload"] == 12
+    assert hit.thresholds == {"min_ammo_left": 1, "source": "config"}
+    assert "12 发" in evidence_sentence(hit) and "0.25 秒" in evidence_sentence(hit)
+
+    missing = detect_problems(make_mm([make_moment(death=death | {"ammo_before_reload": None})]), baseline, cfg)
+    assert missing.skipped["died_while_reloading"] == 1
+    assert "died_while_reloading" not in {h.problem for h in missing.hits}
+
+    utility = detect_problems(make_mm([make_moment(weapon="inferno", death=death)]), baseline, cfg)
+    assert utility.skipped["died_while_reloading/killed_by_utility"] == 1
+    assert "died_while_reloading" not in {h.problem for h in utility.hits}
 
 
 def test_missed_trade_records_are_preserved(cfg, baseline):
@@ -477,7 +499,7 @@ def test_nonautomatic_and_unknown_recoil_not_counted(cfg, baseline):
 
 
 def test_registry_context_and_markdown(cfg, baseline):
-    assert len(PROBLEMS) == 25
+    assert len(PROBLEMS) == 26
     for pid in ("awp_close_range_duel", "awp_moving_shot", "overspray_at_range", "pistol_spam", "other"):
         assert pid in PROBLEMS
     assert {"unused_utility", "isolated_death", "opponent_saw_first", "opening_death", "man_advantage", "friendly_flash",

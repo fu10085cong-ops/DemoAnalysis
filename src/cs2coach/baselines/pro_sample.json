@@ -2771,6 +2771,12 @@
       "per_10_rounds": 0.43,
       "player_share_pct": 57.3
     },
+    "died_while_reloading": {
+      "hits": 9,
+      "rounds": 5620,
+      "per_10_rounds": 0.02,
+      "player_share_pct": 3.5
+    },
     "missed_trade": {
       "hits": 249,
       "rounds": 5620,

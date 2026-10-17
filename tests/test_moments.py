@@ -462,6 +462,27 @@ def test_thrown_grenades_keep_order_duplicates_and_exclude_other_rounds_and_bots
     assert d.thrown_grenades == ["flashbang", "flashbang", "smokegrenade"]
 
 
+def test_death_reload_state_and_ammo_before_start():
+    from cs2coach.features.moments import _Params, death_state
+
+    for ammo, expected in ((12, 12), (0, 0), (None, None)):
+        overrides = {(A, t): {"is_in_reload": True} for t in range(190, 200)}
+        overrides[A, 189] = {"active_weapon_ammo": ammo}
+        match = scenario(extra_ticks=overrides)
+        row = match.kills[match.kills["victim"] == A].iloc[0]
+        state = death_state(match, _Params(match, CFG), A, 200, row)
+        assert state.reloading_at_death is True
+        assert state.reload_started_s == round(10 / 64, 3)
+        assert state.ammo_before_reload == expected
+
+    match = scenario()
+    row = match.kills[match.kills["victim"] == A].iloc[0]
+    state = death_state(match, _Params(match, CFG), A, 200, row)
+    assert state.reloading_at_death is False
+    assert state.reload_started_s is None
+    assert state.ammo_before_reload is None
+
+
 def test_digest_shows_fight_blinds_and_thrown_grenades():
     from cs2coach.tools.digest import moment_line
 
