@@ -199,30 +199,39 @@ def detect_problems(mm: MatchMoments, baseline: dict | None, cfg: dict) -> Probl
                         missing("slow_reaction")
                     elif ttd < cap:
                         limit = threshold("slow_reaction", w, "seen_to_first_shot_ms", "p75")
-                        if limit is not None and react * 1000 > limit and (m.kind == "kill" or opp < ttd):
-                            hit("slow_reaction", {"seen_to_first_shot_ms": react * 1000,
-                                "first_shot_to_damage_ms": (e.first_shot_to_damage_s * 1000
-                                                            if _finite(e.first_shot_to_damage_s) else None),
-                                "ttd_ms": ttd * 1000,
-                                "opponent_ttd_ms": opp * 1000 if _finite(opp) else None,
-                                "visibility_note": e.visibility_note,
-                                "player_seen_while_blind": e.player_seen_while_blind},
-                                {"seen_to_first_shot_ms": limit, "source": "pro_p75", "ttd_max_seconds": cap,
-                                 "ttd_max_source": "config"})
+                        if limit is not None and react * 1000 > limit * (1 + p["slow_reaction_margin_ratio"]):
+                            if m.kind == "kill" and not _finite(opp):
+                                # 035：击杀了根本没打到你的对手，出枪慢不值得提醒（第三轮审计）
+                                skipped["slow_reaction/opponent_no_damage"] += 1
+                            elif m.kind == "kill" or opp < ttd:
+                                hit("slow_reaction", {"seen_to_first_shot_ms": react * 1000,
+                                    "first_shot_to_damage_ms": (e.first_shot_to_damage_s * 1000
+                                                                if _finite(e.first_shot_to_damage_s) else None),
+                                    "ttd_ms": ttd * 1000,
+                                    "opponent_ttd_ms": opp * 1000 if _finite(opp) else None,
+                                    "visibility_note": e.visibility_note,
+                                    "player_seen_while_blind": e.player_seen_while_blind},
+                                    {"seen_to_first_shot_ms": limit, "margin_ratio": p["slow_reaction_margin_ratio"],
+                                     "source": "pro_p75", "ttd_max_seconds": cap,
+                                     "ttd_max_source": "config"})
                 cp = e.crosshair_initial_offset_m
                 if not _finite(cp):
                     missing("poor_crosshair_placement")
                 else:
                     limit = threshold("poor_crosshair_placement", w, "crosshair_initial_offset_m", "p75")
                     if limit is not None and cp > limit * (1 + p["crosshair_margin_ratio"]):
-                        hit("poor_crosshair_placement", {
-                            "crosshair_initial_offset_m": cp,
-                            "crosshair_initial_deg": e.crosshair_initial_deg,
-                            "crosshair_initial_yaw_deg": e.crosshair_initial_yaw_deg,
-                            "crosshair_initial_pitch_deg": e.crosshair_initial_pitch_deg,
-                            "distance_m": c.distance if c is not None else None},
-                            {"crosshair_initial_offset_m": limit, "margin_ratio": p["crosshair_margin_ratio"],
-                             "source": "pro_p75"})
+                        # 035：近身遭遇的准星偏差不值得提醒（第三轮审计）；距离缺失时照常判
+                        if c is not None and _finite(c.distance) and c.distance < p["crosshair_min_distance_m"]:
+                            skipped["poor_crosshair_placement/close_range"] += 1
+                        else:
+                            hit("poor_crosshair_placement", {
+                                "crosshair_initial_offset_m": cp,
+                                "crosshair_initial_deg": e.crosshair_initial_deg,
+                                "crosshair_initial_yaw_deg": e.crosshair_initial_yaw_deg,
+                                "crosshair_initial_pitch_deg": e.crosshair_initial_pitch_deg,
+                                "distance_m": c.distance if c is not None else None},
+                                {"crosshair_initial_offset_m": limit, "margin_ratio": p["crosshair_margin_ratio"],
+                                 "source": "pro_p75"})
 
                 if w in automatic and (not _finite(c.distance) or c.distance <= p["spray_max_distance_m"]):
                     eligible = [s for s in e.shots if s.weapon == w and _finite(s.recoil_index)
@@ -280,7 +289,11 @@ def detect_problems(mm: MatchMoments, baseline: dict | None, cfg: dict) -> Probl
                             "unused_grenades": _json(d.unused_grenades), "opponent_blind": None})
                     # CT 已下包时必须去拆包，拉出是被迫的
                     forced_retake = c.side == "CT" and c.bomb_planted
-                    if "man_advantage" in m.tags and m.trade is not None and m.trade.traded is False and not forced_retake:
+                    # 035：T 方未下包的开局阶段拉出是正常进点（第三轮审计），CT 不受影响
+                    t_early_round = (c.side == "T" and not c.bomb_planted and
+                                     c.round_time_s < p["overpeek_t_min_round_time_s"])
+                    if ("man_advantage" in m.tags and m.trade is not None and m.trade.traded is False
+                            and not forced_retake and not t_early_round):
                         hit("overpeek_in_advantage", {"man_advantage": True, "contact_type": e.contact_type, "traded": False})
                 if (shot_weapon == "deagle" and e.first_seen_shot_stopped is False and
                         first_seen is not None and _finite(first_seen.speed_ratio) and
@@ -371,6 +384,10 @@ def detect_problems(mm: MatchMoments, baseline: dict | None, cfg: dict) -> Probl
         if p["missed_trade_exclude_traded_by_other"] and record.killer_traded_by_other:
             if "missed_trade" not in disabled:
                 skipped["missed_trade/killer_traded_by_other"] += 1
+            continue
+        # 035：队友阵亡后只剩自己一个人，补枪无从谈起（第三轮审计）；alive_own 缺失时照常判
+        if record.alive_own == 1:
+            skipped["missed_trade/last_alive"] += 1
             continue
         if record.killer_in_view_s is None:
             missing("missed_trade")

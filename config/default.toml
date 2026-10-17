@@ -302,14 +302,21 @@ spray_moving_min_shots = 4
 spray_moving_ratio = 0.5
 # 看见对手前至少开出多少枪时，不判断出枪慢和准星
 max_shots_before_seen = 1
-# 准星转角相对职业 75 分位的余量
-crosshair_margin_ratio = 0.10
+# 出枪慢：看见→开枪相对职业 75 分位的余量（035：第三轮审计 2026-10-17，只超阈值一点点的不值得提醒）
+slow_reaction_margin_ratio = 0.10
+# 准星转角相对职业 75 分位的余量（035：第三轮审计 2026-10-17，只超 4–9% 的多不值得提醒，从 0.10 提到 0.25）
+crosshair_margin_ratio = 0.25
+# 准星：交火距离小于此值（米）时不判（035：第三轮审计，4 米内的近身拐角遭遇不值得提醒）
+crosshair_min_distance_m = 5.0
+# 人数优势冒进：T 方未下包时，开局不到这么多秒的拉出是正常进点，不判（035：第三轮审计 2026-10-17）；CT 不受影响
+overpeek_t_min_round_time_s = 25.0
 # 准星：首次看见前多少秒到首次命中之间有一刻在空中，就不判（031；游戏内确认的 2 条准星错判都是跳跃中看见）
 crosshair_airborne_lookback_seconds = 0.25
 # 漏补：补枪窗口内能看到击杀者（屏幕内、有视线）累计至少多少秒才判
 missed_trade_min_view_seconds = 0.25
 # 漏补：第一次看到击杀者时，补枪窗口至少还剩多少秒反应时间
-missed_trade_min_react_seconds = 1.0
+# （035：第三轮审计 2026-10-17，击杀者 2 秒后才出现在屏幕里的不值得提醒，从 1.0 提到 3.0）
+missed_trade_min_react_seconds = 3.0
 # 漏补：队友阵亡前 0.5 秒到阵亡后多少秒内和别的敌人互有伤害，说明正在交火，不判
 missed_trade_other_fight_seconds = 2.0
 # 先看见、先开枪至少领先的秒数；0.045 让 64 tick 下的 3 tick（0.047 秒）刚好够格
