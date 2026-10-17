@@ -106,8 +106,8 @@
 
 | | Mac（MacBook Air M5） | Windows（16 GB 显卡、装有 CS2） |
 |---|---|---|
-| 工具 | Claude Code、Codex | Claude Code、Codex |
-| 主要工作 | Claude 写任务单、审查、合并；Codex 做核心代码任务（检测、报告、审计） | 游戏内复盘确认；本地模型实验、以后的小模型训练；也可以由 Codex 做与 Mac 互不冲突的任务 |
+| 工具 | Claude Code、Codex、Kimi Code（待开通） | Claude Code、Codex |
+| 主要工作 | Claude 写任务单、审查、合并；Codex 做 A 类任务，Kimi 做 B 类任务（分工见 `docs/tasks/README.md`） | 游戏内复盘确认；本地模型实验、以后的小模型训练；也可以由 Codex 做与 Mac 互不冲突的任务 |
 
 **代码**：
 - 每个任务在自己的分支上做，命名为 `task/<编号>-<简称>`，例如 `task/028-review-pack`；
