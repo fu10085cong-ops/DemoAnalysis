@@ -1,6 +1,6 @@
 # S07 规则变更回归工具 + 交火数据集
 
-状态：待做
+状态：完成
 难度：B（把已经反复手工做过的流程写成脚本，不改检测逻辑）
 执行：Codex，思考强度 medium
 分支：`task/S07-regression-dataset`
@@ -80,9 +80,18 @@ python scripts/rule_regression.py --name 2026-10-18-afterXXX --compare-to 2026-1
 
 ## 完成报告（实现方填写，尽量简短）
 
-- 改动的文件及原因：
-- 测试结果（最后一行）：
-- 真实运行：
-- 遗留问题 / 需要确认的地方：
+- 改动的文件及原因：新增 `scripts/dataset_export.py`、`src/cs2coach/dataset.py`，导出并按代码哈希读取三类 parquet 行，玩家名仅存 SHA-256；新增 `scripts/rule_regression.py`，备份基准、收集命中并比较历史判定；新增 `tests/test_dataset_regression.py` 覆盖三类行、命中、缓存、回归统计和最新判定覆盖；`pyproject.toml` 声明环境已有的 `pyarrow>=26.0.0`，`docs/tasks/README.md` 同步状态。
+- 测试结果（最后一行）：`833 passed, 3 skipped in 81.99s (0:01:21)`
+- 真实运行：数据集导出 50/50 份（职业 26、业余 24），17,440 行（moments 15,694、missed_trades 1,246、players 500），耗时 1059.7 秒。`load` 读取后按 `moment_kind == "death"` 且 `eng_shots_fired == 0` / `rounds_played` 计算，业余 1531/5110 回合 = 3.00 次/10 回合，职业 1640/5620 回合 = 2.92 次/10 回合。`rule_regression.py --name S07-check --compare-to 2026-10-17-after039 --skip-baseline` 收集 24/24 份，旧 3977 条、新 3962 条，减少 15 条，全部为 `saw_but_no_shot`；报告在 `data/audit/S07-check/regression.md`。
+- 遗留问题 / 需要确认的地方：任务单给出的 2.37/2.17 与现有 `Engagement.shots_fired` 口径不符，需确认原数字是否统计整回合朝击杀者的射击；任务单预期 S07-check 命中数不变，但当前比较基准多出 15 条 `saw_but_no_shot`，没有新增命中，需确认是否由 040 的规则改动造成。两项差异均未通过改检测规则消除。
 
 ## 审查意见（Claude 填写）
+
+**审查通过（2026-10-18，Claude）。** Codex 报告的两处数字差异都已核实：
+1. **"没朝击杀者开枪的阵亡"是 3.00 / 2.92，不是 2.37 / 2.17**：Claude 之前的统计排除了穿烟、穿墙、被闪、被道具打死的阵亡，但任务单里没写这些条件。用数据集加上同样的条件后，职业 2.17、业余 2.37，**完全一致**。
+2. **S07-check 少了 15 条"看见却没开枪"**：对比用的 after039 是在 040 之前收集的，040 排除了手持道具的情况。这是预期内的变化。
+
+**以后补**：数据集的列名需要一份说明。比如 `kind` 表示行的类型，瞬间本身的类型在 `moment_kind`。Claude 审查时就因此写错过两次查询。
+
+导出 50 份 demo 共 17,440 行，耗时 1,060 秒。每个代码版本只需要导出一次，之后的分析都是几秒钟的查询。
+

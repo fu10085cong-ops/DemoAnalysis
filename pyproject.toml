@@ -7,6 +7,7 @@ dependencies = [
     # PyPI 0.42.0 有实体句柄 bug（docs/fields.md 陷阱 12），开发时用 scripts/build_demoparser.py 编译的修复版覆盖安装
     "demoparser2>=0.38",
     "pandas>=2.2",
+    "pyarrow>=26.0.0",
     "pydantic>=2.7",
     "rarfile>=4.2",
     # 视野计算：地图碰撞网格 + 射线检测（awpy-data 发布的 .mesh）
