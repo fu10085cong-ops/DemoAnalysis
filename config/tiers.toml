@@ -8,3 +8,22 @@ note = "现有 23 场业余 demo，正式分段收集齐之前临时使用"
 id = "pro"
 name = "职业"
 manifest = "src/cs2coach/baselines/pro_demos.toml"
+
+# 2026-10-18 产品负责人提供的 5E 分段样本：文件夹按段位放，同场 10 人都计入该段位。
+# 同时出现在 A、B 两个文件夹的两场比赛段位不明，两边都不计入。
+[[tier]]
+id = "5e_b"
+name = "5E B 段"
+dirs = ["data/demos/5e b"]
+exclude = ["g161-20261017190607920240021_de_dust2", "g161-n-20261017183550714674851_de_dust2"]
+
+[[tier]]
+id = "5e_a"
+name = "5E A 段"
+dirs = ["data/demos/5e a"]
+exclude = ["g161-20261017190607920240021_de_dust2", "g161-n-20261017183550714674851_de_dust2"]
+
+[[tier]]
+id = "5e_s"
+name = "5E S 段"
+dirs = ["data/demos/5e s"]

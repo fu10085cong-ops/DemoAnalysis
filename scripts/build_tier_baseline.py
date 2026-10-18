@@ -7,8 +7,11 @@ import json
 import math
 import sys
 import tomllib
+import zipfile
 from pathlib import Path
 from statistics import median
+
+import rarfile
 
 from cs2coach.baseline import load_baseline, problem_rates
 from cs2coach.config import load_config
@@ -68,11 +71,11 @@ def build_tier_baseline(tier: dict, mms: list, demo_count: int,
 
 
 def demo_entries(tier: dict) -> list[tuple[Path, str | None]]:
-    """递归发现全部支持的格式，排除解压缓存，同名比赛只收一次。"""
+    """递归发现全部支持的格式，排除解压缓存，同名比赛只收一次；exclude 中的比赛和损坏的压缩包跳过。"""
     if "manifest" in tier:
         rows = tomllib.loads((ROOT / tier["manifest"]).read_text(encoding="utf-8"))["demos"]
         return [(ROOT / row["archive"], row.get("member")) for row in rows]
-    entries, seen = [], set()
+    entries, seen = [], set(tier.get("exclude", []))
     for folder in tier["dirs"]:
         root = ROOT / folder
         if not root.is_dir():
@@ -80,7 +83,12 @@ def demo_entries(tier: dict) -> list[tuple[Path, str | None]]:
         for path in sorted(root.rglob("*")):
             if not path.is_file() or ".extracted" in path.parts or not _supported(path):
                 continue
-            for member in _members(path):
+            try:
+                members = list(_members(path))
+            except (OSError, ValueError, zipfile.BadZipFile, rarfile.Error) as exc:  # 损坏或下载不完整的压缩包
+                print(f"  跳过无法读取的文件：{path.name}（{exc}）", file=sys.stderr, flush=True)
+                continue
+            for member in members:
                 ident = _match_id(path, member)
                 if ident not in seen:
                     seen.add(ident)

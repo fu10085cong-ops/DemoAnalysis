@@ -381,7 +381,7 @@ visibility_problems = ["slow_reaction", "poor_crosshair_placement", "peeked_into
 incomplete_visibility_notes = ["not_seen", "lost_sight", "first_hit_unseen", "smoke", "blind", "no_map_data"]
 
 [radar]
-default_tier = "amateur_tmp"
+default_tier = "5e_a"  # 2026-10-18 起默认与 5E A 段比较；--target 可指定 5e_b / 5e_s / amateur_tmp / pro
 strength_min_percentile = 65
 verdict_min_axes = 3  # 至少有这些可用维度才判断雷达上的整体强弱（雷达剩 4 个维度后从 4 降到 3）
 verdict_weak_percentile = 40  # 最低的维度低于这个百分位，结论才说"最弱的是……"

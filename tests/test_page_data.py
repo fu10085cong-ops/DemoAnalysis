@@ -126,6 +126,20 @@ def test_recursive_demo_discovery_all_formats_and_extraction_cache(tmp_path, mon
     assert len(entries) == 5 and all(".extracted" not in p.parts for p, _ in entries)
 
 
+def test_demo_discovery_skips_excluded_matches_and_broken_archives(tmp_path, monkeypatch, capsys):
+    # 5E 分段：同时出现在两个段位文件夹的比赛用 exclude 跳过；下载不完整的压缩包跳过并提示
+    import zipfile
+    monkeypatch.setattr("scripts.build_tier_baseline.ROOT", tmp_path)
+    folder = tmp_path / "d"
+    folder.mkdir()
+    for name in ("keep.dem", "dup.dem", "broken.zip"):
+        (folder / name).touch()
+    entries = demo_entries({"dirs": ["d"], "exclude": ["dup"]})
+    assert [p.name for p, _ in entries] == ["keep.dem"]
+    assert "broken.zip" in capsys.readouterr().err
+    assert not zipfile.is_zipfile(folder / "broken.zip")
+
+
 def test_summary_median_of_percentile_axes_and_highlights():
     cfg = load_config()
     games = []
