@@ -238,6 +238,8 @@ class AimStats(BaseModel):
     time_to_damage_samples: int
     crosshair_placement_deg: float | None  # 中位数
     crosshair_placement_samples: int
+    crosshair_offset_m: float | None = None  # 初始偏差中位数（米），自定义口径
+    crosshair_offset_samples: int = 0
     counter_strafing_pct: float | None  # 步枪、看见敌人时、未下蹲的射击中，速度 < 34% 最高速度的比例
     counter_strafing_shots: int
     spray_accuracy_pct: float | None  # 步枪连续 3 发以上的扫射中，命中敌人的比例（只算看见敌人时）

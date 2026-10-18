@@ -16,6 +16,7 @@ import numpy as np
 import pandas as pd
 
 from cs2coach.features.aim import scoped_before_shot
+from cs2coach.features.crosshair import crosshair_offset_sample
 from cs2coach.features.models import AimStats, Moment
 from cs2coach.features.visibility import Sight, angle_between, blinded_at
 from cs2coach.parsing.match import MatchData
@@ -32,6 +33,7 @@ def aim_stats(match: MatchData, sid: int, cfg: dict[str, Any], shots: pd.DataFra
 
     allowed = set(ac["weapons"])
     ttd, cp = _encounters(match, sid, sight, ac, rate)
+    offsets = [value for m in moments if (value := crosshair_offset_sample(m, cfg)) is not None]
 
     mine = shots[(shots["steamid"] == sid).fillna(False) & shots["weapon"].isin(allowed) & ~shots["controlling_bot"]]
     mine = mine.sort_values("tick")
@@ -65,6 +67,8 @@ def aim_stats(match: MatchData, sid: int, cfg: dict[str, Any], shots: pd.DataFra
         time_to_damage_samples=len(ttd),
         crosshair_placement_deg=round(statistics.median(cp), 2) if len(cp) >= min_n else None,
         crosshair_placement_samples=len(cp),
+        crosshair_offset_m=round(statistics.median(offsets), 2) if len(offsets) >= min_n else None,
+        crosshair_offset_samples=len(offsets),
         counter_strafing_pct=_pct(rifle_cs["stopped"].astype(bool).sum(), len(rifle_cs), min_n),
         counter_strafing_shots=len(rifle_cs),
         spray_accuracy_pct=_pct(spray["hit"].sum(), len(spray), min_n),

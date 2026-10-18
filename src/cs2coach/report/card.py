@@ -48,6 +48,8 @@ def _value(line: LobbyLine, field: str) -> float | None:
 def _format(field: str, value: float | None) -> str | None:
     if value is None:
         return None
+    if field == "aim.crosshair_offset_m":
+        return f"{value:.2f} 米"
     if field.endswith("_deg"):
         return f"{value:.1f}°"
     if field.endswith("_ms"):
@@ -210,7 +212,7 @@ def render_lobby_tables(mm: MatchMoments, cfg: dict) -> list[str]:
         name = "▶你" if line.is_target else line.name.replace("|", "\\|")
         kd = special(line, "kills", "deaths", f"{line.kills}-{line.deaths}")
         lines.append(f"| {name} | {kd} | {cell(line, 'accuracy_pct')} | {cell(line, 'aim.headshot_accuracy_pct')} | "
-                     f"{cell(line, 'aim.time_to_damage_ms')} | {cell(line, 'aim.crosshair_placement_deg')} | "
+                     f"{cell(line, 'aim.time_to_damage_ms')} | {cell(line, 'aim.crosshair_offset_m')} | "
                      f"{cell(line, 'aim.counter_strafing_pct')} | {cell(line, 'aim.spray_accuracy_pct')} |")
     lines.extend(["", "### 对局", "", "| 玩家 | 首杀（成功-失败） | 补枪击杀 | 闪光助攻 | 道具伤害 |",
                   "|---|---:|---:|---:|---:|"])

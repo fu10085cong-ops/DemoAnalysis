@@ -18,7 +18,7 @@ from cs2coach.summary.discover import DemoRef, SkippedDemo
 from cs2coach.tools.digest import match_score
 
 
-_AIM_FIELDS = ("time_to_damage_ms", "crosshair_placement_deg", "counter_strafing_pct",
+_AIM_FIELDS = ("time_to_damage_ms", "crosshair_placement_deg", "crosshair_offset_m", "counter_strafing_pct",
                "spray_accuracy_pct", "spotted_accuracy_pct", "headshot_accuracy_pct")
 
 

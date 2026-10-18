@@ -220,7 +220,7 @@ def _validate_report_card(card: dict[str, Any]) -> None:
     if not isinstance(dimensions, list) or not dimensions or len({d.get("key") for d in dimensions if isinstance(d, dict)}) != len(dimensions):
         raise ConfigError("配置项 report.card.dimensions 应为编号唯一的表数组")
     allowed_fields = {"utility_damage", "aim.headshot_accuracy_pct", "aim.counter_strafing_pct",
-                      "aim.crosshair_placement_deg", "aim.time_to_damage_ms", "aim.spotted_accuracy_pct",
+                      "aim.crosshair_placement_deg", "aim.crosshair_offset_m", "aim.time_to_damage_ms", "aim.spotted_accuracy_pct",
                       "aim.spray_accuracy_pct"}
     for i, d in enumerate(dimensions):
         if (not isinstance(d, dict) or set(d) != {"key", "label", "field", "direction", "problem"} or

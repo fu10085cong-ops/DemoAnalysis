@@ -150,6 +150,35 @@ def test_strength_examples_pick_best_then_sort_by_tick():
     assert len(row.examples) == 2
 
 
+def test_crosshair_strength_uses_eligible_kills_in_offset_order():
+    from cs2coach.report.page_data import _strength_moments
+    from tests.test_summary import stats
+    cfg = load_config()
+    cfg["radar"]["max_examples"] = 2
+    moments = [make_moment("kill", tick=tick, jump_tick=tick,
+                           engagement={"crosshair_initial_offset_m": value, **extra})
+               for tick, value, extra in [(300, .2, {}), (100, .8, {}), (200, 1.5, {}),
+                                          (400, .01, {"airborne_near_seen": True})]]
+    moments.append(make_moment("death", engagement={"crosshair_initial_offset_m": .01}))
+    aim = stats(100).model_copy(update={"crosshair_offset_m": 1.03, "crosshair_offset_samples": 5})
+    mm = make_mm(moments, lobby=[line(aim=aim)], aim_stats=aim)
+    assert [m.tick for m in _strength_moments(mm, "crosshair_offset_m", 2, cfg)] == [300, 100]
+    data = tier(crosshair_offset_m=[2, 3, 4])
+    row, = build_match_page(mm, report(), [], cfg, {data["id"]: data}).tiers[0].strengths
+    assert row.name == "预瞄" and row.unit == "米" and row.you == 1.03 and row.samples == 5
+    # 先按偏差选出最小的两次，再与命中速度一样按比赛和时间顺序展示。
+    assert [e.tick for e in row.examples] == [100, 300]
+    # 多场也按同一指标跨场选择。
+    other = make_mm([make_moment("kill", tick=500, jump_tick=500,
+                                 engagement={"crosshair_initial_offset_m": .1})], lobby=[line(aim=aim)], aim_stats=aim)
+    games = [(DemoRef(path="test.dem", member=None, match_id=str(i), map_name="de_test", player_name="目标玩家"),
+              match, report(), (5, 5)) for i, match in enumerate([mm, other])]
+    summary = aggregate_matches(A, games, None, cfg)
+    row, = build_summary_page(summary, cfg, {data["id"]: data}).tiers[0].strengths
+    assert [e.tick for e in row.examples] == [300, 500]
+    assert row.samples == 10 and summary.aim_overall["crosshair_offset_m"].median == 1.03
+
+
 @pytest.mark.parametrize("metric", ["utility_damage_per_round", "wasted_utility_avg"])
 def test_utility_damage_does_not_borrow_flash_examples(metric):
     from cs2coach.report.page_data import _strength_moments
@@ -343,9 +372,9 @@ def test_only_one_death_is_not_a_strength():
 
 def test_verdict_weakest_requires_four_axes_even_when_bad():
     from tests.test_summary import stats
-    aim = stats(100).model_copy(update={"crosshair_placement_deg": 10, "crosshair_placement_samples": 5,
+    aim = stats(100).model_copy(update={"crosshair_offset_m": 10, "crosshair_offset_samples": 5,
                                       "counter_strafing_pct": 50, "counter_strafing_shots": 5})
-    data = tier(time_to_damage_ms=[200, 300, 400], crosshair_placement_deg=[0, 5, 10],
+    data = tier(time_to_damage_ms=[200, 300, 400], crosshair_offset_m=[0, 5, 10],
                 counter_strafing_pct=[0, 50, 100], utility_damage_per_round=[0, 10, 20])
     data["problem_rates"] = sample()["amateur_tmp"]["problem_rates"]
     view, = build_match_page(make_mm(lobby=[line(aim=aim)], rounds=10), report(), frequency(6, 6),

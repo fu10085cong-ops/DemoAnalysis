@@ -24,9 +24,9 @@ DEMO_MANIFEST = BASELINE_FILE.with_name("pro_demos.toml")
 EXCLUDED_TAGS = {"after_round_end", "teamkill", "victim_is_bot", "world_damage"}
 
 # 数值越小越好的指标
-LOWER_IS_BETTER = {"time_to_damage_ms", "crosshair_placement_deg"}
+LOWER_IS_BETTER = {"time_to_damage_ms", "crosshair_placement_deg", "crosshair_offset_m"}
 METRICS = [
-    "time_to_damage_ms", "crosshair_placement_deg", "counter_strafing_pct",
+    "time_to_damage_ms", "crosshair_placement_deg", "crosshair_offset_m", "counter_strafing_pct",
     "spray_accuracy_pct", "spotted_accuracy_pct", "headshot_accuracy_pct",
 ]
 

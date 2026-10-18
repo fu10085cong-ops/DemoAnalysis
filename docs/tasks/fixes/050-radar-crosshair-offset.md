@@ -1,6 +1,6 @@
 # 050 雷达"预瞄"改用初始偏差米数，与"准星没放好"同一把尺子
 
-状态：待做
+状态：完成
 难度：B（照现有写法扩展，跨 radar / 报告页 / 卡片 / 汇总，但每处改动都是替换一个指标键）
 执行：Codex（思考强度 medium）
 分支：`task/050-radar-crosshair-offset`
@@ -98,8 +98,26 @@
 ## 完成报告（实现方填写，尽量简短）
 
 - 改动的文件及原因：
+  - `features/crosshair.py` 新增共用排除条件与初始偏差样本函数；`features/problems.py` 仅迁移排除条件计算，判定顺序、命中和 skipped 逻辑不变；`features/models.py`、`features/aim_stats.py` 新增有默认值的中位数与样本数，保留旧转角计算。
+  - `features/radar.py`、`report/page_data.py`、`report/card.py`、`config/default.toml`、`config.py` 接入新指标，优点只选合格击杀并按偏差升序；旧卡片配置字段继续接受。
+  - `baseline.py`、`summary/aggregate.py`、`tools/digest.py` 登记新指标，`docs/features.md` 说明自定义口径；未重建任何基准。任务索引同步为待审查。
+  - 新增 `tests/test_crosshair_offset_050.py`：筛选边界、与问题检测的一致性、no_cost、配置排除、聚合门槛、旧 JSON 和旧基准兼容、雷达读取。
+  - 修改 `tests/test_radar.py`：雷达轴改用新键；`tests/test_card.py`：排名数据和表格断言改用初始偏差米数；`tests/test_page_data.py`：最弱维度样本改用新键，补单场及多场优点例子的筛选和排序验证。
 - 测试结果（最后一行）：
-- 真实 demo 验证（如有）：
+  - 相关测试：`117 passed in 3.00s`
+  - 全量测试（继续运行可收集的测试）：`1084 passed, 3 skipped, 1 error in 66.92s (0:01:06)`
+- 真实 demo 验证（如有）：运行 `scripts/page_check_all.py`，使用 `config/tiers.toml` 的 `amateur_tmp` 指定的 `data/demos/5e_demo`、`data/demos/perfectworld_demo` 全部 23 份 demo；已检查 230 人次、无法检查 0 项，`报告页一致性检查：0 处违规`（七类检查均为 0）。该验证使用现有分段基准，尚无新预瞄分布；新轴及优点的数据链路另由合成测试覆盖。
 - 遗留问题 / 需要确认的地方：
+  - 全量测试未全部通过：`tests/test_platform_check.py` 收集时访问 `data/eval/platform` 的局域网共享符号链接，被当前环境拒绝（WinError 5）；需在可访问共享目录的环境复跑。默认 pytest 临时目录同样无权限，验证通过 `PYTEST_ADDOPTS` 指定工作区内临时目录及缓存；第一次全量尝试还出现 Windows WMI 资源异常，第二次继续收集执行仅剩上述权限错误。未改动这些范围外测试和环境配置。
+  - 卡片与同场表固定显示两位小数（如 `1.03 米`、`1.00 米`）；报告页沿用统一格式：绝对值小于 10 最多两位、否则最多一位，并去掉末尾 0（如 `1.03 米`、`1 米`、`10.1 米`）。
+  - 旧分段基准缺新键时预瞄轴为空，已验证；基准留待 Claude 审查后重建。保留开始时已有的 `docs/product.md` 改动；未提交。
 
 ## 审查意见（Claude 填写）
+
+2026-10-18 通过。
+
+- 排除条件原样挪进 `features/crosshair.py::active_exclusions`，`poor_crosshair_placement` 判定与 skipped 计数不变（重建后职业、业余 `problem_rates` 与改动前逐项相同）。
+- 审查时改一处：做得好的方向里预瞄例子与命中速度一致，先按偏差选最小的，再按比赛和时间顺序展示；`tests/test_page_data.py` 相应断言改为时间顺序。
+- 全部测试：`1087 passed, 4 skipped`（Codex 沙箱里 `test_platform_check.py` 读不到局域网共享，属已知环境问题）。
+- 基准由 Claude 重建：`crosshair_offset_m` 职业中位数 0.90 米（四分位 0.74–1.13，n=215），业余 `amateur_tmp` 1.12 米（0.88–1.51，n=202）。
+- `scripts/page_check_all.py`：230 人次 0 处违规；实际报告页卡片显示"预瞄 1.51 米"，AI 摘要显示"预瞄（初始偏差）1.51米，职业 0.9米"。

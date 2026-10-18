@@ -10,6 +10,7 @@ from typing import Literal
 from pydantic import BaseModel, Field
 import pandas as pd
 
+from cs2coach.features.crosshair import crosshair_offset_sample
 from cs2coach.features.highlights import round_time
 from cs2coach.features.labels import weapon_label
 from cs2coach.features.models import MatchMoments, Moment
@@ -24,7 +25,7 @@ TIER_DIR = Path(__file__).resolve().parents[1] / "baselines/tiers"
 # 名称、这个数是什么（页面上直接显示）、单位、换算倍数。按回合算的次数换成"每 10 回合"，与问题汇总一致（审查 044）
 METRIC_TEXT = {
     "time_to_damage_ms": ("首次命中用时", "从看见对手到第一次打中他的时间（典型单场的中位数，1 秒以上的不算）", "毫秒", 1),
-    "crosshair_placement_deg": ("看见到命中的转角", "从看见对手到第一次打中，准星转过的角度（越小说明预瞄越到位）", "°", 1),
+    "crosshair_offset_m": ("预瞄", "刚看见对手那一刻，准星离他头部的距离（典型单场的中位数，越小越好；5 米内的近身交火、跳跃中和转身才看到的对手不算）", "米", 1),
     "counter_strafing_pct": ("急停", "用步枪、看见敌人时开枪，已经停稳的比例", "%", 1),
     "spray_accuracy_pct": ("压枪", "用步枪连发 3 发以上时，子弹打中敌人的比例", "%", 1),
     "trade_kill_events_per_round": ("补枪", "每 10 回合补枪击杀的次数（一次击杀算一次）", "次", 10),
@@ -34,7 +35,7 @@ METRIC_TEXT = {
 }
 PROBLEM_MEASURE = "每 10 回合出现的次数"
 PROBLEM_METRICS = {
-    "slow_reaction": "time_to_damage_ms", "poor_crosshair_placement": "crosshair_placement_deg",
+    "slow_reaction": "time_to_damage_ms", "poor_crosshair_placement": "crosshair_offset_m",
     "shot_while_moving": "counter_strafing_pct", "spray_while_moving": "counter_strafing_pct",
     "spray_control": "spray_accuracy_pct", "missed_trade": "trade_kill_events_per_round",
     "post_plant_utility_unused": "utility_damage_per_round", "dry_peek_with_utility": "utility_damage_per_round",
@@ -160,8 +161,11 @@ def _moment_what(mm, moment):
 def _strength_moments(mm, metric, limit, cfg):
     kills = [m for m in mm.moments if m.kind == "kill" and not
              {"teamkill", "after_round_end", "victim_is_bot"}.intersection(m.tags)]
-    if metric in ("time_to_damage_ms", "crosshair_placement_deg"):
-        field = "time_to_damage_s" if metric == "time_to_damage_ms" else metric
+    if metric == "crosshair_offset_m":
+        valid = [(value, m) for m in kills if (value := crosshair_offset_sample(m, cfg)) is not None]
+        return [m for _, m in sorted(valid, key=lambda pair: (pair[0], pair[1].tick))[:limit]]
+    if metric == "time_to_damage_ms":
+        field = "time_to_damage_s"
         valid = [m for m in kills if m.engagement and getattr(m.engagement, field) is not None]
         return sorted(valid, key=lambda m: (getattr(m.engagement, field), m.tick))[:limit]
     if metric == "counter_strafing_pct":
@@ -261,8 +265,10 @@ def _rows(games, frequency, cfg, tier):
         count = len(selected)
         samples = sum(sample_count(line, key) for (mm, _, _), values_for_match in zip(games, values)
                       for line in mm.lobby if line.steamid == mm.player and values_for_match[key] is not None)
-        if key in ("time_to_damage_ms", "crosshair_placement_deg"):
-            field = "time_to_damage_s" if key == "time_to_damage_ms" else key
+        if key == "crosshair_offset_m":
+            selected.sort(key=lambda item: (crosshair_offset_sample(item[2], cfg), item[2].tick))
+        if key == "time_to_damage_ms":
+            field = "time_to_damage_s"
             selected.sort(key=lambda item: (getattr(item[2].engagement, field), item[2].tick))
         selected = selected[:limit]
         selected.sort(key=lambda item: (next(i for i, g in enumerate(games) if g[2] == item[1]), item[2].tick))

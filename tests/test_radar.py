@@ -34,7 +34,7 @@ def test_percentile_matches_baseline(metric, value):
 def test_directions_empty_and_axis_mean():
     sample = tier(time_to_damage_ms=[0, 50, 100], trade_kill_events_per_round=[0, 1, 2])
     assert percentile("time_to_damage_ms", 0, sample, load_config()) > percentile("time_to_damage_ms", 100, sample, load_config())
-    axes = [{"metrics": ["time_to_damage_ms", "crosshair_placement_deg"]},
+    axes = [{"metrics": ["time_to_damage_ms", "crosshair_offset_m"]},
             {"metrics": ["trade_kill_events_per_round", "traded_death_pct"]}, {"metrics": ["spray_accuracy_pct"]}]
     assert axis_values({"time_to_damage_ms": 50, "trade_kill_events_per_round": 1}, sample, axes, load_config()) == [50, 50, None]
     assert percentile("time_to_damage_ms", 1, {"metrics": {"time_to_damage_ms": {"values": []}}}, load_config()) is None

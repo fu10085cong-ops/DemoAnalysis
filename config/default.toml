@@ -190,7 +190,7 @@ problem = "shot_while_moving"
 [[report.card.dimensions]]
 key = "crosshair"
 label = "预瞄"
-field = "aim.crosshair_placement_deg"
+field = "aim.crosshair_offset_m"
 direction = "lower"
 problem = "poor_crosshair_placement"
 
@@ -407,7 +407,7 @@ metrics = ["time_to_damage_ms"]
 [[radar.axes]]
 id = "crosshair"
 name = "预瞄"
-metrics = ["crosshair_placement_deg"]
+metrics = ["crosshair_offset_m"]
 [[radar.axes]]
 id = "strafe"
 name = "急停"

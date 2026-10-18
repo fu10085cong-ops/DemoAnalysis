@@ -20,6 +20,7 @@ from cs2coach.features.ranking import candidate_targets, ranked_hits
 from cs2coach.tools.slots import slot_guidance
 
 METRIC_LABELS = {
+    "crosshair_offset_m": ("预瞄（初始偏差）", "米", "crosshair_offset_samples", "次交火"),
     "time_to_damage_ms": ("Time to Damage", "ms", "time_to_damage_samples", "次遭遇"),
     "crosshair_placement_deg": ("Crosshair Placement", "°", "crosshair_placement_samples", "次遭遇"),
     "counter_strafing_pct": ("Counter-Strafing", "%", "counter_strafing_shots", "发步枪"),

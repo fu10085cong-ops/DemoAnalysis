@@ -23,7 +23,7 @@ def aim(**changes):
 def lobby(n=10):
     return [LobbyLine(steamid=A + i, name=f"玩家{i}", team=2 if i < 5 else 3, is_target=i == 0,
                       kills=20 - i, deaths=5 + i, accuracy_pct=10 + i, aim=aim(
-                          crosshair_placement_deg=9 - i, spray_accuracy_pct=10 + i,
+                          crosshair_offset_m=9 - i, spray_accuracy_pct=10 + i,
                           headshot_accuracy_pct=40 - i), opening_kills=i, opening_deaths=0,
                       trade_kills=i, flash_assists=i, utility_damage=i * 10) for i in range(n)]
 
@@ -68,7 +68,7 @@ def test_problem_note_focus_and_fallback():
     assert card.focus.key == 'spray'  # 同为第 10，取多出次数较多的
     assert next(r for r in card.rows if r.key == 'spray').problem_note == '但有 1 次压枪差，见下文'
     assert card.focus_drills
-    mm.lobby[0].aim.crosshair_placement_deg = 0.1
+    mm.lobby[0].aim.crosshair_offset_m = 0.1
     assert build_card(mm, problems, frequency, cfg, None).focus.key == 'spray'
     cfg['report']['card']['min_ranked'] = 11
     assert build_card(mm, problems, frequency, cfg, None).focus.key == 'spray'
@@ -126,7 +126,7 @@ def test_table_markers_team_order_and_shared_front():
     mm = make_mm(lobby=lines)
     table = '\n'.join(render_lobby_tables(mm, cfg))
     assert '| ▶你 | ▲20-5 | ▼10%' in table
-    assert '▼9.0°' in table  # 角度越小越好
+    assert '▼9.00 米' in table  # 初始偏差越小越好
     assert table.index('玩家4') < table.index('玩家5')
     assert '玩家0' not in table
     assert table.count('| **对手** |') == 2

@@ -6,7 +6,7 @@ from cs2coach.features.models import LobbyLine
 
 
 RADAR_METRICS: dict[str, bool] = {
-    "time_to_damage_ms": True, "crosshair_placement_deg": True,
+    "time_to_damage_ms": True, "crosshair_offset_m": True,
     "counter_strafing_pct": False, "spray_accuracy_pct": False,
     "trade_kill_events_per_round": False, "traded_death_pct": False,
     "utility_damage_per_round": False, "enemies_flashed_per_flash": False,
@@ -16,7 +16,7 @@ RADAR_METRICS: dict[str, bool] = {
 def sample_count(line: LobbyLine, metric: str) -> int:
     """指标真正参与统计的样本数，不用代表例子的数量代替。"""
     fields = {"time_to_damage_ms": "time_to_damage_samples",
-              "crosshair_placement_deg": "crosshair_placement_samples",
+              "crosshair_offset_m": "crosshair_offset_samples",
               "counter_strafing_pct": "counter_strafing_shots", "spray_accuracy_pct": "spray_shots"}
     if metric in fields:
         return getattr(line.aim, fields[metric]) if line.aim else 0
@@ -39,7 +39,7 @@ def player_metrics(line: LobbyLine, cfg: dict) -> dict[str, float | None]:
     """分母为零或原指标样本不足时保留空值。"""
     values = {
         **{key: getattr(line.aim, key) if line.aim else None
-           for key in ("time_to_damage_ms", "crosshair_placement_deg", "counter_strafing_pct", "spray_accuracy_pct")},
+           for key in ("time_to_damage_ms", "crosshair_offset_m", "counter_strafing_pct", "spray_accuracy_pct")},
         "trade_kill_events_per_round": line.trade_kill_events / line.rounds_played if line.rounds_played else None,
         "traded_death_pct": 100 * line.traded_deaths / line.deaths if line.deaths else None,
         "utility_damage_per_round": line.utility_damage / line.rounds_played if line.rounds_played else None,

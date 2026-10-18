@@ -10,6 +10,7 @@ from typing import Literal
 from pydantic import BaseModel
 
 from cs2coach.baseline import EXCLUDED_TAGS, engagement_weapon, spray_segments, spray_stats, weapon_threshold
+from cs2coach.features.crosshair import active_exclusions
 from cs2coach.features.labels import weapon_label
 from cs2coach.parsing.weapons import is_gun
 from cs2coach.features.models import MatchMoments
@@ -128,42 +129,13 @@ def detect_problems(mm: MatchMoments, baseline: dict | None, cfg: dict) -> Probl
     skipped: Counter = Counter()
     automatic = cfg["baseline"]["automatic_weapons"]
 
-    def exclusions(moment) -> set[str]:
-        if moment is None:
-            return set()
-        engagement = moment.engagement
-        active = set()
-        if moment.through_smoke:
-            active.add("through_smoke")
-        if moment.wallbang:
-            active.add("wallbang")
-        if engagement is not None:
-            if engagement.visibility_note == "smoke":
-                active.add("first_seen_through_smoke")
-            if engagement.player_blind is not None:
-                active.add("player_blinded_in_fight")
-            if (engagement.opponent_blind is not None and
-                    engagement.opponent_blind.thrower_role in ("self", "teammate")):
-                active.add("opponent_blinded_by_own_side")
-            if (engagement.shots_before_seen is not None and
-                    engagement.shots_before_seen >= p["max_shots_before_seen"]):
-                active.add("fired_before_seen")
-            if engagement.airborne_near_seen is True:
-                active.add("airborne_near_seen")
-            if (engagement.opponent_in_sight_before_view_ticks is not None and
-                    engagement.opponent_in_sight_before_view_ticks >= p["crosshair_turn_min_ticks"]):
-                active.add("turned_into_view")
-        if moment.kind == "death" and moment.weapon in ("hegrenade", "inferno", "molotov", "incgrenade"):
-            active.add("killed_by_utility")
-        return active
-
     def missing(pid):
         if pid not in disabled:
             skipped[pid] += 1
 
     def emit(pid, target, weapon, evidence, thresholds=None, moment=None):
         if pid not in disabled:
-            excluded = exclusions(moment)
+            excluded = active_exclusions(moment, p)
             reasons = [condition for condition, ids in p["exclusions"].items()
                        if condition in excluded and pid in ids]
             if reasons:
