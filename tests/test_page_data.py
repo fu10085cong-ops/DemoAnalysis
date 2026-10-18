@@ -4,7 +4,15 @@ import json
 
 import pytest
 
-from cs2coach.config import load_config
+from cs2coach.config import load_config as _load_config
+
+
+def load_config(*args, **kwargs):
+    """生产配置加上补枪轴：这些测试用补枪指标做优点和问题样例，检验的是页面逻辑，与雷达实际配了哪些维度无关
+    （2026-10-18 补枪移出雷达，生产配置见 tests/test_radar.py::test_configured_axes）。"""
+    cfg = _load_config(*args, **kwargs)
+    cfg["radar"]["axes"].append({"id": "trade", "name": "补枪", "metrics": ["missed_trade_pct"]})
+    return cfg
 from cs2coach.features.problems import FrequencyRow, ProblemHit, ProblemReport
 from cs2coach.features.highlights import find_highlights
 from cs2coach.features.radar import axis_values, player_metrics
@@ -29,7 +37,7 @@ def frequency(you, hits=3):
 
 
 def sample():
-    data = tier(trade_kill_events_per_round=[0, .1, .2], traded_death_pct=[0, 20, 40])
+    data = tier(trade_kill_events_per_round=[0, .1, .2], traded_death_pct=[0, 20, 40], missed_trade_pct=[0, 20, 40])
     data["problem_rates"] = {"slow_reaction": {"per_10_rounds": 2, "hits": 20, "rounds": 100}}
     return {data["id"]: data}
 
@@ -66,15 +74,15 @@ def test_missing_tier_and_empty_samples(tmp_path, monkeypatch):
 
 
 @pytest.mark.parametrize("lines,expected", [
-    ([line(kills=20, deaths=10), line(steamid=B, name="队友甲", kills=21, deaths=15)], "目标玩家，20/10"),
-    ([line(kills=20, deaths=10), line(steamid=B, name="队友甲", kills=21, deaths=11)], "队友甲，21/11"),
-    ([line(steamid=B, name="队友甲"), line()], "目标玩家，10/5"),
+    ([line(kills=20, deaths=10, trade_chances=5), line(steamid=B, name="队友甲", kills=21, deaths=15, trade_chances=5)], "目标玩家，20/10"),
+    ([line(kills=20, deaths=10, trade_chances=5), line(steamid=B, name="队友甲", kills=21, deaths=11, trade_chances=5)], "队友甲，21/11"),
+    ([line(steamid=B, name="队友甲", trade_chances=5), line(trade_chances=5)], "目标玩家，10/5"),
 ])
 def test_best_player_and_average_include_target(lines, expected):
     page = build_match_page(make_mm(lobby=lines), report(), [], load_config(), sample())
     avg, best, target = page.tiers[0].comparisons
     assert best.name == f"本场最佳（{expected}）"
-    assert avg.id == "match_avg" and target.values == [50]*6
+    assert avg.id == "match_avg" and target.values == [50] * len(load_config()["radar"]["axes"])
     expected_average = sum(axis_values(player_metrics(item, load_config()), sample()["amateur_tmp"],
                                       load_config()["radar"]["axes"], load_config())[4] for item in lines) / len(lines)
     assert avg.values[4] == expected_average
@@ -123,14 +131,14 @@ def test_summary_median_of_percentile_axes_and_highlights():
     games = []
     for number, trades in enumerate([0, 1, 2]):
         mm = make_mm([make_moment("kill", tags=["opening_kill"])],
-                     lobby=[line(trade_kill_events=trades)], rounds=10)
+                     lobby=[line(trade_chances=5, missed_trade_chances=trades)], rounds=10)
         mm.highlights = find_highlights(mm, [make_round()])
         ref = DemoRef(path="test.dem", member=None, match_id=f"a{number}", map_name="de_dust2", player_name="目标玩家")
         games.append((ref, mm, report(), (6, 4)))
     summary = aggregate_matches(A, games, None, cfg)
     page = build_summary_page(summary, cfg, sample())
-    # 补枪百分位中位数为 50，被补比例为 83，维度逐场平均后中位数为 66.5。
-    assert page.tiers[0].you[4] == 66.5
+    # 漏补率分别为 0%、20%、40%，补枪维度百分位的中位数为 50。
+    assert page.tiers[0].you[4] == 50
     assert [c.id for c in page.tiers[0].comparisons] == ["tier_median"]
     assert len(page.highlights) == 3 and page.highlights[0].command.jump == "demo_gototick 1"
 
@@ -257,21 +265,22 @@ def test_verdict_names_weakest_axis_when_nothing_is_bad():
     assert "最弱的是" not in page.tiers[0].verdict
 
 
-def test_axis_listed_as_problem_is_not_a_strength_and_units_are_per_10_rounds():
-    """审查 044（另一名业余玩家）：准星中位数排 71%，规则又命中偏多，两边同时出现；按回合的次数换成每 10 回合。"""
+def test_axis_listed_as_problem_is_not_a_strength_and_units_match_metrics():
+    """问题维度不能同时列优点；漏补率用百分比，问题频率仍用每十回合次数。"""
     from tests.test_summary import stats
-    mm = make_mm([make_moment("kill", tags=["trade_kill"])], lobby=[line(aim=stats(100))], rounds=10)
-    baseline = tier(time_to_damage_ms=[200, 300, 400], trade_kill_events_per_round=[0, .05, .1])
+    mm = make_mm([make_moment("kill", tags=["trade_kill"])],
+                 lobby=[line(aim=stats(100), trade_chances=5)], rounds=10)
+    baseline = tier(time_to_damage_ms=[200, 300, 400], missed_trade_pct=[20, 40, 60])
     baseline["problem_rates"] = {"slow_reaction": {"per_10_rounds": 2, "hits": 20, "rounds": 100}}
     tiers = {baseline["id"]: baseline}
     # 出枪慢没有命中偏多：出枪速度可以算优点
     page = build_match_page(mm, report(), frequency(1, 1), load_config(), tiers)
-    assert {row.id for row in page.tiers[0].strengths} == {"time_to_damage_ms", "trade_kill_events_per_round"}
-    trade = next(row for row in page.tiers[0].strengths if row.id == "trade_kill_events_per_round")
-    assert trade.you == 2 and trade.target == .5 and trade.unit == "次" and "每 10 回合" in trade.measure
+    assert {row.id for row in page.tiers[0].strengths} == {"time_to_damage_ms", "missed_trade_pct"}
+    trade = next(row for row in page.tiers[0].strengths if row.id == "missed_trade_pct")
+    assert trade.you == 0 and trade.target == 40 and trade.unit == "%" and "越低越好" in trade.measure
     # 出枪慢命中偏多（warn）：出枪速度维度不再列为优点
     page = build_match_page(mm, report(), frequency(3, 3), load_config(), tiers)
-    assert {row.id for row in page.tiers[0].strengths} == {"trade_kill_events_per_round"}
+    assert {row.id for row in page.tiers[0].strengths} == {"missed_trade_pct"}
     assert page.tiers[0].problems[0].measure == "每 10 回合出现的次数" and page.tiers[0].problems[0].unit == "次"
 
 
@@ -373,9 +382,10 @@ def test_only_one_death_is_not_a_strength():
 def test_verdict_weakest_requires_four_axes_even_when_bad():
     from tests.test_summary import stats
     aim = stats(100).model_copy(update={"crosshair_offset_m": 10, "crosshair_offset_samples": 5,
-                                      "counter_strafing_pct": 50, "counter_strafing_shots": 5})
+                                      "counter_strafing_pct": 50, "counter_strafing_shots": 5,
+                                      "spray_accuracy_pct": 50, "spray_shots": 5})
     data = tier(time_to_damage_ms=[200, 300, 400], crosshair_offset_m=[0, 5, 10],
-                counter_strafing_pct=[0, 50, 100], utility_damage_per_round=[0, 10, 20])
+                counter_strafing_pct=[0, 50, 100], spray_accuracy_pct=[0, 50, 100])
     data["problem_rates"] = sample()["amateur_tmp"]["problem_rates"]
     view, = build_match_page(make_mm(lobby=[line(aim=aim)], rounds=10), report(), frequency(6, 6),
                              load_config(), {data["id"]: data}).tiers
@@ -413,3 +423,16 @@ def test_verdict_does_not_call_an_above_threshold_axis_weakest():
     assert "最弱" not in text and "都在第 40 百分位以上" in text
     text = _verdict("summary", [], "业余（临时）", [], axes, [17.4, 60, 70, 80, 90, 66], cfg)
     assert "雷达上最弱的是命中速度（第 17 百分位）" in text
+
+
+def test_metric_off_radar_is_never_a_strength():
+    # 道具使用移出雷达后，道具伤害再高也不列为优点
+    data = tier(utility_damage_per_round=list(range(40)))
+    view, = build_match_page(make_mm(lobby=[line(utility_damage=1000)], rounds=10), report(), [],
+                             load_config(), {data["id"]: data}).tiers
+    assert all(row.id != "utility_damage_per_round" for row in view.strengths)
+    cfg = load_config()
+    cfg["radar"]["axes"].append({"id": "utility", "name": "道具使用", "metrics": ["utility_damage_per_round"]})
+    view, = build_match_page(make_mm(lobby=[line(utility_damage=1000)], rounds=10), report(), [],
+                             cfg, {data["id"]: data}).tiers
+    assert any(row.id == "utility_damage_per_round" for row in view.strengths)

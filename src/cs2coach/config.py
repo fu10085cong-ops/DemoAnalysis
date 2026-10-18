@@ -54,7 +54,7 @@ def _validate_radar(cfg: dict[str, Any]) -> None:
             raise ConfigError(f"配置项 radar.{key} 应为有限数")
     if not 0 <= cfg["strength_min_percentile"] <= 100 or cfg["problem_min_excess"] < 0:
         raise ConfigError("radar 百分位应在 [0, 100] 内，多出次数应非负")
-    for key in ("rounds", "deaths", "flashes", "tier_values"):
+    for key in ("rounds", "deaths", "flashes", "trade_chances", "tier_values"):
         if type(cfg["min_samples"][key]) is not int or cfg["min_samples"][key] < 1:
             raise ConfigError(f"配置项 radar.min_samples.{key} 应为正整数")
     if type(cfg["verdict_weak_percentile"]) not in (int, float) or not 0 < cfg["verdict_weak_percentile"] <= 100:
@@ -62,14 +62,14 @@ def _validate_radar(cfg: dict[str, Any]) -> None:
     if type(cfg["verdict_min_axes"]) is not int or not 1 <= cfg["verdict_min_axes"] <= 6:
         raise ConfigError("配置项 radar.verdict_min_axes 应为 [1, 6] 内的整数")
     axes = cfg["axes"]
-    if (not isinstance(axes, list) or len(axes) != 6 or any(
+    if (not isinstance(axes, list) or not 3 <= len(axes) <= 8 or any(
             not isinstance(axis, dict) or set(axis) != {"id", "name", "metrics"}
             or any(not isinstance(axis[key], str) or not axis[key] for key in ("id", "name"))
             or not isinstance(axis["metrics"], list) or not axis["metrics"]
             or any(not isinstance(metric, str) or metric not in RADAR_METRICS for metric in axis["metrics"])
             or len(set(axis["metrics"])) != len(axis["metrics"]) for axis in axes)
             or len({axis["id"] for axis in axes}) != len(axes)):
-        raise ConfigError("配置项 radar.axes 应为六个编号唯一且指标有效的维度")
+        raise ConfigError("配置项 radar.axes 应为 3–8 个编号唯一且指标有效的维度")
 
 
 def _validate_review(cfg: dict[str, Any]) -> None:

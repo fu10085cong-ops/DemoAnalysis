@@ -5,16 +5,15 @@ from types import SimpleNamespace
 
 import pytest
 
-from cs2coach.config import load_config
 from cs2coach.report.page_check import check_page
 from cs2coach.report.page_data import build_match_page
 from tests.helpers.moments import make_mm, make_moment
-from tests.test_page_data import frequency, report, sample
+from tests.test_page_data import frequency, load_config, report, sample
 from tests.test_radar import line
 
 
 def valid_page():
-    page = build_match_page(make_mm([make_moment()], lobby=[line()], rounds=10),
+    page = build_match_page(make_mm([make_moment()], lobby=[line(trade_chances=5)], rounds=10),
                             report(), frequency(6, 6), load_config(), sample())
     problem = page.tiers[0].problems[0]
     problem.id = "missed_trade"
@@ -33,7 +32,7 @@ def test_each_rule_accepts_valid_page(rule):
     elif rule == 5:
         view.strengths[0].percentile = load_config()["radar"]["strength_min_percentile"]
     elif rule == 6:
-        view.strengths[0].samples = load_config()["radar"]["min_samples"]["rounds"]
+        view.strengths[0].samples = load_config()["radar"]["min_samples"]["trade_chances"]
     # 两个分段都逐一检查，避免只核对默认分段。
     page.tiers.append(deepcopy(page.tiers[0]))
     page.tiers[1].id = "other"
@@ -60,7 +59,7 @@ def test_each_rule_rejects_invalid_page(rule, message):
     elif rule == 5:
         view.strengths[0].percentile = 64
     elif rule == 6:
-        view.strengths[0].samples = 9
+        view.strengths[0].samples = 4
     else:
         view.problems[0].examples[0].tick += 1
     issues = check_page(page, load_config())

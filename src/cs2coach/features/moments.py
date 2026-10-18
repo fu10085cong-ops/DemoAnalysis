@@ -23,6 +23,7 @@ from cs2coach.features.models import (
     Moment,
     Shot,
     Trade,
+    TradeChance,
 )
 from cs2coach.features.aim import scoped_before_shot, shot_targets
 from cs2coach.features.aim_stats import aim_stats
@@ -63,11 +64,12 @@ def find_moments(match: MatchData, steamid: int, cfg: dict[str, Any], sight: Sig
     moments.sort(key=lambda m: (m.tick, m.kind != "death"))
     _assign_ids(moments)
     player = match.players[int(steamid)]
+    chances = find_trade_chances(match, p, steamid)
     mm = MatchMoments(
         demo=match.demo_path.name, map_name=match.meta.map_name, tick_rate=match.meta.tick_rate,
         player=int(steamid), player_name=player.name, rounds=len(match.rounds),
         player_names={int(k): v.name.strip() for k, v in match.players.items() if int(k) > 0},
-        moments=moments, missed_trades=find_missed_trades(match, p, steamid), excluded=excluded,
+        moments=moments, missed_trades=_missed_trades(chances), trade_chances=chances, excluded=excluded,
         aim_stats=aim_stats(match, steamid, cfg, p.shots, p.sight, moments),
         visibility_data_version=p.sight.data_version, visibility_unavailable=p.sight.unavailable_reason,
         absent_rounds=list(player.absent_rounds),
@@ -660,6 +662,17 @@ def _assist(match: MatchData, p: _Params, sid: int, row: pd.Series) -> Moment | 
 # ---------- 漏补 ----------
 
 def find_missed_trades(match: MatchData, p: _Params, sid: int) -> list[MissedTrade]:
+    """保留原漏补接口，由全部机会派生，不携带自己补上的字段。"""
+    return _missed_trades(find_trade_chances(match, p, sid))
+
+
+def _missed_trades(chances: list[TradeChance]) -> list[MissedTrade]:
+    return [MissedTrade.model_validate(c.model_dump(exclude={"traded_by_me", "my_trade_tick"}))
+            for c in chances if not c.traded_by_me]
+
+
+def find_trade_chances(match: MatchData, p: _Params, sid: int) -> list[TradeChance]:
+    """附近队友阵亡且雷达发现过击杀者的候选，包含自己补上的机会。"""
     k = match.kills
     ok = k["is_enemy_kill"] & ~k["in_freeze_time"] & ~k["after_round_end"] & k["attacker"].notna()
     out = []
@@ -677,16 +690,18 @@ def find_missed_trades(match: MatchData, p: _Params, sid: int) -> list[MissedTra
         if dist is None or dist > p.missed_trade_distance:
             continue
         revenge = k[ok & (k["victim"] == killer).fillna(False) & k["tick"].between(tick + 1, tick + p.trade)]
-        if (revenge["attacker"] == sid).any():
-            continue
+        first_trade = revenge.sort_values("tick").iloc[0] if len(revenge) else None
+        traded_by_me = first_trade is not None and int(first_trade["attacker"]) == sid
+        my_trade_tick = int(first_trade["tick"]) if traded_by_me else None
         if not _spotted_by(match, killer, sid, tick, tick + p.trade):
             continue
         reloading = any(bool(st["is_in_reload"]) for t in (tick - 1, tick)
                         if (st := match.state_at(sid, t)) is not None)
         view_seconds = first_view = None
         if p.sight is not None and p.sight.available:
-            own_states = p.sight.states(sid, tick, tick + p.trade)
-            killer_states = p.sight.states(killer, tick, tick + p.trade)
+            view_end = my_trade_tick if my_trade_tick is not None else tick + p.trade
+            own_states = p.sight.states(sid, tick, view_end)
+            killer_states = p.sight.states(killer, tick, view_end)
             visible = [t for t, st in own_states.items()
                        if t in killer_states and p.sight.sees(st, killer_states[t])]
             view_seconds = p.secs(len(visible))
@@ -715,8 +730,9 @@ def find_missed_trades(match: MatchData, p: _Params, sid: int) -> list[MissedTra
                 own += 1
             else:
                 enemy += 1
-        out.append(MissedTrade(round=number, tick=tick, teammate=victim, killer=killer,
-            distance=round(dist, 1), killer_traded_by_other=len(revenge) > 0,
+        out.append(TradeChance(round=number, tick=tick, teammate=victim, killer=killer,
+            distance=round(dist, 1), killer_traded_by_other=first_trade is not None and not traded_by_me,
+            traded_by_me=traded_by_me, my_trade_tick=my_trade_tick,
             killer_in_view_s=view_seconds, killer_first_in_view_s=first_view,
             reloading_at_death=reloading, other_fight_s=other_fight,
             side="T" if my_team == Team.T else "CT", alive_own=own, alive_enemy=enemy,

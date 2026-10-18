@@ -221,6 +221,13 @@ class MissedTrade(BaseModel):
     bomb_planted: bool | None = None
 
 
+class TradeChance(MissedTrade):
+    """附近队友阵亡后的补枪候选，包含自己补上的情况；是否计入由共用条件判断。"""
+
+    traded_by_me: bool
+    my_trade_tick: int | None = None
+
+
 class Excluded(BaseModel):
     round: int
     tick: int
@@ -263,6 +270,8 @@ class LobbyLine(BaseModel):
     opening_deaths: int
     trade_kills: int
     trade_kill_events: int = 0  # 一次补枪击杀只算一次，不按补回的队友人数累加
+    trade_chances: int = 0
+    missed_trade_chances: int = 0
     flashes_thrown: int = 0
     flash_assists: int
     utility_damage: int
@@ -295,6 +304,7 @@ class MatchMoments(BaseModel):
     moments: list[Moment]
     # 队友阵亡、自己就在附近且存活、却没在窗口内补枪（不是自己的击杀 / 死亡，单独列出）
     missed_trades: list[MissedTrade]
+    trade_chances: list[TradeChance] = []
     excluded: list[Excluded]  # 不参与分析的记录（接管 bot、冻结期自杀等）及原因
     aim_stats: AimStats | None = None
     lobby: list[LobbyLine] = []

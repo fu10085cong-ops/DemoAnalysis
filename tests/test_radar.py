@@ -54,8 +54,10 @@ def test_summary_uses_per_match_axis_median():
     assert median_axes([[0, None], [10, None], [100, None]], 2) == [10, None]
 
 
-def test_six_configured_axes():
-    assert len(load_config()["radar"]["axes"]) == 6
+def test_configured_axes():
+    # 2026-10-18 道具使用、补枪移出雷达，剩 4 个维度；配置允许 3–8 个
+    axes = load_config()["radar"]["axes"]
+    assert [a["id"] for a in axes] == ["ttd", "crosshair", "strafe", "spray"]
 
 
 @pytest.mark.parametrize("metric,changes", [
@@ -70,7 +72,7 @@ def test_small_samples_are_missing(metric, changes):
 
 def test_sample_boundaries_and_tier_minimum():
     cfg = load_config()
-    values = player_metrics(line(flashes_thrown=5, enemies_flashed_per_flash=2), cfg)
+    values = player_metrics(line(flashes_thrown=5, enemies_flashed_per_flash=2, trade_chances=5), cfg)
     assert all(values[key] is not None for key in list(RADAR_METRICS)[4:])
     small = {"metrics": {"traded_death_pct": {"values": [0] * 29, "n": 29}}}
     assert percentile("traded_death_pct", 100, small, cfg) is None

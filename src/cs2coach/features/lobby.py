@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from cs2coach.features.models import LobbyLine
+from cs2coach.features.trades import trade_chance_skip
 from cs2coach.parsing.weapons import is_gun
 
 if TYPE_CHECKING:
@@ -62,6 +63,7 @@ def lobby_line(match: MatchData, sid: int, cfg: dict, mm: MatchMoments,
     fired = int((shots["steamid"] == sid).sum())
     hits = int((gun_damage["attacker"] == sid).sum())
     deaths = [m for m in mine if m.kind == "death"]
+    chances = [c for c in mm.trade_chances if trade_chance_skip(c, cfg) is None]
     wasted = [sum(prices[g] for g in m.death.unused_grenades) for m in deaths if m.death]
     flash_count = int((flashes["thrower"] == sid).sum()) if not flashes.empty else 0
     thrown_blinds = blinds[blinds["thrower"] == sid] if not blinds.empty else blinds
@@ -89,6 +91,8 @@ def lobby_line(match: MatchData, sid: int, cfg: dict, mm: MatchMoments,
         flashes_thrown=flash_count,
         utility_damage=int(utility_damage.loc[utility_damage["attacker"] == sid, "dmg_effective"].sum()),
         traded_deaths=sum("traded" in m.tags for m in deaths),
+        trade_chances=len(chances),
+        missed_trade_chances=sum(not c.traded_by_me for c in chances),
         wasted_utility_avg=sum(wasted) / len(deaths) if deaths else None,
         enemies_flashed_per_flash=enemies_flashed / flash_count if flash_count else None,
         teammates_flashed_per_flash=teammates_flashed / flash_count if flash_count else None,

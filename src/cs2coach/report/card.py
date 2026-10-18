@@ -204,7 +204,7 @@ def render_lobby_tables(mm: MatchMoments, cfg: dict) -> list[str]:
         return _extreme_marker(value, values, "higher", mark_top) + (display or str(value))
 
     lines = ["## 同场对比", "", "### 枪法", "",
-             "| 玩家 | K-D | 命中率 | 爆头率 | 出枪速度 | 预瞄 | 急停 | 压枪 |",
+             "| 玩家 | K-D | 命中率 | 爆头率 | 命中速度 | 预瞄 | 急停 | 压枪 |",
              "|---|---:|---:|---:|---:|---:|---:|---:|"]
     for i, line in enumerate(ordered):
         if i and ordered[i - 1].team == own_team and line.team != own_team:

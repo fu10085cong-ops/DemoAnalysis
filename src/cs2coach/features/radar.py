@@ -10,6 +10,7 @@ RADAR_METRICS: dict[str, bool] = {
     "counter_strafing_pct": False, "spray_accuracy_pct": False,
     "trade_kill_events_per_round": False, "traded_death_pct": False,
     "utility_damage_per_round": False, "enemies_flashed_per_flash": False,
+    "missed_trade_pct": True,
 }
 
 
@@ -22,6 +23,8 @@ def sample_count(line: LobbyLine, metric: str) -> int:
         return getattr(line.aim, fields[metric]) if line.aim else 0
     if metric == "traded_death_pct":
         return line.deaths
+    if metric == "missed_trade_pct":
+        return line.trade_chances
     if metric == "enemies_flashed_per_flash":
         return line.flashes_thrown
     return line.rounds_played
@@ -31,7 +34,8 @@ def minimum_samples(metric: str, cfg: dict) -> int:
     """枪法沿用原门槛，其他指标按自己的分母设门槛。"""
     if metric in tuple(RADAR_METRICS)[:4]:
         return cfg["aim_stats"]["min_samples"]
-    key = {"traded_death_pct": "deaths", "enemies_flashed_per_flash": "flashes"}.get(metric, "rounds")
+    key = {"traded_death_pct": "deaths", "enemies_flashed_per_flash": "flashes",
+           "missed_trade_pct": "trade_chances"}.get(metric, "rounds")
     return cfg["radar"]["min_samples"][key]
 
 
@@ -42,6 +46,7 @@ def player_metrics(line: LobbyLine, cfg: dict) -> dict[str, float | None]:
            for key in ("time_to_damage_ms", "crosshair_offset_m", "counter_strafing_pct", "spray_accuracy_pct")},
         "trade_kill_events_per_round": line.trade_kill_events / line.rounds_played if line.rounds_played else None,
         "traded_death_pct": 100 * line.traded_deaths / line.deaths if line.deaths else None,
+        "missed_trade_pct": 100 * line.missed_trade_chances / line.trade_chances if line.trade_chances else None,
         "utility_damage_per_round": line.utility_damage / line.rounds_played if line.rounds_played else None,
         "enemies_flashed_per_flash": line.enemies_flashed_per_flash,
     }

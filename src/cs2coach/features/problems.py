@@ -14,6 +14,7 @@ from cs2coach.features.crosshair import active_exclusions
 from cs2coach.features.labels import weapon_label
 from cs2coach.parsing.weapons import is_gun
 from cs2coach.features.models import MatchMoments
+from cs2coach.features.trades import trade_chance_skip
 
 
 class ProblemSpec(BaseModel):
@@ -389,29 +390,12 @@ def detect_problems(mm: MatchMoments, baseline: dict | None, cfg: dict) -> Probl
             hit("flash_assist", {"flash_assist": True})
 
     for record in mm.missed_trades:
-        if p["missed_trade_exclude_traded_by_other"] and record.killer_traded_by_other:
-            if "missed_trade" not in disabled:
-                skipped["missed_trade/killer_traded_by_other"] += 1
-            continue
-        # 035：队友阵亡后只剩自己一个人，补枪无从谈起（第三轮审计）；alive_own 缺失时照常判
-        if record.alive_own == 1:
-            skipped["missed_trade/last_alive"] += 1
-            continue
-        if record.killer_in_view_s is None:
-            missing("missed_trade")
-            continue
-        if record.killer_in_view_s < p["missed_trade_min_view_seconds"]:
-            skipped["missed_trade/killer_in_view_s"] += 1
-            continue
-        if (record.killer_first_in_view_s is None or
-                record.killer_first_in_view_s > cfg["moments"]["trade_window_seconds"] - p["missed_trade_min_react_seconds"]):
-            skipped["missed_trade/killer_first_in_view_s"] += 1
-            continue
-        if record.reloading_at_death:
-            skipped["missed_trade/reloading_at_death"] += 1
-            continue
-        if record.other_fight_s is not None:
-            skipped["missed_trade/other_fight_s"] += 1
+        reason = trade_chance_skip(record, cfg)
+        if reason is not None:
+            if reason == "missing":
+                missing("missed_trade")
+            elif reason != "killer_traded_by_other" or "missed_trade" not in disabled:
+                skipped[f"missed_trade/{reason}"] += 1
             continue
         emit("missed_trade", f"R{record.round}", None, record.model_dump())
 

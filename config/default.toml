@@ -171,7 +171,7 @@ min_ranked = 6
 mark_top = 3
 highlight_priority = ["won_duel_seen_first", "good_trade", "flash_assist"]
 highlight_show_ttd_max_ms = 400
-note = "出枪速度、预瞄、急停、压枪按地图几何判断'看见'，数值和对战平台不同；同场排名可以直接比较。补枪按 {trade_window} 秒窗口统计。"
+note = "命中速度、预瞄、急停、压枪按地图几何判断'看见'，数值和对战平台不同；同场排名可以直接比较。补枪按 {trade_window} 秒窗口统计。"
 
 [[report.card.dimensions]]
 key = "headshot"
@@ -196,7 +196,7 @@ problem = "poor_crosshair_placement"
 
 [[report.card.dimensions]]
 key = "ttd"
-label = "出枪速度"
+label = "命中速度"
 field = "aim.time_to_damage_ms"
 direction = "lower"
 problem = "slow_reaction"
@@ -383,7 +383,7 @@ incomplete_visibility_notes = ["not_seen", "lost_sight", "first_hit_unseen", "sm
 [radar]
 default_tier = "amateur_tmp"
 strength_min_percentile = 65
-verdict_min_axes = 4  # 至少有这些可用维度才判断雷达上的整体强弱
+verdict_min_axes = 3  # 至少有这些可用维度才判断雷达上的整体强弱（雷达剩 4 个维度后从 4 降到 3）
 verdict_weak_percentile = 40  # 最低的维度低于这个百分位，结论才说"最弱的是……"
 max_strengths = 3
 max_problems = 5
@@ -398,6 +398,7 @@ problem_min_excess = 3
 rounds = 10
 deaths = 5
 flashes = 5
+trade_chances = 5
 tier_values = 30
 
 [[radar.axes]]
@@ -416,14 +417,9 @@ metrics = ["counter_strafing_pct"]
 id = "spray"
 name = "压枪"
 metrics = ["spray_accuracy_pct"]
-[[radar.axes]]
-id = "trade"
-name = "补枪配合"
-metrics = ["trade_kill_events_per_round", "traded_death_pct"]
-[[radar.axes]]
-id = "utility"
-name = "道具使用"
-metrics = ["utility_damage_per_round", "enemies_flashed_per_flash"]
+# 道具使用 2026-10-18 起移出雷达：段位间分不出，后续按具体地图分析（产品负责人决定）
+# 补枪（漏补率，051）2026-10-18 起移出雷达：每人每场平均只有 1.8 次补枪机会，单场算不出；
+# 5E B/A/S 合并统计也分不出段位（产品负责人决定）。漏补仍作为问题检测提醒，missed_trade_pct 继续写入分段基准
 
 [review]
 # CS2 的 game/csgo 目录；也可用 CS2COACH_CSGO_DIR 或 install --csgo 指定

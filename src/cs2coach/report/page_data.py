@@ -16,6 +16,7 @@ from cs2coach.features.labels import weapon_label
 from cs2coach.features.models import MatchMoments, Moment
 from cs2coach.features.problems import ProblemReport, _poisson_tail
 from cs2coach.features.radar import RADAR_METRICS, axis_values, median_axes, percentile, player_metrics, sample_count
+from cs2coach.features.trades import trade_chance_skip
 from cs2coach.report.basic import problem_texts
 from cs2coach.report.evidence import evidence_sentence
 from cs2coach.summary.aggregate import PlayerSummary
@@ -24,12 +25,13 @@ from cs2coach.tools.slots import situation_text
 TIER_DIR = Path(__file__).resolve().parents[1] / "baselines/tiers"
 # 名称、这个数是什么（页面上直接显示）、单位、换算倍数。按回合算的次数换成"每 10 回合"，与问题汇总一致（审查 044）
 METRIC_TEXT = {
-    "time_to_damage_ms": ("首次命中用时", "从看见对手到第一次打中他的时间（典型单场的中位数，1 秒以上的不算）", "毫秒", 1),
+    "time_to_damage_ms": ("命中速度", "从看见对手到第一次打中他的时间（典型单场的中位数，1 秒以上的不算）", "毫秒", 1),
     "crosshair_offset_m": ("预瞄", "刚看见对手那一刻，准星离他头部的距离（典型单场的中位数，越小越好；5 米内的近身交火、跳跃中和转身才看到的对手不算）", "米", 1),
     "counter_strafing_pct": ("急停", "用步枪、看见敌人时开枪，已经停稳的比例", "%", 1),
     "spray_accuracy_pct": ("压枪", "用步枪连发 3 发以上时，子弹打中敌人的比例", "%", 1),
     "trade_kill_events_per_round": ("补枪", "每 10 回合补枪击杀的次数（一次击杀算一次）", "次", 10),
     "traded_death_pct": ("被队友补回", "自己阵亡后被队友补枪的比例", "%", 1),
+    "missed_trade_pct": ("漏补率", "队友在你附近阵亡、你也看到了击杀者时，5 秒内没有补上的比例（越低越好；击杀者被其他队友补掉、只剩你一人、你正在换弹或正和别的对手交火的不算）", "%", 1),
     "utility_damage_per_round": ("道具伤害", "每 10 回合手雷和火造成的伤害", "点", 10),
     "enemies_flashed_per_flash": ("闪光效果", "每颗闪光平均闪到的敌人数", "人", 1),
 }
@@ -37,7 +39,7 @@ PROBLEM_MEASURE = "每 10 回合出现的次数"
 PROBLEM_METRICS = {
     "slow_reaction": "time_to_damage_ms", "poor_crosshair_placement": "crosshair_offset_m",
     "shot_while_moving": "counter_strafing_pct", "spray_while_moving": "counter_strafing_pct",
-    "spray_control": "spray_accuracy_pct", "missed_trade": "trade_kill_events_per_round",
+    "spray_control": "spray_accuracy_pct", "missed_trade": "missed_trade_pct",
     "post_plant_utility_unused": "utility_damage_per_round", "dry_peek_with_utility": "utility_damage_per_round",
 }
 
@@ -194,6 +196,11 @@ def _strength_moments(mm, metric, limit, cfg):
         return valid
     if metric == "trade_kill_events_per_round":
         return [m for m in kills if "trade_kill" in m.tags]
+    if metric == "missed_trade_pct":
+        trades = {(c.round, c.killer, c.my_trade_tick) for c in mm.trade_chances
+                  if c.traded_by_me and trade_chance_skip(c, cfg) is None}
+        return sorted((m for m in kills if (m.round, m.opponent, m.tick) in trades),
+                      key=lambda m: m.tick)[:limit]
     if metric == "traded_death_pct":
         return [m for m in mm.moments if m.kind == "death" and "traded" in m.tags]
     if metric == "enemies_flashed_per_flash":
@@ -258,8 +265,9 @@ def _rows(games, frequency, cfg, tier):
                     if (p := percentile(key, s[key], tier, cfg)) is not None]) else None
                    for key in RADAR_METRICS}
     flagged = {row.axis for row in problems if row.severity != "ok" and row.axis}
-    ranked = [(key, p) for key, p in percentiles.items() if _axis(key, axes) not in flagged
-              and p is not None and p >= radar["strength_min_percentile"]]
+    # 只从雷达上画出来的维度里选优点（道具使用已移出雷达）
+    ranked = [(key, p) for key, p in percentiles.items() if (axis := _axis(key, axes)) is not None
+              and axis not in flagged and p is not None and p >= radar["strength_min_percentile"]]
     for key, p in sorted(ranked, key=lambda pair: -pair[1])[:radar["max_strengths"]]:
         selected = [(mm, label, m) for mm, _, label in games for m in _strength_moments(mm, key, limit, cfg)]
         count = len(selected)
