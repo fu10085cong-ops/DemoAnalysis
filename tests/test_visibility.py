@@ -334,6 +334,7 @@ def test_aim_stats_uses_scope_before_aug_shot(previous_scoped, expected):
 
     cfg = copy.deepcopy(CFG)
     cfg["aim_stats"]["min_samples"] = 1
+    cfg["aim_stats"]["weapons"] = [*cfg["aim_stats"]["weapons"], "aug"]  # 测开镜逻辑，不测白名单
     m = make_match(ticks(extra={(A, 89): {"is_scoped": previous_scoped},
                                (A, 90): {"is_scoped": False, "X": 0.9375}}))
     m.damages = build_damages(pd.DataFrame([hurt(90, A, C, 30, 70, weapon="aug")]), m)
@@ -349,6 +350,7 @@ def test_aim_stats_reads_scoped_awp_speed_without_changing_rifle_scope():
     from cs2coach.features.aim_stats import aim_stats
 
     cfg = copy.deepcopy(CFG)
+    cfg["aim_stats"]["weapons"] = [*cfg["aim_stats"]["weapons"], "awp"]  # 测开镜逻辑，不测白名单
     scoped_speeds = Mock(wraps=cfg["counter_strafe"]["max_speed_scoped"])
     cfg["counter_strafe"]["max_speed_scoped"] = scoped_speeds
     m = make_match(ticks(extra={(A, 89): {"is_scoped": True},
@@ -358,6 +360,20 @@ def test_aim_stats_reads_scoped_awp_speed_without_changing_rifle_scope():
     st = aim_stats(m, A, cfg, m.shots, sight(m), [])
     scoped_speeds.get.assert_called_once_with("awp")
     assert st.counter_strafing_shots == 0  # 整场 Counter-Strafing 仍只统计步枪。
+
+
+@pytest.mark.parametrize("weapon,counted", [("ak47", True), ("mp9", False), ("awp", False)])
+def test_aim_stats_only_counts_whitelisted_weapons(weapon, counted):
+    from cs2coach.features.aim_stats import aim_stats
+
+    cfg = copy.deepcopy(CFG)
+    cfg["aim_stats"]["min_samples"] = 1
+    m = make_match(ticks(extra={(A, 90): {"X": 0.9375}}))
+    m.damages = build_damages(pd.DataFrame([hurt(90, A, C, 30, 70, weapon=weapon)]), m)
+    m.shots = build_shots(pd.DataFrame([fire(90, A, f"weapon_{weapon}")]), pd.DataFrame([bullet(90, A)]), m)
+    st = aim_stats(m, A, cfg, m.shots, sight(m), [])
+    n = 1 if counted else 0
+    assert (st.spotted_shots, st.hits, st.time_to_damage_samples, st.crosshair_placement_samples) == (n, n, n, n)
 
 
 def flash(victim=A, tick=16, duration=2.0):

@@ -4,6 +4,7 @@
 - "看见敌人"用地图几何视野（features/visibility.py），Leetify 用自己的位置重放（方法未公开）
 - Time to Damage、Crosshair Placement 按"遭遇"统计：同一回合对同一敌人的伤害，间隔超过 encounter_gap_seconds
   才算新的一次遭遇，每次遭遇取第一次伤害
+- 六项指标只统计 aim_stats.weapons 白名单中的武器（不含冲锋枪、狙击枪等）
 """
 
 from __future__ import annotations
@@ -29,9 +30,10 @@ def aim_stats(match: MatchData, sid: int, cfg: dict[str, Any], shots: pd.DataFra
     rate = match.meta.tick_rate
     min_n = int(ac["min_samples"])
 
+    allowed = set(ac["weapons"])
     ttd, cp = _encounters(match, sid, sight, ac, rate)
 
-    mine = shots[(shots["steamid"] == sid).fillna(False) & shots["is_gun"] & ~shots["controlling_bot"]]
+    mine = shots[(shots["steamid"] == sid).fillna(False) & shots["weapon"].isin(allowed) & ~shots["controlling_bot"]]
     mine = mine.sort_values("tick")
     hit_ticks = _hit_ticks(match, sid)
     states = match.player_ticks(sid).set_index("tick")
@@ -57,7 +59,7 @@ def aim_stats(match: MatchData, sid: int, cfg: dict[str, Any], shots: pd.DataFra
 
     d = match.damages
     gun_hits = d[(d["attacker"] == sid).fillna(False) & (d["attacker_team_num"] != d["victim_team_num"])
-                 & d["weapon"].map(is_gun) & (d["weapon"] != "awp")]
+                 & d["weapon"].isin(allowed)]
     return AimStats(
         time_to_damage_ms=round(statistics.median(ttd) * 1000) if len(ttd) >= min_n else None,
         time_to_damage_samples=len(ttd),
@@ -78,7 +80,7 @@ def _encounters(match: MatchData, sid: int, sight: Sight, ac: dict, rate: int) -
     """每次遭遇的 Time to Damage（秒）和 Crosshair Placement（度）。≥ time_to_damage_max_seconds 的排除。"""
     d = match.damages
     mine = d[(d["attacker"] == sid).fillna(False) & d["victim"].notna() & (d["attacker_team_num"] != d["victim_team_num"])
-             & d["weapon"].map(is_gun)].sort_values("tick")
+             & d["weapon"].isin(ac["weapons"])].sort_values("tick")
     gap = round(ac["encounter_gap_seconds"] * rate)
     max_ttd = ac["time_to_damage_max_seconds"]
     ttd, cp = [], []

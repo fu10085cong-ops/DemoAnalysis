@@ -330,9 +330,14 @@ def test_absent_baseline_runs_universal_rules(base, cfg):
 
 
 def test_unknown_weapon_and_missing_quantile_are_skipped(cfg, baseline):
-    m = make_moment(weapon="mp9", engagement={"time_to_damage_s": .8})
+    # p250 在准星白名单内但基准里没有；mp9 不在准星白名单内
+    m = make_moment(weapon="p250", engagement={"time_to_damage_s": .8, "crosshair_initial_offset_m": 4.0})
     report = detect_problems(make_mm([m]), baseline, cfg)
     assert report.skipped["slow_reaction"] == report.skipped["poor_crosshair_placement"] == 1
+    smg = make_moment(weapon="mp9", engagement={"time_to_damage_s": .8})
+    report = detect_problems(make_mm([smg]), baseline, cfg)
+    assert report.skipped["slow_reaction"] == report.skipped["poor_crosshair_placement/weapon"] == 1
+    assert "poor_crosshair_placement" not in report.skipped
     baseline["weapons"]["ak47"]["seen_to_first_shot_ms"]["p75"] = None
     assert detect_problems(make_mm([make_moment()]), baseline, cfg).skipped["slow_reaction"] == 1
 

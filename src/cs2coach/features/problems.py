@@ -223,7 +223,10 @@ def detect_problems(mm: MatchMoments, baseline: dict | None, cfg: dict) -> Probl
                                      "source": "pro_p75", "ttd_max_seconds": cap,
                                      "ttd_max_source": "config"})
                 cp = e.crosshair_initial_offset_m
-                if not _finite(cp):
+                if w not in cfg["aim_stats"]["weapons"]:
+                    if "poor_crosshair_placement" not in disabled:
+                        skipped["poor_crosshair_placement/weapon"] += 1
+                elif not _finite(cp):
                     missing("poor_crosshair_placement")
                 else:
                     limit = threshold("poor_crosshair_placement", w, "crosshair_initial_offset_m", "p75")

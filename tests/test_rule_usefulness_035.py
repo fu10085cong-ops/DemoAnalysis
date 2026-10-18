@@ -88,3 +88,15 @@ def test_overpeek_skips_t_early_round(cfg, baseline):
     assert "overpeek_in_advantage" in problems(later_t, baseline, cfg)
     assert "overpeek_in_advantage" in problems(early_ct, baseline, cfg)
     assert cfg["problems"]["overpeek_t_min_round_time_s"] == 25.0
+
+
+# 准星武器白名单（2026-10-18 产品负责人决定）：名单外的武器不判，计入 skipped
+def test_crosshair_weapon_whitelist(cfg, baseline):
+    assert cfg["aim_stats"]["weapons"] == ["ak47", "m4a1_silencer", "m4a1", "famas", "galilar",
+                                           "usp_silencer", "glock", "deagle", "p250"]
+    baseline["weapons"]["mac10"] = copy.deepcopy(baseline["weapons"]["ak47"])
+    rifle = make_moment(engagement={"crosshair_initial_offset_m": 4.0})
+    smg = make_moment(weapon="mac10", engagement={"crosshair_initial_offset_m": 4.0})
+    assert "poor_crosshair_placement" in problems(rifle, baseline, cfg)
+    assert "poor_crosshair_placement" not in problems(smg, baseline, cfg)
+    assert detect_problems(make_mm([smg]), baseline, cfg).skipped["poor_crosshair_placement/weapon"] == 1

@@ -79,6 +79,9 @@ spray_max_gap_seconds = 0.2
 spray_min_shots = 3
 # 样本数低于此值时不给出数值
 min_samples = 5
+# 六项枪法指标和"准星没放好"检测只统计这些武器（2026-10-18 产品负责人决定：冲锋枪、狙击枪等不计入）。
+# m4a1 是 M4A4，m4a1_silencer 是 M4A1-S；急停、扫射命中再与步枪取交集
+weapons = ["ak47", "m4a1_silencer", "m4a1", "famas", "galilar", "usp_silencer", "glock", "deagle", "p250"]
 
 [visibility]
 # 视野计算：awpy 的地图碰撞网格做射线检测（只有静态几何，不含烟雾、门等动态物体）。

@@ -99,6 +99,8 @@
 
 名称和口径沿用 Leetify（`docs/metrics_research.md`），样本数低于 `min_samples` 时数值为空。
 
+**武器白名单（与 Leetify 的差别，2026-10-18 产品负责人决定）**：六项指标只统计 `[aim_stats] weapons` 中的武器：AK-47、M4A1-S、M4A4、FAMAS、Galil、USP-S、Glock、沙鹰、P250。冲锋枪、AWP、SSG 08、Tec-9、Five-SeveN、双枪等不计入；Leetify 统计全部枪械。急停、扫射命中再与下方步枪取交集（实际只剩 AK、M4A4、M4A1-S、Galil、FAMAS）。"准星没放好"检测使用同一份名单，名单外武器计入 `skipped["poor_crosshair_placement/weapon"]`。
+
 | 指标 | 定义 | 与 Leetify 的差别 |
 |---|---|---|
 | `time_to_damage_ms` | 每次遭遇（同一回合对同一敌人，伤害间隔超过 3 秒算新的一次）从看见到第一次伤害，≥ 1 秒的排除，取中位数 | "看见"用地图几何；按遭遇统计 |
@@ -106,7 +108,7 @@
 | `counter_strafing_pct` | 步枪、看见敌人时、未下蹲的射击中，速度 < 34% 武器最高速度的比例；开镜状态取开枪前一 tick，缺数据时取开枪 tick（fields.md 陷阱 23） | "看见"用地图几何 |
 | `spray_accuracy_pct` | 步枪连续 3 发以上（相邻两枪间隔 ≤ 0.2 秒）的扫射中，看见敌人时开的枪命中敌人的比例 | 同上；"连续"的间隔是我们定的 |
 | `spotted_accuracy_pct` | 看见敌人时开枪的命中率（同一 tick 对敌人造成伤害即命中） | 同上 |
-| `headshot_accuracy_pct` | 枪械命中中命中头部的比例，不含 AWP | 无 |
+| `headshot_accuracy_pct` | 白名单武器命中中命中头部的比例 | 只算白名单武器 |
 
 步枪：AK-47、M4A4、M4A1-S、Galil、FAMAS、AUG、SG 553。
 
@@ -129,7 +131,7 @@
 
 清单在 `baselines/pro_demos.toml`，生成入口为 `scripts/build_baseline.py`。使用与分析用户相同的解析、特征和致盲过滤流程；覆盖率低于 `parsing.min_target_coverage` 的玩家不入样本，某份 demo 失败时整份跳过并打印原因，来源与实际人次写入基准文件。Mirage p1/p2 是同图两段，按两份样本处理，不称为两张不同地图。
 
-当前 v2（2026-10-17 按 5 秒补枪窗口和逐枪视野过滤重建）来自 ESL Pro League S24、Esports World Cup 2026、FISSURE Playground 3、Stake Ranked Episode 4 的 9 组对局、26 份 demo，共 260 人次、5620 回合；全部成功，覆盖率为 0 的非选手不计入。地图：Mirage 6、Dust2 6、Nuke 4、Ancient 3、Anubis 3、Inferno 2、Cache 2。整场 TTD 职业中位数 391 ms，准星移动中位数 3.71°。各武器交火样本：AK 2490、M4A1-S 945、M4A4 677、AWP 663、Glock 433、Galil 386、USP 337、沙鹰 287、MP9 172、Tec-9 159、MAC-10 123、Five-SeveN 120、FAMAS 108、双枪 89、P250 68、MP7 32、SSG 08 31（不足 30 的武器不输出阈值，UMP-45 等仍缺）。扩充前（15 份）的数值见 git 历史。具体分布和每项有效样本数见 `baselines/pro_sample.json`。上方 30 人次表格是旧算法的早期核对记录。
+当前 v2（2026-10-17 按 5 秒补枪窗口和逐枪视野过滤重建）来自 ESL Pro League S24、Esports World Cup 2026、FISSURE Playground 3、Stake Ranked Episode 4 的 9 组对局、26 份 demo，共 260 人次、5620 回合；全部成功，覆盖率为 0 的非选手不计入。地图：Mirage 6、Dust2 6、Nuke 4、Ancient 3、Anubis 3、Inferno 2、Cache 2。整场 TTD 职业中位数 391 ms，准星移动中位数 3.70°（2026-10-18 起只统计白名单武器，此前为 3.71°）。各武器交火样本：AK 2490、M4A1-S 945、M4A4 677、AWP 663、Glock 433、Galil 386、USP 337、沙鹰 287、MP9 172、Tec-9 159、MAC-10 123、Five-SeveN 120、FAMAS 108、双枪 89、P250 68、MP7 32、SSG 08 31（不足 30 的武器不输出阈值，UMP-45 等仍缺）。扩充前（15 份）的数值见 git 历史。具体分布和每项有效样本数见 `baselines/pro_sample.json`。上方 30 人次表格是旧算法的早期核对记录。
 
 - `metrics` 保留每人每份 demo 的整场枪法分布，原 `compare()` 接口兼容；四分位数使用 inclusive 方法，不向样本值范围外推。
 - `weapons` 按交火第一枪的武器归组；没开枪时从手持显示名反查规范名，查不到则跳过。只含击杀、死亡且有交火的数据，不含回合结束后、误杀、bot 和世界伤害；交火少于 `baseline.min_engagements`（默认 30）的武器不输出。
