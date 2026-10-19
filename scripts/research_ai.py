@@ -32,12 +32,14 @@ KEY = ["demo_id", "match_id", "round_id", "player_id", "start_tick"]
 
 SYSTEM = """你是 CS2 职业比赛的分析员。用户会给你一名 CT 选手的"选手视角时间线"：只包含他当时能看到、听到、从雷达和队友那里知道的信息。
 
-任务：判断他在【交火结束】之后约 3 秒内做了什么，从下面五个标签中选一个：
-- 继续压：朝刚才交火的对手方向推进（离交火位置明显更近）
-- 撤离：往远离交火的方向撤（离开这片区域、退到更后方）
-- 换位：离开交火时所在的、被对手看到的位置，换到附近另一个点或角度（不是明显推进或撤离）
-- 原位再架：留在交火时的位置（挪动不到约 100 单位），继续架点或转头看别处
+任务：判断他在【交火结束】之后约 3 秒内做了什么，从下面五个标签中选一个。时间线每行给出你所在的报点和区域层级
+（后方 < 防守区 < 接触区，防守区还分 A / B / 中路等组）、离交火结束时位置的距离、离交火对手的距离：
+- 原位再架：离交火结束时位置挪动不到约 100 单位（转头看别处、原地调整都算）
+- 换位：挪动超过约 100 单位，但仍在同一个报点或同一组防守区内，换到另一个点或角度
+- 撤离：往后退了一层（接触区→防守区、防守区→后方）；或离开了所在报点 / 防守区组，并且离交火对手明显更远（约 250 以上）
+- 继续压：往前进了一层（例如防守区→接触区）；或离交火对手明显更近（约 150 以上）
 - 看不出：交火后很快阵亡、回合结束，或信息不足以判断
+按观察期结束时（交火结束后约 3 秒）相对交火结束时的位置判断；中途走出去又回来，以结束时为准，并在依据里说明。
 
 要求：
 1. 交火结束默认以时间线中"程序判断的交火结束"为准；如果你认为交火在别的时刻结束，用你的判断，并写进 fight_end_s
@@ -183,12 +185,16 @@ def parse_answer(text: str) -> dict:
     return answer
 
 
-def run(name: str, model: str | None, repeats: int | None, yes: bool, root: Path = ROOT, client=None) -> Path:
+def run(name: str, model: str | None, repeats: int | None, yes: bool, root: Path = ROOT, client=None,
+        provider: str | None = None) -> Path:
     from cs2coach.ai.providers import make_provider
+    from cs2coach.env import load_env_file
 
     cfg = load_config()
     ai = cfg["research"]["ai"]
-    model, repeats = model or ai["model"], repeats or ai["repeats"]
+    provider = provider or cfg["ai"]["provider"]
+    model = model or (ai["model"] if provider == cfg["ai"]["provider"] else cfg["ai"][provider]["model"])
+    repeats = repeats or ai["repeats"]
     out = _dir(root, name)
     records = _load(out / "timelines.jsonl")
     chars = sum(len(SYSTEM) + len(r["text"]) for r in records) * repeats
@@ -196,9 +202,11 @@ def run(name: str, model: str | None, repeats: int | None, yes: bool, root: Path
     if not yes:
         print("未调用：真实调用会产生费用，确认后加 --yes")
         return out
+    if (root / ".env").exists():
+        load_env_file(root / ".env")  # API key 放在 .env（不进仓库），与 CLI 相同
     run_cfg = copy.deepcopy(cfg)
-    provider_name = run_cfg["ai"]["provider"]
-    run_cfg["ai"][provider_name]["model"] = model
+    run_cfg["ai"]["provider"] = provider
+    run_cfg["ai"][provider]["model"] = model
     results = out / "results"
     results.mkdir(exist_ok=True)
     for k in range(1, repeats + 1):
@@ -208,9 +216,9 @@ def run(name: str, model: str | None, repeats: int | None, yes: bool, root: Path
             for record in records:
                 if record["id"] in done:
                     continue
-                provider = make_provider(run_cfg, client)
-                provider.start(SYSTEM, [record["text"]], [])
-                turn = provider.send()
+                service = make_provider(run_cfg, client)
+                service.start(SYSTEM, [record["text"]], [])
+                turn = service.send()
                 answer = parse_answer(turn.text)
                 stream.write(json.dumps({"id": record["id"], "model": turn.model or model,
                                          "prompt_version": ai["prompt_version"], **answer, "raw": turn.text,
@@ -316,6 +324,7 @@ def main(argv=None, root: Path = ROOT) -> int:
     t.add_argument("--jobs", type=int, default=None)
     r = sub.add_parser("run")
     r.add_argument("name")
+    r.add_argument("--provider", default=None, help="deepseek / mimo / claude / local，默认 [ai] provider")
     r.add_argument("--model", default=None)
     r.add_argument("--repeats", type=int, default=None)
     r.add_argument("--yes", action="store_true", help="确认真实调用（会产生费用）")
@@ -335,7 +344,7 @@ def main(argv=None, root: Path = ROOT) -> int:
     elif args.cmd == "timelines":
         timelines(args.name, args.jobs, root)
     elif args.cmd == "run":
-        run(args.name, args.model, args.repeats, args.yes, root)
+        run(args.name, args.model, args.repeats, args.yes, root, provider=args.provider)
     else:
         compare(args.name, args.model, root=root)
     return 0

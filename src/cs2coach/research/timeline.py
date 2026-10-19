@@ -104,20 +104,25 @@ def build_timeline(match: MatchData, window: dict, result: Reposition, sight, so
     if fight is not None:
         lines.append(f"程序判断的交火段：{rel(fight.start_tick)} 到 {rel(fight.end_tick)}（以你的开枪、命中、受伤、击杀计，"
                      f"间隔不超过 {cfg['research']['fight']['gap_seconds']} 秒的连成一段）。你可以不同意。")
+        if result.location is not None:
+            where = {"opponent": "交火对手在交火结束时的位置", "visible": "交火结束时你看到的最近的 T 的位置",
+                     "aim": "交火结束时你准星方向前方 1000 单位（没有可确定的对手）"}[result.location_source]
+            lines.append(f"\"离交火对手\"的距离以{where}为准（{_nearest_place(marks, result.location[0], result.location[1])} 附近）。")
+    lines.append("区域层级：后方（CT 出生点）< 防守区（包点和防守位）< 接触区（靠近 T 的区域）。")
     lines.append("")
     p0 = match.state_at(sid, fight.end_tick if fight else trigger)
     anchor = (float(p0["X"]), float(p0["Y"])) if p0 is not None and pd.notna(p0["X"]) else position[:2]
     anchor_name = "交火结束时位置" if fight else "0 秒时位置"
     prev = start - 1
     ticks = list(range(start, end + 1, step))
-    if ticks[-1] != end:
+    if end - ticks[-1] >= step / 2:
         ticks.append(end)
     for tick in ticks:
         me = match.state_at(sid, tick)
         if me is None or not bool(me["is_alive"]):
             lines.append(f"{rel(tick)} 你已阵亡。")
             break
-        parts = [_self_text(me, tick, anchor, anchor_name, marks, match, sid, cfg, map_name)]
+        parts = [_self_text(me, tick, anchor, anchor_name, marks, match, sid, cfg, map_name, result.location)]
         seen = {}
         for enemy in enemies:
             st = match.state_at(enemy, tick)
@@ -155,7 +160,7 @@ def build_timeline(match: MatchData, window: dict, result: Reposition, sight, so
     return "\n".join(lines)
 
 
-def _self_text(me, tick, anchor, anchor_name, marks, match, sid, cfg, map_name) -> str:
+def _self_text(me, tick, anchor, anchor_name, marks, match, sid, cfg, map_name, opponent=None) -> str:
     limits = cfg["research"]["timeline"]
     speed = float(me["speed_xy"]) if pd.notna(me.get("speed_xy")) else 0.0
     if speed < limits["moving_speed"]:
@@ -171,14 +176,17 @@ def _self_text(me, tick, anchor, anchor_name, marks, match, sid, cfg, map_name) 
     look = look_target(me, marks, cfg)
     weapon = me.get("active_weapon_name")
     ammo = me.get("active_weapon_ammo")
-    gun = f"{weapon}" + (f"（{int(ammo)} 发）" if pd.notna(ammo) else "") if isinstance(weapon, str) else "武器未知"
+    gun = f"{weapon}" + (f"（{int(ammo)} 发）" if pd.notna(ammo) and ammo > 0 else "") if isinstance(weapon, str) else "武器未知"
     flags = []
     if bool(me.get("is_scoped")):
         flags.append("开镜")
     if _blinded(match, sid, tick):
         flags.append("被闪白")
     away = math.hypot(float(me["X"]) - anchor[0], float(me["Y"]) - anchor[1])
-    return (f"你 在 {place_text(me, cfg, map_name)}，离{anchor_name} {away:.0f}，{move}，"
+    area = role_text(str(me["last_place_name"]) if pd.notna(me["last_place_name"]) else None,
+                     (float(me["X"]), float(me["Y"]), float(me["Z"])), cfg, map_name)
+    foe = f"，离交火对手 {math.hypot(float(me['X']) - opponent[0], float(me['Y']) - opponent[1]):.0f}" if opponent else ""
+    return (f"你 在 {place_text(me, cfg, map_name)}（{area}），离{anchor_name} {away:.0f}{foe}，{move}，"
             f"看向 {look or '（无对应报点）'}，{int(me['health'])}血/{int(me['armor_value'])}甲，{gun}"
             + (f"，{'、'.join(flags)}" if flags else ""))
 

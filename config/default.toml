@@ -899,7 +899,7 @@ min_window_seconds = 1
 
 [research.fight]
 # R03 交战后换位（docs/tasks/research/R03-ai-post-fight-reposition.md）；游戏单位与秒，均为待复核的工程假设
-gap_seconds = 1            # 开枪 / 伤害 / 击杀事件间隔不超过这个值算同一段交火
+gap_seconds = 2            # 开枪 / 伤害 / 击杀事件间隔不超过这个值算同一段交火（r03-1 用 1 秒，断续开枪被切成多段）
 observe_seconds = 3        # 交火结束后看多久
 min_observe_seconds = 1.5  # 观察期（因阵亡或回合结束）短于这个值判"看不出"
 stay_max_move = 100        # 位置挪动小于这个值为"原位再架"
@@ -924,7 +924,7 @@ running_speed = 150        # 高于此为跑
 # R03 AI 判定试点；真实调用会产生费用，运行前先征得产品负责人同意
 model = "deepseek-flash"
 repeats = 2
-prompt_version = "r03-v1"
+prompt_version = "r03-v2"   # v2：按区域层级定义撤离 / 继续压，时间线加离交火对手的距离
 
 [research.zones.de_mirage]
 # 防守区组：起点和终点在同一组内（含同一报点）判"保持"，从某组或纵深进入另一组判"转点"；先于距离阈值判断。

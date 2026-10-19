@@ -78,7 +78,11 @@ def find_fight(events: pd.DataFrame, trigger: int, gap_ticks: int) -> Fight | No
 
 def reposition(match: MatchData, sid: int, round_id: int, trigger: int, cfg: dict,
                sight=None, lead_ticks: int = 0, window_end: int | None = None) -> Reposition:
-    """规则基线：交火结束后 observe_seconds 内，相对交火位置 F 的移动。"""
+    """规则基线：交火结束后 observe_seconds 内的移动，按区域层级和离交火位置 F 的远近判断（R03 第 2 版定义）。
+
+    原位再架：挪动 < stay_max_move；撤离：往后退一层（接触区→防守区→后方），或离开所在区域且离 F 远了
+    leave_min_farther；继续压：往前进一层，或离 F 近了 push_min_closer；其余为换位（同一区域内换点）。
+    """
     limits = cfg["research"]["fight"]
     rate = match.meta.tick_rate
     rnd = match.round(round_id)
@@ -96,20 +100,43 @@ def reposition(match: MatchData, sid: int, round_id: int, trigger: int, cfg: dic
     result = Reposition(label="unknown", fight=fight, observe_end=stop)
     location, source = _location(match, sid, fight, sight)
     result.location, result.location_source = location, source
-    p0, p3 = _xyz(match.state_at(sid, fight.end_tick)), _xyz(match.state_at(sid, stop))
+    s0, s3 = match.state_at(sid, fight.end_tick), match.state_at(sid, stop)
+    p0, p3 = _xyz(s0), _xyz(s3)
     if (stop - fight.end_tick) < limits["min_observe_seconds"] * rate or p0 is None or p3 is None or location is None:
         return result
     result.move = round(math.dist(p0[:2], p3[:2]), 1)
     result.closer = round(math.dist(p0[:2], location[:2]) - math.dist(p3[:2], location[:2]), 1)
-    if result.closer >= limits["push_min_closer"]:
-        result.label = "push"
-    elif -result.closer >= limits["leave_min_farther"]:
-        result.label = "leave"
-    elif result.move >= limits["stay_max_move"]:
-        result.label = "move"
-    else:
+    area0, area3 = area_of(s0, cfg, match.meta.map_name), area_of(s3, cfg, match.meta.map_name)
+    layer0, layer3 = area0["layer"], area3["layer"]
+    same_area = area0["place"] == area3["place"] or bool(area0["zones"] & area3["zones"])
+    if result.move < limits["stay_max_move"]:
         result.label = "stay"
+    elif layer0 is not None and layer3 is not None and layer3 < layer0:
+        result.label = "leave"
+    elif (layer0 is not None and layer3 is not None and layer3 > layer0) or result.closer >= limits["push_min_closer"]:
+        result.label = "push"
+    elif not same_area and -result.closer >= limits["leave_min_farther"]:
+        result.label = "leave"
+    else:
+        result.label = "move"
     return result
+
+
+LAYERS = {"deep": 0, "hold": 1, "contact": 2}
+
+
+def area_of(state, cfg: dict, map_name: str) -> dict:
+    """报点（Palace 等按高度拆分）、区域层级（后方 0 / 防守区 1 / 接触区 2）、所属防守区组。"""
+    from cs2coach.research.labels import _place
+
+    research = cfg["research"]
+    if state is None or pd.isna(state["last_place_name"]):
+        return {"place": None, "layer": None, "zones": set()}
+    name = str(state["last_place_name"])
+    point = (float(state["X"]), float(state["Y"]), float(state["Z"])) if pd.notna(state["Z"]) else None
+    place = _place(name, point, research.get("floors", {}).get(map_name, {}))
+    zones = {zone for zone, places in research.get("zones", {}).get(map_name, {}).items() if place in places}
+    return {"place": place, "layer": LAYERS.get(research["regions"].get(map_name, {}).get(name, "")), "zones": zones}
 
 
 def _location(match: MatchData, sid: int, fight: Fight, sight) -> tuple[tuple[float, float, float] | None, str | None]:

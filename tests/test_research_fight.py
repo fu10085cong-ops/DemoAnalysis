@@ -40,11 +40,21 @@ def test_fight_events_only_count_enemies():
     assert set(events["enemy"].dropna().astype(int)) == {T[0]}
 
 
+A_SITE = {1: {"last_place_name": "BombsiteA"}}
+
+
 @pytest.mark.parametrize("moves, expected", [
-    ({}, "stay"),
-    ({CT[0]: {200: {"X": -300.0}}}, "leave"),       # 离交火对手（X=1000）远了 300
-    ({CT[0]: {200: {"X": 200.0}}}, "push"),         # 近了 200
-    ({CT[0]: {200: {"Y": 150.0}}}, "move"),         # 横向挪了 150，距离几乎不变
+    ({CT[0]: A_SITE}, "stay"),
+    # 同一报点内远离交火对手（X=1000）300：仍算换位（区域没变）
+    ({CT[0]: {**A_SITE, 200: {"X": -300.0}}}, "move"),
+    # 后退一层：A 包点（防守区）→ CT 出生点（后方）
+    ({CT[0]: {**A_SITE, 200: {"X": -300.0, "last_place_name": "CTSpawn"}}}, "leave"),
+    # 离开所在防守区组（A → B 区），并且离对手远了 ≥ 250
+    ({CT[0]: {**A_SITE, 200: {"X": -300.0, "last_place_name": "Shop"}}}, "leave"),
+    # 往前一层：A 包点 → Middle（接触区），即使离对手没近多少
+    ({CT[0]: {**A_SITE, 200: {"Y": 150.0, "last_place_name": "Middle"}}}, "push"),
+    ({CT[0]: {**A_SITE, 200: {"X": 200.0}}}, "push"),          # 离对手近了 200
+    ({CT[0]: {**A_SITE, 200: {"Y": 150.0, "last_place_name": "Stairs"}}}, "move"),  # A 区组内换点
 ])
 def test_reposition_rule_baseline(moves, expected):
     result = reposition(fight_match(moves), CT[0], 1, 100, CFG)
