@@ -459,7 +459,7 @@ def build_summary_page(summary: PlayerSummary, cfg, tiers: dict[str, dict]) -> R
         levels = {tier["level"]: tier["name"] for tier in tiers.values()
                   if tier["id"] in complete_ids}
         page.ladder_levels = [{"level": level, "name": name} for level, name in sorted(levels.items())]
-        page.ladder_note = "线 = 各段位代表玩家的标准水平。" + "；".join(
+        page.ladder_note = "刻度 = 各段位代表玩家的标准水平。" + "；".join(
             f"{tier['name']}：{tier['per_player']['n_players']} 名玩家、{tier.get('demo_count', sum(tier['per_player']['matches']))} 场"
             for tier in sorted(tiers.values(), key=lambda item: item.get("level", 99))
             if tier["id"] in complete_ids)
