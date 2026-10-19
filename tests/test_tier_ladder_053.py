@@ -111,12 +111,18 @@ def test_summary_ladder_and_old_baseline_fallback():
     assert view.strengths and view.strengths[0].id == "time_to_damage_ms"
     assert "最弱的是" in view.verdict
     assert page.ladder_levels and "8 名玩家" in page.ladder_note
+    # 多场页改画横向阶梯条：每个维度带你的数值、各档标准（展示单位）和方向
+    ttd = next(axis for axis in page.ladder_axes if axis["id"] == "ttd")
+    assert [axis["id"] for axis in page.ladder_axes] == [axis["id"] for axis in cfg["radar"]["axes"]]
+    assert ttd["you"] == 250 and ttd["lower_is_better"] is True and ttd["unit"] == "毫秒"
+    assert [(point["level"], point["standard"]) for point in ttd["points"]] == [(1, 500), (2, 400), (3, 300)]
     assert check_page(page, cfg) == []
     single = build_match_page(games[0][1], games[0][2], [], cfg, tiers)
     assert single.ladder_levels == [] and single.tiers[0].comparisons
     old = {"5e_a": {k: v for k, v in tiers["5e_a"].items() if k not in ("per_player", "level")}}
     fallback = build_summary_page(summary, cfg, old)
     assert fallback.ladder_levels == [] and fallback.tiers[0].comparisons[0].id == "tier_median"
+    assert fallback.ladder_axes == []
 
 
 def test_summary_excludes_tier_demos_by_default(tmp_path, monkeypatch):

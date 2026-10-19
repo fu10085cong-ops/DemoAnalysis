@@ -125,6 +125,8 @@ class ReportPage(BaseModel):
     panel: dict | None = None
     ladder_levels: list[dict] = Field(default_factory=list)
     ladder_note: str = ""
+    # 多场阶梯条：每个雷达维度的你的数值、各档标准（已按展示单位换算）与方向
+    ladder_axes: list[dict] = Field(default_factory=list)
 
 
 def _num(value: float) -> str:
@@ -448,6 +450,15 @@ def build_summary_page(summary: PlayerSummary, cfg, tiers: dict[str, dict]) -> R
         for key, result in results_by_metric.items():
             _, _, unit, scale = METRIC_TEXT[key]
             result.text = _ladder_text(result, points_by_metric[key], unit, scale)
+        for axis in axes:
+            key = axis["metrics"][0]
+            _, _, unit, scale = METRIC_TEXT[key]
+            page.ladder_axes.append({
+                "id": axis["id"], "name": axis["name"], "unit": unit,
+                "you": metrics[key] * scale if metrics[key] is not None else None,
+                "lower_is_better": RADAR_METRICS[key],
+                "points": [{"level": point.level, "name": point.name, "standard": point.standard * scale}
+                           for point in points_by_metric[key]]})
         for view in page.tiers:
             tier = tiers[view.id]
             view.ladder = {axis["id"]: results_by_metric[axis["metrics"][0]] for axis in axes}

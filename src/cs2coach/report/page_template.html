@@ -76,6 +76,17 @@ code { font-family: var(--f-mono); font-size: 12px; background: var(--chip); pad
 .card .big { font-family: var(--f-num); font-size: 22px; font-weight: 600; line-height: 1.2 }
 .card .meta { font-size: 12px; color: var(--muted) }
 .card .what { font-size: 14px }
+.ladder-box { grid-template-columns: 1fr }
+.ladder-row { display: grid; grid-template-columns: 72px minmax(0, 1fr); gap: 2px 12px; padding: 12px 0; border-top: 1px solid var(--line) }
+.ladder-row:first-child { border-top: 0 }
+.ladder-row .name { font-weight: 600; padding-top: 6px }
+.ladder-track { position: relative; height: 40px; margin: 0 28px }
+.ladder-track .rail { position: absolute; left: 0; right: 0; top: 12px; height: 2px; background: var(--line) }
+.ladder-track .tick { position: absolute; top: 6px; width: 2px; height: 14px; background: var(--muted); transform: translateX(-1px) }
+.ladder-track .tick span { position: absolute; top: 18px; left: 50%; transform: translateX(-50%); font-size: 11px; color: var(--muted); white-space: nowrap }
+.ladder-track .dot { position: absolute; top: 6px; width: 14px; height: 14px; border-radius: 50%; background: var(--you); transform: translateX(-7px) }
+.ladder-row .text { grid-column: 2; font-size: 13px }
+.ladder-row .text b { font-family: var(--f-num); font-size: 15px; font-weight: 600 }
 .category { margin-top: 20px }
 .category:first-child { margin-top: 0 }
 .category h3 { font-size: 15px; margin: 0 0 8px }
@@ -120,12 +131,12 @@ th, td { overflow-wrap: anywhere }
   </section>
 
   <section class="panel">
-    <h2>能力雷达</h2>
+    <h2 id="ability-title">能力雷达</h2>
     <p id="no-tiers" hidden>还没有构建分段基准：<code>python scripts/build_tier_baseline.py --all</code></p>
     <div class="radar-box" id="radar-box">
       <canvas class="radar" id="radar" width="920" height="840" role="img" aria-label="能力雷达图"></canvas>
       <div class="legend">
-        <div class="key"><span class="sw"></span>你</div>
+        <div class="key" id="you-key"><span class="sw"></span>你</div>
         <div class="key" id="cmp-key"><span class="sw cmp"></span><span id="cmp-name">参考中线（50）</span></div>
         <div id="cmp-control">
           <label for="cmp">虚线对比</label>
@@ -139,6 +150,7 @@ th, td { overflow-wrap: anywhere }
         <div class="sub" id="radar-note">数值是在目标分段里排到百分之几，越往外越好；50 = 分段里排在正中间的水平。</div>
       </div>
     </div>
+    <div id="ladder-rows" hidden></div>
   </section>
 
   <section class="panel">
@@ -285,9 +297,57 @@ function drawList(id, list, problems) {
     box.append(row, detail);
   });
 }
+function shortTier(name) { return name.replace(/（.*?）/g, ""); }
+function drawLadder() {
+  const box = $("ladder-rows");
+  box.replaceChildren();
+  const levels = page.ladder_levels.map(item => item.level);
+  const low = Math.min(...levels) - .5, high = Math.max(...levels) + .5;
+  const left = value => `${100 * (value - low) / (high - low)}%`;
+  page.ladder_axes.forEach(axis => {
+    const result = tier.ladder?.[axis.id];
+    const row = node("div", null, "ladder-row");
+    row.append(node("div", axis.name, "name"));
+    const text = node("div", null, "text");
+    text.append(node("b", axis.you == null ? "样本不足" : withUnit(axis.you, axis.unit)));
+    if (result?.ordered === false) {
+      // 段位间不是越高档越好：不画阶梯，直接列出各档标准
+      row.append(node("div", "段位间没有明显差别", "sub"));
+      text.append(node("span", " · " + axis.points.map(p => `${shortTier(p.name)} ${withUnit(p.standard, axis.unit)}`).join(" · "), "sub"));
+    } else {
+      const track = node("div", null, "ladder-track");
+      track.append(node("div", null, "rail"));
+      axis.points.forEach(p => {
+        const tick = node("div", null, "tick");
+        tick.style.left = left(p.level);
+        tick.append(node("span", shortTier(p.name)));
+        track.append(tick);
+      });
+      if (result?.position != null) {
+        const dot = node("div", null, "dot");
+        dot.style.left = left(result.position);
+        dot.title = "你";
+        track.append(dot);
+      }
+      row.append(track);
+      text.append(node("span", ` · ${result?.text || "样本不足"}`, "sub"));
+    }
+    row.append(text);
+    box.append(row);
+  });
+}
 function drawRadar() {
   if (!tier) return;
   const ladder = page.kind === "summary" && page.ladder_levels.length > 0;
+  // 多场汇总：不画雷达，改画每个维度一条横向阶梯
+  $("radar").hidden = ladder;
+  $("axes-list").hidden = ladder;
+  $("radar-note").hidden = ladder;
+  $("radar-box").classList.toggle("ladder-box", ladder);
+  $("ladder-rows").hidden = !ladder;
+  $("ability-title").textContent = ladder ? "段位阶梯" : "能力雷达";
+  $("you-key").hidden = ladder;
+  if (ladder) { drawLadder(); return; }
   const comparison = tier.comparisons.find(c => c.id === $("cmp").value);
   $("cmp-name").textContent = comparison?.name || "暂无对比数据";
   const values = comparison?.values || page.axes.map(() => null);
