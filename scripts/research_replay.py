@@ -103,7 +103,8 @@ def build(name: str, jobs: int | None, root: Path = ROOT) -> Path:
                       & (windows["player_id"] == str(item["player_id"])) & (windows["start_tick"] == item["start_tick"])].iloc[0]
         meta.append({"id": item["id"], "match": item["match_id"], "round": int(item["round_id"]),
                      "player": row["player_name"], "place": row["start_place"] if isinstance(row["start_place"], str) else "",
-                     "round_time": round(float(row["round_time_s"]), 0)})
+                     "round_time": round(float(row["round_time_s"]), 0),
+                     **({"focus": item["focus"], "focus_note": item.get("focus_note", "要判断的时段")} if "focus" in item else {})})
     map_cfg = json.loads((AWPY / "map_data.json").read_text(encoding="utf-8"))["de_mirage"]
     radar = base64.b64encode((AWPY / "radars" / "de_mirage.png").read_bytes()).decode()
     payload = {"pack": name, "map": map_cfg, "window": cfg["research"]["window_seconds"], "items": meta, "replays": replays,

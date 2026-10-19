@@ -306,8 +306,14 @@ def _write_pack(root: Path, name: str, records: list[dict], cfg: dict) -> None:
     source = json.loads((_dir(root, name) / "meta.json").read_text(encoding="utf-8"))["source"]
     header = {"source": source, "labels": NAMES,
               "note": "R03 交战后换位：判断交火结束后约 3 秒内他做了什么（盲审：不显示规则和 AI 的答案）"}
-    items = [{"id": r["id"], **{k: r[k] for k in KEY}, "replay_until_s": max(11.0, (r["observe_end_s"] or 0) + 1),
-              "result": "", "comment": ""} for r in records]
+    observe = cfg["research"]["fight"]["observe_seconds"]
+    items = []
+    for r in records:
+        item = {"id": r["id"], **{k: r[k] for k in KEY}, "replay_until_s": max(11.0, (r["observe_end_s"] or 0) + 1)}
+        if r["fight_end_s"] is not None:  # 交火段的时间不是程序给的标签，标出来方便找到要看的 3 秒
+            item.update(focus=[r["fight_end_s"], r["fight_end_s"] + observe],
+                        focus_note=f"交火在 {r['fight_end_s']:+.1f} 秒结束（程序判断），看之后 {observe:g} 秒")
+        items.append({**item, "result": "", "comment": ""})
     _write_review(pack, header, items)
 
 

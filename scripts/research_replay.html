@@ -101,6 +101,7 @@ function select(i) {
   $("title").textContent = `${item.id} · 第 ${item.round} 回合`;
   $("info").innerHTML = `<div>比赛：<b>${item.match}</b></div><div>要看：<b>${item.player}</b>（CT）</div>`
     + `<div>T 阵亡时他在：<b>${item.place || "未知"}</b></div><div>冻结期结束后第 ${item.round_time} 秒</div>`
+    + (item.focus ? `<div>${item.focus_note}：<b style="color:var(--accent)">${item.focus[0].toFixed(1)} 到 ${item.focus[1].toFixed(1)} 秒</b></div>` : "")
     + (replay() ? "" : `<div style="color:#f77">这个窗口没有取到数据</div>`);
   const box = $("answers"); box.replaceChildren();
   LABELS.forEach(label => {
@@ -160,7 +161,8 @@ function draw() {
   });
   const [lo, hi] = span();
   $("seek").value = hi > lo ? Math.round(1000 * (t - lo) / (hi - lo)) : 0;
-  const inWindow = t >= 0 && t <= data.window;
+  const focus = data.items[current].focus || [0, data.window];
+  const inWindow = t >= focus[0] && t <= focus[1];
   $("clock").innerHTML = t < 0 ? `T 阵亡前 ${(-t).toFixed(1)} 秒` : `T 阵亡后 <b style="color:${inWindow ? "var(--accent)" : "var(--muted)"}">${t.toFixed(1)}</b> 秒`;
   $("seek").style.accentColor = inWindow ? "var(--accent)" : "#888";
 }
