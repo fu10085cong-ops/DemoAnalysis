@@ -1,6 +1,6 @@
 # 052 类别面板：指标计算、段位均值与多场汇总展示
 
-状态：待做
+状态：完成
 难度：A（新模块，涉及回合胜负、阵营、残局状态推演，跨 moments / 基准 / 汇总 / 报告页）
 执行：Codex（思考强度 high）
 分支：`task/052-category-panel`
@@ -109,10 +109,20 @@
 
 ## 完成报告（实现方填写，尽量简短）
 
-- 改动的文件及原因：
-- 测试结果（最后一行）：
-- 闪光匹配验证：
-- 真实 demo 验证（面板数值与合理性）：
-- 遗留问题 / 需要确认的地方：
+- 改动的文件及原因：`features/panel.py`、`models.py`、`moments.py`、`aim_stats.py` 记录可合并的计数和枪法原始样本；`config/default.toml`、`config.py` 登记指标门槛及类别；`build_tier_baseline.py`、`summary/aggregate.py` 输出合并计数和值；`report/page_data.py`、`page_template.html` 展示多场类别；`docs/features.md` 补闪光口径；`tests/test_panel_052.py` 覆盖计算和展示。多场 `report_data.json.panel` 为 `{counts, values, n, matches, categories}`，各分段在 `tiers[].panel_values` / `panel_expected`；旧基准无面板时均值留空。
+- 测试结果（最后一行）：相关测试 `48 passed in 1.12s`；全量测试 `1138 passed, 4 skipped in 32.94s`；页面检查 `报告页一致性检查：0 处违规`（230 人次，无法检查 0 项）。
+- 闪光匹配验证：5E 一场 137/137 条、完美一场 170/170 条明确投掷者的致盲均匹配同回合、同投掷者、同 tick 的闪光爆开，tick 差均为 0；容差设为 0 tick。
+- 真实 demo 验证（面板数值与合理性）：5E Mirage 一场匿名玩家 24 回合：火力 KPR 0.46、ADR 48.58（偏低但可出现）；枪法精准度 21.93%、爆头击杀率 54.55%（合理）；补枪回均 0.08（合理）；突破参与率 20.83%（在 15–25% 参考范围）；道具使用率 62.07%、回均闪白 0.18 秒（合理）；残局最后存活率 4.17%（1/24，样本少）；狙杀 0 次，按规则应隐藏狙击类（合成页面测试已验证）。低于门槛的胜利回合、闪光和残局指标值为空。
+- 遗留问题 / 需要确认的地方：未收到任务单要求的产品负责人 SteamID64，无法运行指定的 `summary --player` 多场验证；请提供该 ID 后补验。遵照要求未重建分段基准文件，也未调用真实 AI。
 
 ## 审查意见（Claude 填写）
+
+2026-10-19 通过。
+
+- 审查时修一处：`reaction_ms` 原按 `m.weapon` 筛白名单，死亡瞬间的 `weapon` 是对手的武器；改为 `engagement_weapon(m)`，补测试 `test_reaction_filters_by_own_weapon_not_killer_weapon`。
+- 全部测试 `1139 passed, 4 skipped`；全量规则回归（`data/audit/2026-10-19-after052/` 对比 `after051`）3681 条命中，hit_key、evidence、collect_stats 逐条相同。
+- 闪光匹配：5E 137/137、完美 170/170 同回合同投掷者同 tick，容差 0 合理。
+- Claude 重建全部分段基准并生成产品负责人 21 场汇总。与其完美赛季数据对照（不同比赛集合，只看量级）：爆头击杀率 51.7% / 55.4%，精准度 21.2% / 19.2%，击杀均伤害 103 / 106，首杀对枪参与率 21.7% / 18.2%。零和类段位均值符合预期（首杀对枪胜率 50%，每 10 回合首杀、首伤 1.0）。
+- 遗留（不阻断）：
+  1. 亮点"多杀"从 `mm.highlights` 计数，高光每回合只选一种（残局获胜优先），多杀会偏少；以后可改用 `PanelCounts.multikill_rounds`。
+  2. `summary` 默认递归扫描 `data/demos`，会扫到新放入的 `data/demos/tiers/` 分段样本（含坏压缩包），变慢且多报"跳过"；在按代表人物重建基准的任务里一并处理。

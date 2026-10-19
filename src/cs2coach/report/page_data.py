@@ -14,6 +14,7 @@ from cs2coach.features.crosshair import crosshair_offset_sample
 from cs2coach.features.highlights import round_time
 from cs2coach.features.labels import weapon_label
 from cs2coach.features.models import MatchMoments, Moment
+from cs2coach.features.panel import PANEL_METRICS, PanelCounts, panel_sample
 from cs2coach.features.problems import ProblemReport, _poisson_tail
 from cs2coach.features.radar import RADAR_METRICS, axis_values, median_axes, percentile, player_metrics, sample_count
 from cs2coach.features.trades import trade_chance_skip
@@ -103,6 +104,8 @@ class TierView(BaseModel):
     verdict: str
     strengths: list[Row]
     problems: list[Row]
+    panel_values: dict[str, float | None] = Field(default_factory=dict)
+    panel_expected: dict[str, float | None] = Field(default_factory=dict)
 
 
 class ReportPage(BaseModel):
@@ -114,6 +117,7 @@ class ReportPage(BaseModel):
     rounds_played: int = 0
     tiers: list[TierView]
     highlights: list[Highlight]
+    panel: dict | None = None
 
 
 def _num(value: float) -> str:
@@ -217,11 +221,7 @@ def _rows(games, frequency, cfg, tier):
     rates = tier.get("problem_rates", {})
 
     def expected(row):
-        rate = rates.get(row.problem, {})
-        hits, total = rate.get("hits"), rate.get("rounds")
-        if hits is None or hits < 0 or total is None or total <= 0:
-            return None
-        return rounds * (hits if hits else 0.5) / total
+        return _expected_hits(rates.get(row.problem, {}), rounds)
 
     candidates = sorted((r for r in frequency if r.hits > 0 and
                          (e := expected(r)) is not None and r.hits > e),
@@ -291,6 +291,14 @@ def _rows(games, frequency, cfg, tier):
     return strengths, problems
 
 
+def _expected_hits(rate: dict, rounds: int) -> float | None:
+    """与现有问题汇总共用段位预期口径。"""
+    hits, total = rate.get("hits"), rate.get("rounds")
+    if hits is None or hits < 0 or total is None or total <= 0:
+        return None
+    return rounds * (hits if hits else 0.5) / total
+
+
 def _verdict(kind, games, tier_name, problems, axes, values, cfg):
     bad = [row for row in problems if row.severity == "bad"]
     if bad:
@@ -353,6 +361,43 @@ def build_match_page(mm: MatchMoments, report: ProblemReport, frequency, cfg, ti
 def build_summary_page(summary: PlayerSummary, cfg, tiers: dict[str, dict]) -> ReportPage:
     games = [(*summary.detail(match.number), f"{match.map_name.removeprefix('de_').title()} {match.number}")
              for match in summary.matches]
-    return _build_page("summary", games, summary.frequency, cfg, tiers,
+    page = _build_page("summary", games, summary.frequency, cfg, tiers,
                        f"{summary.primary_name} · 多场汇总",
                        f"{len(summary.matches)} 场 · 在场 {summary.rounds_played_total} 回合")
+    if summary.panel is None:
+        return page
+    counts = PanelCounts.model_validate(summary.panel["counts"])
+    values = summary.panel["values"]
+    frequencies = {row.problem: row for row in summary.frequency}
+    highlight_counts = {}
+    for mm, report, _ in games:
+        for hit in report.hits:
+            if hit.problem in ("good_trade", "flash_assist", "won_duel_seen_first"):
+                highlight_counts[hit.problem] = highlight_counts.get(hit.problem, 0) + 1
+        for item in mm.highlights:
+            if item.kind in ("multikill", "clutch"):
+                highlight_counts[item.kind] = highlight_counts.get(item.kind, 0) + 1
+    categories = []
+    for category in cfg["panel"]["categories"]:
+        if category["id"] == "sniper" and counts.sniper_kills < cfg["panel"]["sniper_min_kills"]:
+            continue
+        metrics = [dict(id=metric.id, name=metric.name, unit=metric.unit, kind=metric.kind,
+                        zero_sum=metric.id in ("opening_win_pct", "clutch_1v1_win_pct"),
+                        you=values[metric.id], sample=panel_sample(counts, metric))
+                   for metric in PANEL_METRICS if metric.category == category["id"]]
+        problems = [dict(id=pid, name=frequencies[pid].label, count=frequencies[pid].hits)
+                    for pid in category["problems"] if pid in frequencies]
+        names = {"multikill": "多杀", "clutch": "残局获胜"}
+        from cs2coach.features.problems import PROBLEMS
+        highlights = [dict(id=hid, name=names.get(hid, PROBLEMS[hid].label if hid in PROBLEMS else hid),
+                           count=highlight_counts.get(hid, 0)) for hid in category["highlights"]]
+        categories.append(dict(id=category["id"], name=category["name"], metrics=metrics,
+                               problems=problems, highlights=highlights))
+    page.panel = {**summary.panel, "matches": summary.panel["n"], "categories": categories}
+    for view in page.tiers:
+        baseline = tiers[view.id]
+        view.panel_values = baseline.get("panel", {}).get("values", {})
+        rates = baseline.get("problem_rates", {})
+        view.panel_expected = {pid: _expected_hits(rates.get(pid, {}), counts.rounds)
+                               for cat in categories for pid in (p["id"] for p in cat["problems"])}
+    return page

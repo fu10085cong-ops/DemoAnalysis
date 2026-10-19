@@ -255,6 +255,11 @@ class AimStats(BaseModel):
     spotted_shots: int
     headshot_accuracy_pct: float | None  # 命中头部 ÷ 命中总数（枪械，不含 AWP）
     hits: int
+    # 面板合并多场时使用原始样本，旧缓存缺少这些字段仍可读取。
+    time_to_damage_values_ms: list[float] = []
+    crosshair_offset_values_m: list[float] = []
+    counter_strafing_stopped: int = 0
+    spray_hits: int = 0
 
 
 class LobbyLine(BaseModel):
@@ -316,8 +321,13 @@ class MatchMoments(BaseModel):
     visibility_unavailable: str | None = None
     # 目标玩家不在场的回合（中途掉线、重连前），不计入问题频率
     absent_rounds: list[int] = []
+    panel: PanelCounts | None = None
 
     @property
     def rounds_played(self) -> int:
         """目标玩家在场的回合数。"""
         return self.rounds - len(self.absent_rounds)
+
+
+from cs2coach.features.panel import PanelCounts
+MatchMoments.model_rebuild()

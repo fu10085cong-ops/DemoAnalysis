@@ -77,6 +77,9 @@ def find_moments(match: MatchData, steamid: int, cfg: dict[str, Any], sight: Sig
     from cs2coach.features.highlights import find_highlights
 
     mm.highlights = find_highlights(mm, match.rounds)
+    from cs2coach.features.panel import panel_counts
+
+    mm.panel = panel_counts(match, steamid, mm, cfg)
     return mm
 
 

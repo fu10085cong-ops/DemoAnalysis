@@ -65,9 +65,14 @@ def build_tier_baseline(tier: dict, mms: list, demo_count: int,
                         if sample[metric] is not None and math.isfinite(sample[metric]))
         metrics[metric] = {"median": median(values) if values else None,
                            "n": len(values), "values": values}
+    from cs2coach.features.panel import merge_panel_counts, panel_values
+
+    panel_samples = [mm.panel for mm in mms if mm.panel is not None]
+    panel = {"counts": merge_panel_counts(panel_samples).model_dump(),
+             "values": panel_values(panel_samples, cfg), "n": len(panel_samples)}
     return {"version": 1, "id": tier["id"], "name": tier["name"],
             "source": f"{demo_count} 份 demo、{len(mms)} 人次", "metrics": metrics,
-            "problem_rates": problem_rates(mms, pro_baseline, cfg)}
+            "problem_rates": problem_rates(mms, pro_baseline, cfg), "panel": panel}
 
 
 def demo_entries(tier: dict) -> list[tuple[Path, str | None]]:

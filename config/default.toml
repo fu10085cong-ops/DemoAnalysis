@@ -394,6 +394,61 @@ best_player_rule = "kills_minus_deaths"
 # 红色还要求比目标分段至少多出这么多次：只多一两次多半是偶然，不当作最该练的问题
 problem_min_excess = 3
 
+[panel]
+sniper_min_kills = 5
+sniper_weapons = ["awp", "ssg08"]
+flash_match_ticks = 0
+
+[panel.min_samples]
+rounds = 20
+kills = 5
+shots = 20
+deaths = 5
+opening = 10
+trade_chances = 5
+flashes = 10
+grenades = 10
+clutches = 5
+clutch_1v1 = 3
+sniper_rounds = 5
+aim = 5
+
+[[panel.categories]]
+id = "firepower"
+name = "火力"
+problems = []
+highlights = ["multikill"]
+[[panel.categories]]
+id = "aim"
+name = "枪法"
+problems = ["slow_reaction", "poor_crosshair_placement", "shot_while_moving", "spray_control", "spray_while_moving", "deagle_moving_shot", "glock_long_range"]
+highlights = ["won_duel_seen_first"]
+[[panel.categories]]
+id = "trade"
+name = "补枪"
+problems = ["missed_trade"]
+highlights = ["good_trade"]
+[[panel.categories]]
+id = "opening"
+name = "突破"
+problems = ["dry_peek_with_utility", "overpeek_in_advantage", "died_without_seeing", "saw_but_no_shot", "died_while_reloading"]
+highlights = []
+[[panel.categories]]
+id = "utility"
+name = "道具"
+problems = ["post_plant_utility_unused"]
+highlights = ["flash_assist"]
+[[panel.categories]]
+id = "clutch"
+name = "残局"
+problems = []
+highlights = ["clutch"]
+[[panel.categories]]
+id = "sniper"
+name = "狙击"
+problems = ["awp_unscoped_shot", "awp_moving_shot", "awp_repeek_same_angle", "awp_close_range_duel"]
+highlights = []
+
 [radar.min_samples]
 rounds = 10
 deaths = 5

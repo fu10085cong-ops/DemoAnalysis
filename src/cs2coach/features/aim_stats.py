@@ -77,6 +77,10 @@ def aim_stats(match: MatchData, sid: int, cfg: dict[str, Any], shots: pd.DataFra
         spotted_shots=len(seen),
         headshot_accuracy_pct=_pct((gun_hits["hitgroup"] == "head").sum(), len(gun_hits), min_n),
         hits=len(gun_hits),
+        time_to_damage_values_ms=[x * 1000 for x in ttd],
+        crosshair_offset_values_m=offsets,
+        counter_strafing_stopped=int(rifle_cs["stopped"].astype(bool).sum()),
+        spray_hits=int(spray["hit"].sum()),
     )
 
 

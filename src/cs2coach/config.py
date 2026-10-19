@@ -28,6 +28,7 @@ def load_config(path: Path | None = None) -> dict[str, Any]:
     _validate_problems(cfg["problems"])
     _validate_economy(cfg["economy"])
     _validate_radar(cfg["radar"])
+    _validate_panel(cfg["panel"])
     if type(cfg["baseline"]["min_metric_samples"]) is not int or cfg["baseline"]["min_metric_samples"] < 1:
         raise ConfigError("配置项 baseline.min_metric_samples 应为正整数")
     _validate_tools(cfg["tools"])
@@ -37,6 +38,34 @@ def load_config(path: Path | None = None) -> dict[str, Any]:
 def _validate_tools(cfg: dict[str, Any]) -> None:
     if type(cfg["jobs"]) is not int or cfg["jobs"] < 1:
         raise ConfigError("配置项 tools.jobs 应为正整数")
+
+
+def _validate_panel(cfg: dict[str, Any]) -> None:
+    from cs2coach.features.panel import PANEL_METRICS
+    from cs2coach.features.problems import PROBLEMS
+
+    for key in ("sniper_min_kills", "flash_match_ticks"):
+        if type(cfg[key]) is not int or cfg[key] < 0:
+            raise ConfigError(f"配置项 panel.{key} 应为非负整数")
+    if cfg["sniper_min_kills"] < 1:
+        raise ConfigError("配置项 panel.sniper_min_kills 应为正整数")
+    if (not isinstance(cfg["sniper_weapons"], list) or not cfg["sniper_weapons"]
+            or any(x not in {"awp", "ssg08"} for x in cfg["sniper_weapons"])
+            or len(set(cfg["sniper_weapons"])) != len(cfg["sniper_weapons"])):
+        raise ConfigError("配置项 panel.sniper_weapons 应为不重复的狙击枪名称")
+    keys = {metric.min_samples for metric in PANEL_METRICS}
+    samples = cfg["min_samples"]
+    if set(samples) != keys or any(type(x) is not int or x < 1 for x in samples.values()):
+        raise ConfigError("配置项 panel.min_samples 应包含所有指标的正整数门槛")
+    categories = cfg["categories"]
+    expected = list(dict.fromkeys(metric.category for metric in PANEL_METRICS))
+    if (not isinstance(categories, list) or [x.get("id") for x in categories] != expected
+            or any(not isinstance(x.get("name"), str) or not x["name"]
+                   or not isinstance(x.get("problems"), list) or not isinstance(x.get("highlights"), list)
+                   or any(pid not in PROBLEMS for pid in x["problems"])
+                   or any(hid not in {"multikill", "clutch", "flash_assist", "good_trade", "won_duel_seen_first"}
+                          for hid in x["highlights"]) for x in categories)):
+        raise ConfigError("配置项 panel.categories 顺序或内容无效")
 
 
 def _validate_radar(cfg: dict[str, Any]) -> None:

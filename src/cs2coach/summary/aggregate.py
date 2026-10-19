@@ -10,6 +10,7 @@ from pydantic import BaseModel, PrivateAttr
 
 from cs2coach.cache import cache_key, cached
 from cs2coach.features.models import AimStats, MatchMoments
+from cs2coach.features.panel import merge_panel_counts, panel_values
 from cs2coach.features.problems import (FrequencyRow, ProblemReport, detect_problems,
                                          frequency_from_counts, problem_frequency)
 from cs2coach.parsing.loader import resolve_demo
@@ -55,6 +56,7 @@ class PlayerSummary(BaseModel):
     rounds_played_total: int
     frequency: list[SummaryFrequencyRow]
     aim_overall: dict[str, AimMedian]
+    panel: dict | None = None
 
     # 013 用来回查 M3:R9-death 等引用，不序列化到 summary.json。
     _details: dict[str, tuple[MatchMoments, ProblemReport]] = PrivateAttr(default_factory=dict)
@@ -118,7 +120,10 @@ def aggregate_matches(steamid: int, games: list[tuple[DemoRef, MatchMoments, Pro
         aim_overall[field] = AimMedian(median=median(values) if values else None, matches=len(values))
     summary = PlayerSummary(steamid=steamid, names=names, matches=matches,
         skipped=list(skipped or []), rounds_played_total=rounds_total,
-        frequency=frequency, aim_overall=aim_overall)
+        frequency=frequency, aim_overall=aim_overall,
+        panel={"counts": merge_panel_counts(panel_samples).model_dump(),
+               "values": panel_values(panel_samples, cfg), "n": len(panel_samples)}
+        if (panel_samples := [mm.panel for _, mm, _, _ in games if mm.panel is not None]) else None)
     summary._details = details
     return summary
 

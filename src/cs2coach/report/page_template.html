@@ -76,6 +76,11 @@ code { font-family: var(--f-mono); font-size: 12px; background: var(--chip); pad
 .card .big { font-family: var(--f-num); font-size: 22px; font-weight: 600; line-height: 1.2 }
 .card .meta { font-size: 12px; color: var(--muted) }
 .card .what { font-size: 14px }
+.category { margin-top: 20px }
+.category:first-child { margin-top: 0 }
+.category h3 { font-size: 15px; margin: 0 0 8px }
+.category table td:first-child { width: 45% }
+.category-notes { margin: 8px 0 0; font-size: 13px; color: var(--muted) }
 @media (max-width: 560px) { .row { grid-template-columns: 22px minmax(0, 1fr) auto } .row .bar { grid-column: 2 / 4 } }
 
 body { margin: 0; overflow-wrap: anywhere }
@@ -152,6 +157,12 @@ th, td { overflow-wrap: anywhere }
     <h2>高光回合</h2>
     <div class="sub" style="margin-bottom:8px">程序按固定规则挑出：多杀、残局获胜、首杀并赢下回合、闪光助攻击杀。</div>
     <div class="hl" id="hl"></div>
+  </section>
+  <section class="panel" id="category-panel" hidden>
+    <h2>类别面板</h2>
+    <div class="sub" id="category-intro"></div>
+    <div id="categories"></div>
+    <p class="category-notes">首杀对枪胜率和 1v1 胜率是同场零和指标：一方赢，对方就输；段位均值不能用于比较不同段位的高低。</p>
   </section>
 </div>
 
@@ -332,6 +343,46 @@ function selectTier() {
   $("verdict").textContent = tier.verdict;
   drawList("probs", tier.problems, true);
   drawList("goods", tier.strengths, false);
+  drawCategories();
+}
+function drawCategories() {
+  if (!page.panel) return;
+  $("category-panel").hidden = false;
+  $("category-intro").textContent = `按 ${page.panel.matches} 场合并 · 段位均值：${tier?.name || "当前对比分段"}全部样本合并`;
+  const box = $("categories");
+  box.replaceChildren();
+  page.panel.categories.forEach(category => {
+    const section = node("section", null, "category");
+    section.append(node("h3", category.name));
+    const wrapper = node("div", null, "tbl"), table = node("table"), head = node("thead"), header = node("tr");
+    ["指标", "你", "段位均值（当前对比分段）", "样本"].forEach(label => header.append(node("th", label)));
+    head.append(header);
+    const body = node("tbody");
+    category.metrics.forEach(metric => {
+      const row = node("tr");
+      const suffix = `${metric.kind === "风格" ? "（风格）" : ""}${metric.zero_sum ? "（同场零和）" : ""}`;
+      [metric.name + suffix, metric.you == null ? "样本不足" : withUnit(metric.you, metric.unit),
+       withUnit(tier?.panel_values?.[metric.id], metric.unit), String(metric.sample)].forEach((value, index) => {
+        const cell = node("td", value, index ? "num" : null);
+        cell.dataset.label = ["指标", "你", "段位均值", "样本"][index];
+        row.append(cell);
+      });
+      body.append(row);
+    });
+    table.append(head, body); wrapper.append(table); section.append(wrapper);
+    if (category.problems.length) {
+      section.append(node("p", "问题检测", "category-notes"));
+      category.problems.forEach(problem => {
+        const expected = tier?.panel_expected?.[problem.id];
+        section.append(node("p", `${problem.name}：${problem.count} 次；段位预期 ${expected == null ? "—" : number(expected) + " 次"}`, "category-notes"));
+      });
+    }
+    if (category.highlights.length) {
+      section.append(node("p", "亮点", "category-notes"));
+      category.highlights.forEach(highlight => section.append(node("p", `${highlight.name}：${highlight.count} 次`, "category-notes")));
+    }
+    box.append(section);
+  });
 }
 ["title", "subtitle"].forEach(key => { $(key).textContent = page[key]; });
 document.title = page.title;
@@ -343,6 +394,7 @@ if (tier) {
 } else {
   drawList("probs", [], true);
   drawList("goods", [], false);
+  drawCategories();
 }
 $("hl").replaceChildren();
 if (!page.highlights.length) $("hl").append(node("p", "这段时间没有挑出高光回合", "sub"));
