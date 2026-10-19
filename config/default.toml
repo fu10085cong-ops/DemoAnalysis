@@ -905,6 +905,9 @@ min_observe_seconds = 1.5  # 观察期（因阵亡或回合结束）短于这个
 stay_max_move = 100        # 位置挪动小于这个值为"原位再架"
 push_min_closer = 150      # 离交火对手近了这么多为"继续压"
 leave_min_farther = 250    # 离交火对手远了这么多为"撤离"
+trade_seconds = 5          # 首杀研究：交火结束后几秒内被打死算"被补"
+sniper_weapons = ["awp", "ssg08"]  # 首杀研究：按击杀武器（事件里的规范名）分狙击枪 / 其他
+bootstrap_draws = 2000     # 按比赛重抽样的次数（置信区间）
 
 [research.timeline]
 # 交给 AI 的选手视角时间线
