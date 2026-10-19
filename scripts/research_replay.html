@@ -56,7 +56,7 @@ textarea { width: 100%; height: 70px; background: #262b34; color: var(--fg); bor
     <div class="legend">
       <div><span style="background:var(--ct)"></span>CT <span style="background:var(--t);margin-left:10px"></span>T <span style="background:var(--me);margin-left:10px"></span>要看的 CT（白圈 + 视角方向 + 轨迹）</div>
       <div>✕ 阵亡 · 灰圈 烟 · 黄 闪 · 红 雷/火 · 白点闪 = 他开枪</div>
-      <div>时间 0 = T 方第一个人阵亡；绿色时段是要判断的 5 秒</div>
+      <div id="window-note"></div>
     </div>
     <button class="export" id="export">导出结果</button>
     <div class="hint" id="progress"></div>
@@ -202,6 +202,7 @@ $("export").onclick = () => {
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob); a.download = `${data.pack}-results.json`; a.click();
 };
+$("window-note").textContent = `时间 0 = T 方第一个人阵亡；绿色时段是要判断的 ${data.window} 秒（判断他知道有人阵亡之后的动作；之前的几秒用来看他原来在做什么）`;
 select(0);
 requestAnimationFrame(tick);
 </script>

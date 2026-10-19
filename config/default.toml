@@ -865,8 +865,9 @@ server_fallback = true
 jobs = 2
 
 [research]
-# R01 的观察时长，待人工复核后校准
-window_seconds = 5
+# 观察时长：R01 初版 5 秒；2026-10-19 产品负责人改为 10 秒（5 秒内常常只看到动作开头，换位在 Mirage 上往往要 5–15 秒）。
+# 5 秒的导出（data/research/r01-v3）保留作敏感性对照
+window_seconds = 10
 # 玩家位置不在任何导航区域内（站在箱子上、高度偏差）时，退回到最近的导航区域中心，
 # 超过这个距离（游戏单位）仍记为缺失（R01 审查：315 个窗口中 112 个因此缺路径距离）
 nav_snap_max_distance = 128
@@ -879,7 +880,8 @@ short_unknown = 2
 top_events = ["IEM Rio 2026", "PGL Bucharest 2026"]
 # 复盘包复制到 CS2 game/csgo 下的子目录；跳转到触发前几秒
 demo_subdir = "replays/research"
-lead_seconds = 2
+# 回放从触发前几秒开始，便于看出他之前在做什么（是否只是原有动作的延续）
+lead_seconds = 3
 # 2D 回放页（scripts/research_replay.py）：每秒帧数、窗口结束后多放几秒
 replay_fps = 16
 replay_tail_seconds = 1

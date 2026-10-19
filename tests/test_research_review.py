@@ -5,6 +5,8 @@ import tomllib
 
 import pandas as pd
 
+from cs2coach.config import load_config
+
 from scripts import research_review as rr
 
 
@@ -42,7 +44,7 @@ def test_build_samples_by_label_blind_and_one_window_per_round(tmp_path):
     for word in ("hold", "advance", "retreat", "lateral", "main_label"):
         assert word not in checklist  # 盲审：不显示程序标签
     cfg = (pack / "cs2coach_research.cfg").read_text(encoding="utf-8")
-    assert 'alias p1 "playdemo replays/research/' in cfg and f'alias r1 "demo_gototick {items[0]["start_tick"] - 128}"' in cfg
+    assert 'alias p1 "playdemo replays/research/' in cfg and f'alias r1 "demo_gototick {items[0]["start_tick"] - 64 * load_config()["research"]["review"]["lead_seconds"]}"' in cfg
 
 
 def test_score_confusion_matrix_and_disagreements(tmp_path):
