@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>行为窗口回放</title>
+<style>
+:root { --bg: #15171c; --panel: #1f232b; --line: #343a46; --fg: #e8eaee; --muted: #9aa3b2; --ct: #4aa3ff; --t: #f2a33a; --me: #ffffff; --accent: #6ee7a8; }
+* { box-sizing: border-box }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 14px/1.5 "Microsoft YaHei", "PingFang SC", system-ui, sans-serif }
+.app { display: grid; grid-template-columns: 210px minmax(0, 1fr) 300px; gap: 12px; padding: 12px; height: 100vh }
+.list, .side { background: var(--panel); border-radius: 10px; padding: 10px; overflow: auto }
+.list button { display: flex; justify-content: space-between; width: 100%; margin: 2px 0; padding: 6px 8px; border: 1px solid transparent; border-radius: 6px; background: none; color: var(--fg); cursor: pointer; text-align: left }
+.list button.on { border-color: var(--accent); background: #26302b }
+.list button .tag { color: var(--muted); font-size: 12px }
+.list button .done { color: var(--accent) }
+.stage { display: flex; flex-direction: column; gap: 8px; min-width: 0; min-height: 0; height: calc(100vh - 24px) }
+.board { flex: 1; min-height: 0; overflow: hidden; background: #0d0f12; border-radius: 10px }
+svg { display: block; width: 100%; height: 100% }
+.controls { display: flex; align-items: center; gap: 10px; background: var(--panel); border-radius: 10px; padding: 8px 12px }
+.controls button { background: #2b313c; color: var(--fg); border: 0; border-radius: 6px; padding: 6px 12px; cursor: pointer }
+.controls input[type=range] { flex: 1 }
+.clock { min-width: 150px; font-variant-numeric: tabular-nums }
+.clock b { color: var(--accent) }
+h2 { font-size: 16px; margin: 4px 0 8px }
+.info div { margin: 2px 0; color: var(--muted) }
+.info b { color: var(--fg) }
+.answers { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin: 12px 0 8px }
+.answers button { padding: 10px; border-radius: 8px; border: 1px solid var(--line); background: #262b34; color: var(--fg); cursor: pointer; font-size: 15px }
+.answers button.on { border-color: var(--accent); background: #24443a }
+.answers button:last-child { grid-column: span 2 }
+textarea { width: 100%; height: 70px; background: #262b34; color: var(--fg); border: 1px solid var(--line); border-radius: 8px; padding: 6px }
+.legend { margin-top: 12px; color: var(--muted); font-size: 12px }
+.legend span { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin: 0 4px 0 0; vertical-align: middle }
+.export { width: 100%; margin-top: 12px; padding: 10px; border: 0; border-radius: 8px; background: var(--accent); color: #0d2018; font-weight: 700; cursor: pointer }
+.hint { color: var(--muted); font-size: 12px; margin-top: 6px }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="list" id="list"></div>
+  <div class="stage">
+    <div class="board"><svg id="board" viewBox="0 0 1024 1024"></svg></div>
+    <div class="controls">
+      <button id="play">▶ 播放</button>
+      <button id="speed">1x</button>
+      <input type="range" id="seek" min="0" max="1000" value="0">
+      <div class="clock" id="clock"></div>
+    </div>
+  </div>
+  <div class="side">
+    <h2 id="title"></h2>
+    <div class="info" id="info"></div>
+    <div class="answers" id="answers"></div>
+    <textarea id="comment" placeholder="备注（可选），如：去补 B 了、被闪后往后退"></textarea>
+    <div class="legend">
+      <div><span style="background:var(--ct)"></span>CT <span style="background:var(--t);margin-left:10px"></span>T <span style="background:var(--me);margin-left:10px"></span>要看的 CT（白圈 + 视角方向 + 轨迹）</div>
+      <div>✕ 阵亡 · 灰圈 烟 · 黄 闪 · 红 雷/火 · 白点闪 = 他开枪</div>
+      <div>时间 0 = T 方第一个人阵亡；绿色时段是要判断的 5 秒</div>
+    </div>
+    <button class="export" id="export">导出结果</button>
+    <div class="hint" id="progress"></div>
+    <div class="hint">答案自动保存在本浏览器。导出后把文件位置告诉 Claude。</div>
+  </div>
+</div>
+<script type="application/json" id="data">__DATA__</script>
+<script>
+const data = JSON.parse(document.getElementById("data").textContent);
+const radar = "data:image/png;base64,__RADAR__";
+const LABELS = ["保持", "前压", "后撤", "横向调整", "看不出"];
+const store = `research-review-${data.pack}`;
+let answers = {};
+try { answers = JSON.parse(localStorage.getItem(store) || "{}"); } catch (e) { answers = {}; }
+const save = () => { try { localStorage.setItem(store, JSON.stringify(answers)); } catch (e) {} };
+const $ = id => document.getElementById(id);
+const ns = "http://www.w3.org/2000/svg";
+const el = (tag, attrs, parent) => { const n = document.createElementNS(ns, tag); for (const k in attrs) n.setAttribute(k, attrs[k]); if (parent) parent.append(n); return n; };
+const px = (x, y) => [(x - data.map.pos_x) / data.map.scale, (data.map.pos_y - y) / data.map.scale];
+
+let current = 0, t = 0, playing = false, speed = 1, last = null;
+const replay = () => data.replays[data.items[current].id];
+const span = () => { const f = replay()?.frames || []; return f.length ? [f[0][0], f[f.length - 1][0]] : [0, 0]; };
+
+function drawList() {
+  const list = $("list"); list.replaceChildren();
+  data.items.forEach((item, i) => {
+    const b = document.createElement("button");
+    b.className = i === current ? "on" : "";
+    const done = answers[item.id]?.result;
+    b.innerHTML = `<span>${item.id}</span><span class="${done ? "done" : "tag"}">${done || "未答"}</span>`;
+    b.onclick = () => select(i);
+    list.append(b);
+  });
+  const n = data.items.filter(i => answers[i.id]?.result).length;
+  $("progress").textContent = `已答 ${n} / ${data.items.length}`;
+}
+
+function select(i) {
+  current = i; playing = false; $("play").textContent = "▶ 播放";
+  t = span()[0];
+  const item = data.items[i];
+  $("title").textContent = `${item.id} · 第 ${item.round} 回合`;
+  $("info").innerHTML = `<div>比赛：<b>${item.match}</b></div><div>要看：<b>${item.player}</b>（CT）</div>`
+    + `<div>T 阵亡时他在：<b>${item.place || "未知"}</b></div><div>冻结期结束后第 ${item.round_time} 秒</div>`
+    + (replay() ? "" : `<div style="color:#f77">这个窗口没有取到数据</div>`);
+  const box = $("answers"); box.replaceChildren();
+  LABELS.forEach(label => {
+    const b = document.createElement("button");
+    b.textContent = label;
+    b.className = answers[item.id]?.result === label ? "on" : "";
+    b.onclick = () => { answers[item.id] = { ...(answers[item.id] || {}), result: label }; save(); select(i); drawList(); };
+    box.append(b);
+  });
+  $("comment").value = answers[item.id]?.comment || "";
+  drawList(); draw();
+}
+
+function frameAt(time) {
+  const frames = replay()?.frames || [];
+  let lo = 0, hi = frames.length - 1;
+  while (lo < hi) { const mid = (lo + hi + 1) >> 1; if (frames[mid][0] <= time) lo = mid; else hi = mid - 1; }
+  return frames[lo];
+}
+
+function draw() {
+  const svg = $("board"); svg.replaceChildren();
+  el("image", { href: radar, width: 1024, height: 1024 }, svg);
+  const r = replay();
+  if (!r) return;
+  // 要看的 CT 的轨迹（到当前时刻）
+  const trail = r.frames.filter(f => f[0] <= t).map(f => f[1].find(p => p[0] === r.target)).filter(p => p && p[4]);
+  if (trail.length > 1) el("polyline", { points: trail.map(p => px(p[1], p[2]).join(",")).join(" "), fill: "none", stroke: "#ffffff", "stroke-width": 2.5, "stroke-opacity": .75 }, svg);
+  // 投掷物（爆开后保留一段时间）
+  const life = { smoke: 18, fire: 7, flash: .6, he: .6, decoy: 2 };
+  const color = { smoke: "#c9ccd1", fire: "#ff5a3c", flash: "#ffe45c", he: "#ff5a3c", decoy: "#9aa3b2" };
+  (r.grenades || []).forEach(([time, type, x, y]) => {
+    if (t >= time && t <= time + (life[type] ?? 1)) {
+      const [a, b] = px(x, y);
+      el("circle", { cx: a, cy: b, r: type === "smoke" ? 28 : 14, fill: color[type] || "#999", "fill-opacity": type === "smoke" ? .45 : .7 }, svg);
+    }
+  });
+  const frame = frameAt(t);
+  const firing = (r.shots || []).some(s => s <= t && t - s < .12);
+  frame[1].forEach(([sid, x, y, yaw, alive, team]) => {
+    const [a, b] = px(x, y);
+    const me = sid === r.target;
+    const fill = team === 3 ? "var(--ct)" : "var(--t)";
+    if (!alive) {
+      el("path", { d: `M${a - 6} ${b - 6}L${a + 6} ${b + 6}M${a + 6} ${b - 6}L${a - 6} ${b + 6}`, stroke: fill, "stroke-width": 3 }, svg);
+      return;
+    }
+    const rad = yaw * Math.PI / 180;
+    const len = me ? 46 : 22;
+    el("line", { x1: a, y1: b, x2: a + Math.cos(rad) * len, y2: b - Math.sin(rad) * len, stroke: me ? "#fff" : fill, "stroke-width": me ? 3 : 2 }, svg);
+    el("circle", { cx: a, cy: b, r: me ? 11 : 7, fill, stroke: me ? "#fff" : "#000", "stroke-width": me ? 3 : 1 }, svg);
+    if (me && firing) el("circle", { cx: a, cy: b, r: 17, fill: "none", stroke: "#fff", "stroke-width": 2 }, svg);
+  });
+  (r.kills || []).filter(([time]) => time <= t && t - time < 1).forEach(([, , victim]) => {
+    const p = frame[1].find(q => q[0] === victim);
+    if (p) { const [a, b] = px(p[1], p[2]); el("circle", { cx: a, cy: b, r: 20, fill: "none", stroke: "#ff4d4d", "stroke-width": 3 }, svg); }
+  });
+  const [lo, hi] = span();
+  $("seek").value = hi > lo ? Math.round(1000 * (t - lo) / (hi - lo)) : 0;
+  const inWindow = t >= 0 && t <= data.window;
+  $("clock").innerHTML = t < 0 ? `T 阵亡前 ${(-t).toFixed(1)} 秒` : `T 阵亡后 <b style="color:${inWindow ? "var(--accent)" : "var(--muted)"}">${t.toFixed(1)}</b> 秒`;
+  $("seek").style.accentColor = inWindow ? "var(--accent)" : "#888";
+}
+
+function tick(now) {
+  if (playing) {
+    if (last !== null) {
+      t += (now - last) / 1000 * speed;
+      const [, hi] = span();
+      if (t >= hi) { t = hi; playing = false; $("play").textContent = "▶ 播放"; }
+      draw();
+    }
+    last = now;
+  } else last = null;
+  requestAnimationFrame(tick);
+}
+
+$("play").onclick = () => {
+  const [lo, hi] = span();
+  if (t >= hi) t = lo;
+  playing = !playing; $("play").textContent = playing ? "❚❚ 暂停" : "▶ 播放";
+};
+$("speed").onclick = () => { speed = speed === 1 ? .5 : speed === .5 ? 2 : 1; $("speed").textContent = `${speed}x`; };
+$("seek").oninput = e => { const [lo, hi] = span(); t = lo + (hi - lo) * e.target.value / 1000; draw(); };
+$("comment").oninput = e => { const id = data.items[current].id; answers[id] = { ...(answers[id] || {}), comment: e.target.value }; save(); };
+document.addEventListener("keydown", e => {
+  if (e.target.tagName === "TEXTAREA") return;
+  if (e.code === "Space") { e.preventDefault(); $("play").click(); }
+  if (e.key === "ArrowRight") { t = Math.min(span()[1], t + .25); draw(); }
+  if (e.key === "ArrowLeft") { t = Math.max(span()[0], t - .25); draw(); }
+  if (e.key === "ArrowDown" || e.key === "n") select(Math.min(data.items.length - 1, current + 1));
+  if (e.key === "ArrowUp" || e.key === "p") select(Math.max(0, current - 1));
+  const n = Number(e.key);
+  if (n >= 1 && n <= 5) $("answers").children[n - 1].click();
+});
+$("export").onclick = () => {
+  const blob = new Blob([JSON.stringify({ pack: data.pack, results: answers }, null, 2)], { type: "application/json" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob); a.download = `${data.pack}-results.json`; a.click();
+};
+select(0);
+requestAnimationFrame(tick);
+</script>
+</body>
+</html>

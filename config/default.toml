@@ -880,6 +880,9 @@ top_events = ["IEM Rio 2026", "PGL Bucharest 2026"]
 # 复盘包复制到 CS2 game/csgo 下的子目录；跳转到触发前几秒
 demo_subdir = "replays/research"
 lead_seconds = 2
+# 2D 回放页（scripts/research_replay.py）：每秒帧数、窗口结束后多放几秒
+replay_fps = 16
+replay_tail_seconds = 1
 
 [research.labels]
 # 以下游戏单位阈值均为待人工校准的工程假设

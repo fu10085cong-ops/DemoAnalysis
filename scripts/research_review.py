@@ -132,17 +132,45 @@ def build(args, root: Path, cfg: dict) -> Path:
                       f"- 比赛：`{row['match_id']}`（{row['tier']}）；回合 {row['round_id']}，冻结期结束后第 {row['round_time_s']:.0f} 秒",
                       f"- 看谁：**{row['player_name']}**（CT），T 阵亡时他在 {row['start_place'] or '未知地点'}",
                       f"- 加载：`p{index}`；跳转：`r{index}`（demo_gototick {jump}）", ""]
-    toml = [f'source = "{args.source}"', f"seed = {args.seed}", f'demo_subdir = "{subdir}"', ""]
-    for item in items:
-        toml.append("[[items]]")
-        for key, value in item.items():
-            toml.append(f"{key} = {json.dumps(value, ensure_ascii=False) if isinstance(value, str) else value}")
-        toml.append("")
-    (pack / "review.toml").write_text("\n".join(toml), encoding="utf-8", newline="\n")
+    _write_review(pack, {"source": args.source, "seed": args.seed, "demo_subdir": subdir}, items)
     (pack / "checklist.md").write_text("\n".join(checklist), encoding="utf-8", newline="\n")
     (pack / "cs2coach_research.cfg").write_text("\n".join(aliases) + "\n", encoding="utf-8", newline="\n")
     print(f"已生成 {len(items)} 条：{pack}")
     return pack
+
+
+def _toml_value(value) -> str:
+    return json.dumps(value, ensure_ascii=False) if isinstance(value, str) else str(value)
+
+
+def _write_review(pack: Path, header: dict, items: list[dict]) -> None:
+    lines = [f"{key} = {_toml_value(value)}" for key, value in header.items()] + [""]
+    for item in items:
+        lines.append("[[items]]")
+        lines += [f"{key} = {_toml_value(value)}" for key, value in item.items()]
+        lines.append("")
+    (pack / "review.toml").write_text("\n".join(lines), encoding="utf-8", newline="\n")
+
+
+def import_results(args, root: Path, cfg: dict) -> None:
+    """把回放页导出的 JSON（{"pack", "results": {编号: {"result", "comment"}}}）写回 review.toml。"""
+    pack = _pack_dir(root, args.name)
+    data = tomllib.loads((pack / "review.toml").read_text(encoding="utf-8"))
+    exported = json.loads(Path(args.file).read_text(encoding="utf-8"))
+    if exported.get("pack") != args.name:
+        raise ValueError(f"结果文件属于复盘包 {exported.get('pack')}，不是 {args.name}")
+    results, updated = exported.get("results", {}), 0
+    for item in data["items"]:
+        answer = results.get(item["id"])
+        if not answer:
+            continue
+        if answer.get("result") and answer["result"] not in LABELS:
+            raise ValueError(f"{item['id']} 的答案无效：{answer['result']}")
+        item["result"] = answer.get("result", item["result"])
+        item["comment"] = answer.get("comment", item["comment"])
+        updated += 1
+    _write_review(pack, {key: value for key, value in data.items() if key != "items"}, data["items"])
+    print(f"已写回 {updated} 条：{pack / 'review.toml'}")
 
 
 def review_window(cfg: dict) -> float:
@@ -309,9 +337,12 @@ def main(argv=None, root: Path = ROOT) -> int:
     i.add_argument("--csgo", default=None)
     s = sub.add_parser("score")
     s.add_argument("name")
+    m = sub.add_parser("import", help="把回放页导出的结果写回 review.toml")
+    m.add_argument("name")
+    m.add_argument("file")
     args = parser.parse_args(argv)
     cfg = load_config()
-    {"build": build, "install": install, "score": score}[args.command](args, root, cfg)
+    {"build": build, "install": install, "score": score, "import": import_results}[args.command](args, root, cfg)
     return 0
 
 
