@@ -162,6 +162,7 @@ problems = ["slow_reaction", "poor_crosshair_placement", "shot_while_moving", "s
 min_aim_problems = 2
 
 [summary]
+exclude_dirs = ["data/demos/tiers"]
 # 每类问题或亮点在 AI 摘要中展示的代表性命中上限
 representatives_per_problem = 3
 
@@ -379,6 +380,10 @@ borderline_ratio = 0.15
 visibility_problems = ["slow_reaction", "poor_crosshair_placement", "peeked_into_held_angle", "dry_peek_with_utility", "overpeek_in_advantage", "died_without_seeing", "spray_control", "spray_while_moving", "won_duel_seen_first"]
 # 这些说明表示视野起点可能不完整；持续可见类说明不计入
 incomplete_visibility_notes = ["not_seen", "lost_sight", "first_hit_unseen", "smoke", "blind", "no_map_data"]
+
+[ladder]
+min_player_matches = 3
+reach_quantile = 0.25
 
 [radar]
 default_tier = "5e_a"  # 2026-10-18 起默认与 5E A 段比较；--target 可指定 5e_b / 5e_s / amateur_tmp / pro

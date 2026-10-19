@@ -9,7 +9,7 @@ import sys
 import tomllib
 import zipfile
 from pathlib import Path
-from statistics import median
+from statistics import median, quantiles
 
 import rarfile
 
@@ -19,7 +19,8 @@ from cs2coach.console import ensure_utf8_stdio
 from cs2coach.features.aim import shot_targets
 from cs2coach.features.lobby import lobby_line, _lobby_inputs
 from cs2coach.features.moments import find_moments
-from cs2coach.features.radar import RADAR_METRICS, player_metrics
+from cs2coach.features.panel import PANEL_METRICS, merge_panel_counts, panel_values
+from cs2coach.features.radar import RADAR_METRICS, player_metrics, typical_player_metrics
 from cs2coach.features.visibility import Sight
 from cs2coach.parsing.loader import resolve_demo
 from cs2coach.parsing.match import parse_match
@@ -31,19 +32,23 @@ TIER_CONFIG = ROOT / "config/tiers.toml"
 TIER_DIR = ROOT / "src/cs2coach/baselines/tiers"
 
 
-def parse_one_tier_demo(path: Path, member: str | None, cfg: dict) -> tuple[list, list[float]]:
+def parse_one_tier_demo(path: Path, member: str | None, cfg: dict,
+                        steamid: int | None = None) -> tuple[list, list[float]]:
     """解析一场分段 demo，返回 (该场全部合格玩家的瞬间列表, 跳过的覆盖率列表)。
 
     本子进程不打印；跳过的覆盖率供主进程按原内容和顺序打印。
     """
     match = parse_match(resolve_demo(path, member=member), cfg)
+    if steamid is not None and steamid not in match.players:
+        raise ValueError("目标 SteamID 不在 demo 中")
     sight = Sight(match, cfg)
     if not sight.available:
         raise ValueError(f"视野计算不可用：{sight.unavailable_reason}")
     shots = match.shots.join(shot_targets(match, cfg)[["target", "target_angle"]])
     inputs = _lobby_inputs(match, cfg)
     game, skipped = [], []
-    for sid, player in match.players.items():
+    players = match.players.items() if steamid is None else [(steamid, match.players[steamid])]
+    for sid, player in players:
         if player.coverage < cfg["parsing"]["min_target_coverage"]:
             skipped.append(player.coverage)
             continue
@@ -53,6 +58,10 @@ def parse_one_tier_demo(path: Path, member: str | None, cfg: dict) -> tuple[list
     if not game:
         raise ValueError("没有合格玩家")
     return game, skipped
+
+
+def parse_representative_demo(path: Path, member: str | None, steamid: int, cfg: dict):
+    return parse_one_tier_demo(path, member, cfg, steamid)
 
 
 def build_tier_baseline(tier: dict, mms: list, demo_count: int,
@@ -65,14 +74,42 @@ def build_tier_baseline(tier: dict, mms: list, demo_count: int,
                         if sample[metric] is not None and math.isfinite(sample[metric]))
         metrics[metric] = {"median": median(values) if values else None,
                            "n": len(values), "values": values}
-    from cs2coach.features.panel import merge_panel_counts, panel_values
-
     panel_samples = [mm.panel for mm in mms if mm.panel is not None]
     panel = {"counts": merge_panel_counts(panel_samples).model_dump(),
              "values": panel_values(panel_samples, cfg), "n": len(panel_samples)}
+    grouped = {}
+    for mm in mms:
+        grouped.setdefault(mm.player, []).append(mm)
+    eligible = [games for games in grouped.values() if len(games) >= cfg["ladder"]["min_player_matches"]]
+    per_player = {"n_players": len(eligible), "matches": sorted(len(games) for games in eligible),
+                  "metrics": {}, "panel_metrics": {}}
+    level_metrics = set(RADAR_METRICS) | {metric.id for metric in PANEL_METRICS if metric.kind == "水平"}
+    values_by_metric = {key: [] for key in level_metrics}
+    panel_by_metric = {metric.id: [] for metric in PANEL_METRICS if metric.kind == "水平"}
+    for games in eligible:
+        lines = [line for mm in games for line in mm.lobby if line.steamid == mm.player]
+        radar_values = typical_player_metrics(lines, cfg)
+        panel_values_for_player = panel_values([mm.panel for mm in games if mm.panel is not None], cfg)
+        for key in panel_by_metric:
+            value = panel_values_for_player[key]
+            if value is not None and math.isfinite(value):
+                panel_by_metric[key].append(value)
+        for key in level_metrics:
+            value = (radar_values if key in RADAR_METRICS else panel_values_for_player).get(key)
+            if value is not None and math.isfinite(value):
+                values_by_metric[key].append(value)
+    for destination, distributions in (("metrics", values_by_metric), ("panel_metrics", panel_by_metric)):
+        for key, samples_for_key in sorted(distributions.items()):
+            values = sorted(samples_for_key)
+            quartiles = quantiles(values, n=4, method="inclusive") if len(values) >= 2 else None
+            per_player[destination][key] = {"values": values, "standard": median(values) if values else None,
+                "q25": quartiles[0] if quartiles else (values[0] if values else None),
+                "q75": quartiles[2] if quartiles else (values[0] if values else None)}
     return {"version": 1, "id": tier["id"], "name": tier["name"],
-            "source": f"{demo_count} 份 demo、{len(mms)} 人次", "metrics": metrics,
-            "problem_rates": problem_rates(mms, pro_baseline, cfg), "panel": panel}
+            **({"level": tier["level"]} if "level" in tier else {}),
+            "source": f"{demo_count} 份 demo、{len(mms)} 人次", "demo_count": demo_count, "metrics": metrics,
+            "problem_rates": problem_rates(mms, pro_baseline, cfg), "panel": panel,
+            "per_player": per_player}
 
 
 def demo_entries(tier: dict) -> list[tuple[Path, str | None]]:
@@ -101,6 +138,17 @@ def demo_entries(tier: dict) -> list[tuple[Path, str | None]]:
     return entries
 
 
+def representative_entries(tier: dict) -> list[tuple[Path, str | None, int]]:
+    """名单只在扫描时使用；返回项不含昵称。"""
+    players = tomllib.loads((ROOT / tier["players_file"]).read_text(encoding="utf-8"))["player"]
+    entries = []
+    for player in players:
+        steamid = int(player["steamid"])
+        for path, member in demo_entries({"dirs": [player["dir"]]}):
+            entries.append((path, member, steamid))
+    return entries
+
+
 def main(argv: list[str] | None = None) -> int:
     ensure_utf8_stdio()
     parser = argparse.ArgumentParser(description=__doc__)
@@ -122,16 +170,19 @@ def main(argv: list[str] | None = None) -> int:
         return 1
     failed = False
     for tier in selected:
-        entries = demo_entries(tier)
+        representative = "players_file" in tier
+        entries = representative_entries(tier) if representative else demo_entries(tier)
 
         def report_progress(index: int, outcome, _tier=tier) -> None:
             print(f"{_tier['id']} [{index + 1}/{len(entries)}] 解析中", flush=True)
 
-        outcomes = map_ordered(parse_one_tier_demo, entries, jobs, args=(cfg,), on_done=report_progress)
+        worker = parse_representative_demo if representative else parse_one_tier_demo
+        outcomes = map_ordered(worker, entries, jobs, args=(cfg,), on_done=report_progress)
         mms, successful = [], 0
         for outcome in outcomes:
             if outcome.error is not None:
-                print(f"  失败，跳过：{outcome.error.split(':', 1)[0]}", flush=True)
+                reason = "目标 SteamID 不在 demo 中" if "目标 SteamID 不在 demo 中" in outcome.error else outcome.error.split(':', 1)[0]
+                print(f"  失败，跳过：{reason}", flush=True)
                 continue
             game, skipped = outcome.value
             for coverage in skipped:

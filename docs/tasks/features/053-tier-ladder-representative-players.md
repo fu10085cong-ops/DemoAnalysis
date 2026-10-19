@@ -1,6 +1,6 @@
 # 053 段位阶梯：按代表人物建分段基准，多场汇总改为阶梯位置
 
-状态：待做
+状态：待审查
 难度：A（分段基准结构变化，新增阶梯计算，多场报告页的雷达、优点、结论都改口径）
 执行：Codex（思考强度 high）
 分支：`task/053-tier-ladder`（基于 `task/052-category-panel`）
@@ -27,7 +27,7 @@
 ## 已有数据（Claude 已准备）
 
 - 5E B 段 8 名代表人物：`data/tiers/5e_b_players.toml`（`[[player]]`：`name`、`steamid`、`dir`），demo 在 `data/demos/tiers/5e_b/<昵称>/`。**名单和 demo 都在 `data/`，不进仓库**
-- 有效 demo 77 场：月蓝海、马虎的柔晓博各有 1 个压缩包损坏（`zipfile.is_zipfile` 为假），九落秋雨有 2 场里他用了另一个 SteamID（按规则会被跳过，剩 7 场）
+- 有效 demo 77 场：两名代表人物各有 1 个压缩包损坏（`zipfile.is_zipfile` 为假），另一名有 2 场使用了不同的 SteamID（按规则跳过，该人剩 7 场）
 - A、S 段的代表人物以后再收集；在那之前 `5e_a`、`5e_s` 仍用旧的文件夹口径
 
 ## 要做的事
@@ -138,9 +138,9 @@
 
 ## 完成报告（实现方填写，尽量简短）
 
-- 改动的文件及原因：
-- 测试结果（最后一行）：
-- 真实 demo 验证（如有）：
-- 遗留问题 / 需要确认的地方：
+- 改动的文件及原因：`config/default.toml`、`config/tiers.toml` 配置阶梯、名单和默认扫描排除；`scripts/build_tier_baseline.py` 按代表人物解析并输出匿名人均分布；`features/radar.py`、新 `features/ladder.py` 统一典型单场与阶梯计算；`report/page_data.py`、`page_template.html`、`page_check.py` 改多场展示与检查；`summary/discover.py`、`cli.py` 排除分段样本；`config.py` 校验新配置；`docs/features.md` 记录口径；新 `tests/test_tier_ladder_053.py` 和更新 `tests/test_page_data.py` 覆盖新旧结构。多场 JSON：`TierView.ladder[axis_id]` 含 `position/reached/next/ordered/text`，水平面板指标含 `ladder`、`ladder_text`；`per_player.panel_metrics` 单独保存面板四个同名指标的合并口径。
+- 测试结果（最后一行）：相关测试 `73 passed in 1.37s`；全量测试 `1144 passed, 4 skipped in 33.13s`；页面一致性检查 `报告页一致性检查：0 处违规`。
+- 真实 demo 验证（如有）：`scripts/page_check_all.py` 检查现有临时业余分段 23 场、230 人次，无违规或解析失败；未重建 5E B 段基准。
+- 遗留问题 / 需要确认的地方：按任务要求，新的分段基准由 Claude 重建后才能在真实多场页显示阶梯。
 
 ## 审查意见（Claude 填写）

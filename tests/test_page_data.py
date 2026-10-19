@@ -107,7 +107,7 @@ def test_anonymous_baseline_uses_pro_thresholds(monkeypatch):
                                [mm], 1, pro, load_config())
     serialized = json.dumps(data, ensure_ascii=False)
     assert seen == [pro]
-    for private in (str(A), "目标玩家", "alice", "synthetic.dem", "private.dem", "steamid", "players", "dirs"):
+    for private in (str(A), "目标玩家", "alice", "synthetic.dem", "private.dem", "steamid", "dirs"):
         assert private not in serialized
     assert data["source"] == "1 份 demo、1 人次"
     assert data["metrics"]["trade_kill_events_per_round"] == {"median": .2, "n": 1, "values": [.2]}

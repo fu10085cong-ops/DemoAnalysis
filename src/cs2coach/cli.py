@@ -171,7 +171,8 @@ def _summary(args: argparse.Namespace) -> int:
         _apply_ai_overrides(cfg, args)
         steamid = int(args.player)
         refs = (inspect_player_demos(steamid, [(path, selected.get(path)) for path in args.demo])
-                if args.demo else find_player_demos(steamid, args.demos_dir))
+                if args.demo else find_player_demos(steamid, args.demos_dir,
+                                                    [Path(p) for p in cfg["summary"]["exclude_dirs"]]))
     except (ConfigError, OSError) as exc:
         print(f"错误: {exc}", file=sys.stderr)
         return 1

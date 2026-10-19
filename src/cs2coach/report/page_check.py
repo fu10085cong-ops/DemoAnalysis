@@ -19,7 +19,11 @@ def check_page(page: ReportPage, cfg: dict) -> list[str]:
         for row in tier.strengths:
             if row.axis and row.axis in flagged:
                 add("维度冲突", tier.id, row.axis)
-            if row.percentile is None or row.percentile < radar["strength_min_percentile"]:
+            if page.kind == "summary" and page.ladder_levels:
+                if (row.ladder is None or row.ladder.reached is None or tier.level is None or
+                        row.ladder.reached.level < tier.level + 1):
+                    add("优点阶梯不足", tier.id, row.id)
+            elif row.percentile is None or row.percentile < radar["strength_min_percentile"]:
                 add("优点百分位不足", tier.id, row.id)
             if row.samples < minimum_samples(row.id, cfg):
                 add("优点样本不足", tier.id, row.id)

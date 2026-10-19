@@ -119,11 +119,14 @@ def inspect_player_demos(steamid: int, candidates: list[tuple[Path, str | None]]
     return refs
 
 
-def find_player_demos(steamid: int, demos_dir: Path) -> list[DemoRef]:
+def find_player_demos(steamid: int, demos_dir: Path,
+                      exclude_dirs: list[Path] | None = None) -> list[DemoRef]:
     """递归找目标玩家的比赛，优先原始文件，失败原因保存在返回列表的 skipped。"""
     root = Path(demos_dir)
     if not root.is_dir():
         raise FileNotFoundError(f"demo 目录不存在: {root}")
-    paths = [path for path in root.rglob("*") if path.is_file() and _supported(path)]
+    excluded = [Path(folder).resolve() for folder in (exclude_dirs or [])]
+    paths = [path for path in root.rglob("*") if path.is_file() and _supported(path)
+             and not any(path.resolve().is_relative_to(folder) for folder in excluded)]
     paths.sort(key=lambda path: (".extracted" in path.parts, str(path).lower()))
     return inspect_player_demos(steamid, [(path, None) for path in paths])

@@ -126,24 +126,24 @@ th, td { overflow-wrap: anywhere }
       <canvas class="radar" id="radar" width="920" height="840" role="img" aria-label="能力雷达图"></canvas>
       <div class="legend">
         <div class="key"><span class="sw"></span>你</div>
-        <div class="key"><span class="sw cmp"></span><span id="cmp-name">参考中线（50）</span></div>
-        <div>
+        <div class="key" id="cmp-key"><span class="sw cmp"></span><span id="cmp-name">参考中线（50）</span></div>
+        <div id="cmp-control">
           <label for="cmp">虚线对比</label>
           <select id="cmp"></select>
         </div>
         <div>
-          <label for="tier">目标分段（雷达的刻度）</label>
+          <label for="tier" id="tier-label">目标分段（雷达的刻度）</label>
           <select id="tier"></select>
         </div>
         <div class="axes-list" id="axes-list"></div>
-        <div class="sub">数值是在目标分段里排到百分之几，越往外越好；50 = 分段里排在正中间的水平。</div>
+        <div class="sub" id="radar-note">数值是在目标分段里排到百分之几，越往外越好；50 = 分段里排在正中间的水平。</div>
       </div>
     </div>
   </section>
 
   <section class="panel">
     <h2>做得好的方向</h2>
-    <div class="sub" style="margin-bottom:8px">在所选分段里百分位最高的几项。竖线：分段指标中位数。点开看具体回合。</div>
+    <div class="sub" id="goods-note" style="margin-bottom:8px">在所选分段里百分位最高的几项。竖线：分段指标中位数。点开看具体回合。</div>
     <div class="probs" id="goods"></div>
   </section>
 
@@ -164,6 +164,7 @@ th, td { overflow-wrap: anywhere }
     <div id="categories"></div>
     <p class="category-notes">首杀对枪胜率和 1v1 胜率是同场零和指标：一方赢，对方就输；段位均值不能用于比较不同段位的高低。</p>
   </section>
+  <p class="note" id="ladder-footer" hidden></p>
 </div>
 
 <script type="application/json" id="page-data">__PAGE_DATA__</script>
@@ -286,6 +287,7 @@ function drawList(id, list, problems) {
 }
 function drawRadar() {
   if (!tier) return;
+  const ladder = page.kind === "summary" && page.ladder_levels.length > 0;
   const comparison = tier.comparisons.find(c => c.id === $("cmp").value);
   $("cmp-name").textContent = comparison?.name || "暂无对比数据";
   const values = comparison?.values || page.axes.map(() => null);
@@ -296,49 +298,77 @@ function drawRadar() {
   ctx.clearRect(0, 0, 460, 420);
   const point = (i, value) => {
     const angle = -Math.PI / 2 + i * 2 * Math.PI / page.axes.length;
-    const radius = 140 * (value ?? 0) / 100;
+    const bottom = page.ladder_levels[0]?.level ?? 1;
+    const top = page.ladder_levels.at(-1)?.level ?? 4;
+    const radius = ladder ? 140 * Math.max(0, (value - bottom + 0.5) / (top - bottom + 1))
+      : 140 * (value ?? 0) / 100;
     return [230 + Math.cos(angle) * radius, 210 + Math.sin(angle) * radius];
   };
   const polygon = (values, stroke, width, dashed = false, filled = false) => {
     ctx.beginPath();
-    values.forEach((value, i) => { const p = point(i, value); i ? ctx.lineTo(...p) : ctx.moveTo(...p); });
-    ctx.closePath();
+    values.forEach((value, i) => {
+      if (value == null) return;
+      const p = point(i, value);
+      if (i && values[i - 1] != null) ctx.lineTo(...p); else ctx.moveTo(...p);
+    });
+    if (values.every(value => value != null)) ctx.closePath();
     ctx.strokeStyle = color(stroke);
     ctx.lineWidth = width;
     ctx.setLineDash(dashed ? [6, 5] : []);
     if (filled) { ctx.globalAlpha = .14; ctx.fillStyle = color(stroke); ctx.fill(); ctx.globalAlpha = 1; }
     ctx.stroke();
   };
-  [25, 50, 75, 100].forEach(value => polygon(page.axes.map(() => value), "line", value === 50 ? 1.5 : 1));
+  (ladder ? page.ladder_levels.map(item => item.level) : [25, 50, 75, 100])
+    .forEach(value => polygon(page.axes.map(() => value), "line", value === 50 || value === 2 ? 1.5 : 1));
   ctx.font = '14px "Microsoft YaHei", "PingFang SC", "Noto Sans SC", system-ui, sans-serif';
   page.axes.forEach((axis, i) => {
-    const [x, y] = point(i, 100), [lx, ly] = point(i, 120);
+    const outer = ladder ? page.ladder_levels.at(-1).level + .5 : 100;
+    const [x, y] = point(i, outer), [lx, ly] = ladder ?
+      [230 + (x - 230) * 1.15, 210 + (y - 210) * 1.15] : point(i, 120);
     ctx.beginPath(); ctx.moveTo(230, 210); ctx.lineTo(x, y);
     ctx.strokeStyle = color("line"); ctx.stroke();
     ctx.fillStyle = color("fg");
     ctx.textAlign = Math.abs(lx - 230) < 5 ? "center" : lx > 230 ? "left" : "right";
     ctx.fillText(axis.name, lx, ly + 5, 110);
   });
-  ctx.textAlign = "left"; ctx.fillStyle = color("muted"); ctx.fillText("50", 234, 137);
-  polygon(values, "cmp", 2, true);
+  ctx.textAlign = "left"; ctx.fillStyle = color("muted");
+  if (ladder) page.ladder_levels.forEach(item => {
+    const [x, y] = point(0, item.level);
+    ctx.fillText(item.name, x + 5, y - 2, 100);
+  }); else ctx.fillText("50", 234, 137);
+  if (!ladder) polygon(values, "cmp", 2, true);
   polygon(tier.you, "you", 2.5, false, true);
   ctx.setLineDash([]);
   tier.you.forEach((value, i) => {
+    if (value == null) return;
     ctx.beginPath(); ctx.arc(...point(i, value), 4, 0, Math.PI * 2);
     ctx.fillStyle = color("you"); ctx.fill();
   });
   $("axes-list").replaceChildren();
   page.axes.forEach((axis, i) => {
     const pair = node("span");
-    pair.append(node("b", pct(tier.you[i])), node("span", ` / ${pct(values[i])}`, "sub"));
+    if (ladder) {
+      const result = tier.ladder?.[axis.id];
+      const metric = page.axes[i];
+      pair.append(node("b", result?.position == null ? "—" : number(result.position)),
+        node("span", ` · ${result?.text || (result?.ordered === false ? "段位间没有明显差别" : "样本不足")}`, "sub"));
+    } else pair.append(node("b", pct(tier.you[i])), node("span", ` / ${pct(values[i])}`, "sub"));
     $("axes-list").append(node("span", axis.name), pair);
   });
 }
 function selectTier() {
+  const ladder = page.kind === "summary" && page.ladder_levels.length > 0;
   const previous = $("cmp").value;
   tier = page.tiers.find(t => t.id === $("tier").value);
   options($("cmp"), tier.comparisons, previous);
   $("cmp").disabled = !tier.comparisons.length;
+  $("cmp-key").hidden = ladder;
+  $("cmp-control").hidden = ladder;
+  $("tier-label").textContent = ladder ? "当前对比分段" : "目标分段（雷达的刻度）";
+  $("radar-note").textContent = ladder ? "阶梯位置越往外越高；线 = 各段位代表玩家的标准水平。" :
+    "数值是在目标分段里排到百分之几，越往外越好；50 = 分段里排在正中间的水平。";
+  $("goods-note").textContent = ladder ? "已达到高于当前对比分段一档的方向。竖线：该分段代表玩家的标准。点开看具体回合。" :
+    "在所选分段里百分位最高的几项。竖线：分段指标中位数。点开看具体回合。";
   drawRadar();
   $("verdict").textContent = tier.verdict;
   drawList("probs", tier.problems, true);
@@ -355,16 +385,19 @@ function drawCategories() {
     const section = node("section", null, "category");
     section.append(node("h3", category.name));
     const wrapper = node("div", null, "tbl"), table = node("table"), head = node("thead"), header = node("tr");
-    ["指标", "你", "段位均值（当前对比分段）", "样本"].forEach(label => header.append(node("th", label)));
+    const labels = ["指标", "你", "段位均值（当前对比分段）", "样本"];
+    if (page.ladder_levels.length) labels.push("阶梯");
+    labels.forEach(label => header.append(node("th", label)));
     head.append(header);
     const body = node("tbody");
     category.metrics.forEach(metric => {
       const row = node("tr");
       const suffix = `${metric.kind === "风格" ? "（风格）" : ""}${metric.zero_sum ? "（同场零和）" : ""}`;
       [metric.name + suffix, metric.you == null ? "样本不足" : withUnit(metric.you, metric.unit),
-       withUnit(tier?.panel_values?.[metric.id], metric.unit), String(metric.sample)].forEach((value, index) => {
+       withUnit(tier?.panel_values?.[metric.id], metric.unit), String(metric.sample),
+       ...(page.ladder_levels.length ? [metric.kind === "水平" ? metric.ladder_text || "—" : ""] : [])].forEach((value, index) => {
         const cell = node("td", value, index ? "num" : null);
-        cell.dataset.label = ["指标", "你", "段位均值", "样本"][index];
+        cell.dataset.label = labels[index];
         row.append(cell);
       });
       body.append(row);
@@ -385,6 +418,8 @@ function drawCategories() {
   });
 }
 ["title", "subtitle"].forEach(key => { $(key).textContent = page[key]; });
+$("ladder-footer").hidden = !page.ladder_note;
+$("ladder-footer").textContent = page.ladder_note;
 document.title = page.title;
 $("no-tiers").hidden = !!tier;
 $("radar-box").hidden = !tier;

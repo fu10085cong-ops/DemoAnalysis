@@ -28,11 +28,20 @@ def load_config(path: Path | None = None) -> dict[str, Any]:
     _validate_problems(cfg["problems"])
     _validate_economy(cfg["economy"])
     _validate_radar(cfg["radar"])
+    _validate_ladder(cfg["ladder"])
     _validate_panel(cfg["panel"])
     if type(cfg["baseline"]["min_metric_samples"]) is not int or cfg["baseline"]["min_metric_samples"] < 1:
         raise ConfigError("配置项 baseline.min_metric_samples 应为正整数")
     _validate_tools(cfg["tools"])
     return cfg
+
+
+def _validate_ladder(cfg: dict[str, Any]) -> None:
+    if type(cfg["min_player_matches"]) is not int or cfg["min_player_matches"] < 1:
+        raise ConfigError("配置项 ladder.min_player_matches 应为正整数")
+    quantile = cfg["reach_quantile"]
+    if type(quantile) not in (int, float) or not math.isfinite(quantile) or not 0 < quantile < 0.5:
+        raise ConfigError("配置项 ladder.reach_quantile 应在 (0, 0.5) 内")
 
 
 def _validate_tools(cfg: dict[str, Any]) -> None:

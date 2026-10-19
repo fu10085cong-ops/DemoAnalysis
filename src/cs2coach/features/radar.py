@@ -54,6 +54,13 @@ def player_metrics(line: LobbyLine, cfg: dict) -> dict[str, float | None]:
             for key, value in values.items()}
 
 
+def typical_player_metrics(lines: list[LobbyLine], cfg: dict) -> dict[str, float | None]:
+    """多场玩家的典型单场：各场有效指标分别取中位数。"""
+    samples = [player_metrics(line, cfg) for line in lines]
+    return {key: median(valid) if (valid := [sample[key] for sample in samples
+            if sample[key] is not None]) else None for key in RADAR_METRICS}
+
+
 def percentile(metric: str, value: float | None, tier: dict, cfg: dict) -> float | None:
     """沿用 baseline.compare 的严格比较、相等算半个样本和整数舍入。"""
     values = tier.get("metrics", {}).get(metric, {}).get("values", [])
