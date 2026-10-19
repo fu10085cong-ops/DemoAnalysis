@@ -143,6 +143,31 @@ def test_labels(changes, expected):
     assert (confidence == 0) == (expected == "unknown")
 
 
+A_SITE, PALACE_LOW, PALACE_HIGH = (0.0, -2000.0, -168.0), (150.0, -2000.0, -170.0), (150.0, -2000.0, -40.0)
+
+
+@pytest.mark.parametrize("changes, expected", [
+    # 主防在自己的防守区组内换位：距离规则会判横向调整 / 前压，按地点分组判保持
+    ({"start_place": "Connector", "end_place": "BombsiteA", "displacement": 357, "nav_delta": 27}, "hold"),
+    ({"start_place": "BombsiteA", "end_place": "Stairs", "displacement": 257, "nav_delta": -400}, "hold"),
+    ({"start_place": "Connector", "end_place": "SnipersNest", "displacement": 500, "nav_delta": 0}, "hold"),
+    # Palace 楼下与 A 包点同组，楼上不是
+    ({"start_place": "BombsiteA", "end_place": "PalaceInterior", "start_position": A_SITE,
+      "end_position": PALACE_LOW, "displacement": 300, "nav_delta": -300}, "hold"),
+    ({"start_place": "BombsiteA", "end_place": "PalaceInterior", "start_position": A_SITE,
+      "end_position": PALACE_HIGH, "displacement": 300, "nav_delta": -300}, "advance"),
+    # 从一个防守区组或纵深进入另一个组：转点；从接触区退回包点不算转点
+    ({"start_place": "BombsiteA", "end_place": "Shop", "start_region": "hold", "displacement": 1800, "nav_delta": 800}, "rotate"),
+    ({"start_place": "CTSpawn", "end_place": "Shop", "start_region": "deep", "displacement": 1855, "nav_delta": 859}, "rotate"),
+    ({"start_place": "Underpass", "end_place": "BombsiteB", "start_region": "contact", "displacement": 865, "nav_delta": 1244}, "retreat"),
+    # 窗口内很快阵亡仍判 unknown；地点分组不依赖导航距离
+    ({"start_place": "BombsiteA", "end_place": "BombsiteA", "died": True, "end_tick": 130}, "unknown"),
+    ({"start_place": "BombsiteB", "end_place": "BombsiteB", "nav_delta": None}, "hold"),
+])
+def test_zone_labels(changes, expected):
+    assert label_window(sample_window(**changes), CFG)[0] == expected
+
+
 def test_auxiliary_labels_combine():
     row = sample_window(utility_types=["flashbang"], teammate_distance_start=1000,
                         teammate_distance_end=500, shots=2, damage_taken=10)

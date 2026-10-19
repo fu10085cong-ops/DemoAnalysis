@@ -873,9 +873,10 @@ window_seconds = 10
 nav_snap_max_distance = 128
 
 [research.review]
-# R02 人工复核的分层抽样：每种主标签抽几个（unknown 多抽，其中 short_unknown 个取 1 秒内结束的窗口）
-counts = { hold = 3, advance = 3, retreat = 3, lateral = 3, unknown = 8 }
-short_unknown = 2
+# R02 人工复核的分层抽样：每种主标签抽几个（unknown 中 short_unknown 个取 1 秒内结束的窗口）
+# 第 2 轮起加"转点"层、保持多抽 1 个（检验主防假设）；第 1 轮 unknown 多为阈值空档，按地点分组后从 19% 降到约 9%
+counts = { hold = 4, advance = 3, retreat = 3, lateral = 3, rotate = 3, unknown = 4 }
+short_unknown = 1
 # 顶级赛事；pro_mirage 清单中其余赛事算二三线，早期职业样本（pro_demos.toml）算顶级
 top_events = ["IEM Rio 2026", "PGL Bucharest 2026"]
 # 复盘包复制到 CS2 game/csgo 下的子目录；跳转到触发前几秒
@@ -895,6 +896,18 @@ lateral_min_displacement = 300
 regroup_min_distance = 300
 regroup_max_end_distance = 600
 min_window_seconds = 1
+
+[research.zones.de_mirage]
+# 防守区组：起点和终点在同一组内（含同一报点）判"保持"，从某组或纵深进入另一组判"转点"；先于距离阈值判断。
+# 一个地点可以属于多组。2026-10-19 产品负责人确认（R02 第 1 轮：主防在自己区域内换位仍算保持）
+A = ["BombsiteA", "Stairs", "Jungle", "Connector", "Scaffolding", "PalaceInterior/lower"]
+B = ["BombsiteB", "Truck", "Shop"]
+Mid = ["SnipersNest", "Ladder", "Connector"]
+
+[research.floors.de_mirage]
+# 按高度拆分的报点：Z 低于该值为 "<地点>/lower"，否则为 "<地点>/upper"。
+# PalaceInterior 的位置高度集中在约 -170（楼下，与 A 包点同层）和约 -40（楼上）；楼下算 A 区保持，楼上按距离规则（通常是前压）
+PalaceInterior = -100
 
 [research.regions.de_mirage]
 # 地点键来自真实 demo；纵深等级由人工填写，空字符串表示未复核。CT 视角：deep 深处 / hold 防守位 / contact 接触区。

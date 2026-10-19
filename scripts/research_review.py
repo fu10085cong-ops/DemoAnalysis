@@ -5,7 +5,7 @@
     python scripts/research_review.py install r02-1 --csgo "D:/SteamLibrary/steamapps/common/Counter-Strike Global Offensive/game/csgo"
     python scripts/research_review.py score r02-1
 
-清单是盲审：不显示程序给的标签。产品负责人在 review.toml 的 result 填"保持 / 前压 / 后撤 / 横向调整 / 看不出"。
+清单是盲审：不显示程序给的标签。产品负责人在 review.toml 的 result 填"保持 / 前压 / 后撤 / 横向调整 / 转点 / 看不出"。
 """
 
 from __future__ import annotations
@@ -28,7 +28,7 @@ sys.path.insert(0, str(ROOT))
 from cs2coach.config import load_config  # noqa: E402
 from cs2coach.parsing.loader import resolve_demo  # noqa: E402
 
-LABELS = {"保持": "hold", "前压": "advance", "后撤": "retreat", "横向调整": "lateral", "看不出": "unknown"}
+LABELS = {"保持": "hold", "前压": "advance", "后撤": "retreat", "横向调整": "lateral", "转点": "rotate", "看不出": "unknown"}
 NAMES = {value: key for key, value in LABELS.items()}
 KEY = ["demo_id", "round_id", "player_id", "start_tick"]
 
@@ -119,9 +119,10 @@ def build(args, root: Path, cfg: dict) -> Path:
     checklist += ["# 研究复核清单（盲审）", "",
                   "控制台先输入 `exec cs2coach_research` 一次。每条先输入 `p编号` 加载 demo，加载完成后输入 `r编号`，",
                   f"画面会停在 T 方第一个人阵亡前 {lead:g} 秒。切到指定 CT 选手的视角，看 T 阵亡后的 {review_window(cfg):g} 秒他做了什么，",
-                  "在 review.toml 的 result 填：保持 / 前压 / 后撤 / 横向调整 / 看不出；有特别情况写在 comment。", "",
-                  "- 保持：基本留在原来的位置", "- 前压：往 T 的方向、往接触区推进", "- 后撤：往自己的后方、纵深撤",
-                  "- 横向调整：换了位置，但没有明显往前或往后（如换到另一侧、去补另一个点）", "- 看不出：太短、太乱或无法判断", ""]
+                  "在 review.toml 的 result 填：保持 / 前压 / 后撤 / 横向调整 / 转点 / 看不出；有特别情况写在 comment。", "",
+                  "- 保持：留在自己防守的那片区域里（区域内换角度、补位、探头都算）", "- 前压：往 T 的方向、往接触区推进",
+                  "- 后撤：往自己的后方、纵深撤", "- 横向调整：换了位置，但没有明显往前或往后，也没有去另一个包点或区域",
+                  "- 转点：去补另一个包点或区域（如 A 区去 B 区、出生点去 B 区）", "- 看不出：太短、太乱或无法判断", ""]
     for index, row in enumerate(picked.to_dict("records"), 1):
         jump = max(0, int(row["start_tick"] - lead * row["tick_rate"]))
         stem = _stem(row["demo_id"])

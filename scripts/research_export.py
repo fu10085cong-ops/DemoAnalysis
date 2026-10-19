@@ -18,12 +18,14 @@ from cs2coach.config import load_config
 from cs2coach.features.visibility import Sight
 from cs2coach.parsing.loader import resolve_demo
 from cs2coach.parsing.match import parse_match
+from cs2coach.research.labels import label_window
 from cs2coach.research.models import BehaviourWindow, Situation
 from cs2coach.research.triggers import find_situations
 from cs2coach.research.windows import behaviour_windows
 
 ROOT = Path(__file__).resolve().parents[1]
 MANIFEST = ROOT / "src/cs2coach/baselines/pro_demos.toml"
+LABELS = ("hold", "advance", "retreat", "lateral", "rotate", "unknown")
 
 
 def _match_id(name: str) -> str:
@@ -105,14 +107,10 @@ def export(map_name: str, name: str, jobs: int, list_places: bool = False) -> tu
     output.mkdir(parents=True, exist_ok=True)
     _write_csv(output / "situations.csv", situations, Situation)
     _write_csv(output / "windows.csv", windows, BehaviourWindow)
-    labels = Counter(window.main_label for window in windows)
     matches = {_match_id(member or path.name) for path, member in entries}
     lines = ["# R01 Mirage CT 5v4 导出摘要", "", f"Demo 数：{len(entries)}",
              f"比赛数：{len(matches)}", f"触发回合数：{len(situations)}", f"窗口数：{len(windows)}",
-             "", "## 主标签", ""]
-    lines.extend(f"- {label}: {labels[label]}" for label in ("hold", "advance", "retreat", "lateral", "unknown"))
-    lines.extend(["", f"unknown 比例：{labels['unknown'] / len(windows):.1%}" if windows else "unknown 比例：无窗口",
-                  "", "## 跳过原因", ""])
+             "", *_label_lines(windows), "", "## 跳过原因", ""]
     lines.extend(f"- {reason}: {count}" for reason, count in sorted(skipped.items()))
     (output / "summary.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
     if list_places:
@@ -121,16 +119,59 @@ def export(map_name: str, name: str, jobs: int, list_places: bool = False) -> tu
     return output, places
 
 
+def _label_lines(windows: list[BehaviourWindow]) -> list[str]:
+    labels = Counter(window.main_label for window in windows)
+    lines = ["## 主标签", ""]
+    lines.extend(f"- {label}: {labels[label]}" for label in LABELS)
+    lines.extend(["", f"unknown 比例：{labels['unknown'] / len(windows):.1%}" if windows else "unknown 比例：无窗口"])
+    return lines
+
+
+def _read_windows(path: Path) -> list[BehaviourWindow]:
+    structured = {key for key, field in BehaviourWindow.model_fields.items()
+                  if any(kind in str(field.annotation) for kind in ("list", "tuple"))}
+    rows = []
+    with path.open(encoding="utf-8", newline="") as stream:
+        for row in csv.DictReader(stream):
+            values = {}
+            for key, value in row.items():
+                if value == "":
+                    continue
+                values[key] = json.loads(value) if key in structured else value
+            rows.append(BehaviourWindow(**values))
+    return rows
+
+
+def relabel(source: str, name: str) -> Path:
+    """只按当前配置重新打标签，不解析 demo（校准阈值和地点分组时用）。"""
+    cfg = load_config()
+    origin = ROOT / "data/research" / source
+    windows = _read_windows(origin / "windows.csv")
+    for window in windows:
+        window.main_label, window.aux_labels, window.label_confidence = label_window(window, cfg)
+    output = ROOT / "data/research" / name
+    output.mkdir(parents=True, exist_ok=True)
+    (output / "situations.csv").write_bytes((origin / "situations.csv").read_bytes())
+    _write_csv(output / "windows.csv", windows, BehaviourWindow)
+    lines = ["# R01 Mirage CT 5v4 导出摘要（只重新打标签）", "", f"来源：data/research/{source}",
+             f"窗口数：{len(windows)}", "", *_label_lines(windows)]
+    (output / "summary.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return output
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--map", default="de_mirage")
     parser.add_argument("--name", default="r01-dev")
     parser.add_argument("--jobs", type=int, default=load_config()["tools"]["jobs"])
     parser.add_argument("--list-places", action="store_true")
+    parser.add_argument("--relabel", metavar="来源导出名", help="只按当前配置重新打标签，不解析 demo")
     args = parser.parse_args()
     if args.jobs < 1 or not re.fullmatch(r"[A-Za-z0-9_-]+", args.name):
         parser.error("--jobs 须为正数，--name 只能含字母、数字、下划线和连字符")
-    if args.list_places:
+    if args.relabel:
+        print(relabel(args.relabel, args.name))
+    elif args.list_places:
         for place, count in list_places(args.map, args.jobs).most_common():
             print(f"{place}\t{count}")
     else:

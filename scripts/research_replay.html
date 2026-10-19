@@ -28,7 +28,6 @@ h2 { font-size: 16px; margin: 4px 0 8px }
 .answers { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin: 12px 0 8px }
 .answers button { padding: 10px; border-radius: 8px; border: 1px solid var(--line); background: #262b34; color: var(--fg); cursor: pointer; font-size: 15px }
 .answers button.on { border-color: var(--accent); background: #24443a }
-.answers button:last-child { grid-column: span 2 }
 textarea { width: 100%; height: 70px; background: #262b34; color: var(--fg); border: 1px solid var(--line); border-radius: 8px; padding: 6px }
 .legend { margin-top: 12px; color: var(--muted); font-size: 12px }
 .legend span { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin: 0 4px 0 0; vertical-align: middle }
@@ -67,7 +66,7 @@ textarea { width: 100%; height: 70px; background: #262b34; color: var(--fg); bor
 <script>
 const data = JSON.parse(document.getElementById("data").textContent);
 const radar = "data:image/png;base64,__RADAR__";
-const LABELS = ["保持", "前压", "后撤", "横向调整", "看不出"];
+const LABELS = ["保持", "前压", "后撤", "横向调整", "转点", "看不出"];
 const store = `research-review-${data.pack}`;
 let answers = {};
 try { answers = JSON.parse(localStorage.getItem(store) || "{}"); } catch (e) { answers = {}; }
@@ -195,7 +194,7 @@ document.addEventListener("keydown", e => {
   if (e.key === "ArrowDown" || e.key === "n") select(Math.min(data.items.length - 1, current + 1));
   if (e.key === "ArrowUp" || e.key === "p") select(Math.max(0, current - 1));
   const n = Number(e.key);
-  if (n >= 1 && n <= 5) $("answers").children[n - 1].click();
+  if (n >= 1 && n <= LABELS.length) $("answers").children[n - 1].click();
 });
 $("export").onclick = () => {
   const blob = new Blob([JSON.stringify({ pack: data.pack, results: answers }, null, 2)], { type: "application/json" });
