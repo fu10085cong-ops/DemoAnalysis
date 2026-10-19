@@ -1,6 +1,6 @@
 # R01 Mirage CT 首次 5v4：触发器、5 秒行为窗口与研究表
 
-状态：完成（导航退回修正后待重新导出）
+状态：完成
 难度：A（新模块：局势触发、逐 tick 窗口抽取、导航网格路径距离、初版行为标签）
 执行：Codex（思考强度 high）
 分支：`research/R01-ct-5v4-windows`
@@ -156,3 +156,4 @@
 - 现有 `data/research/r01-dev` 是修正前的导出，需要重新导出（解析 6 份 demo，`--jobs 2`，约 5–10 分钟）后再看 `unknown` 比例。
 - 区域纵深表：Claude 填写有把握的 17 个地点；`Truck`、`Ladder`、`House`、`BackAlley`、`SideAlley`、`Scaffolding` 待产品负责人确认。
 - 运行期间出现的 `.tmp-hltv-browser/`（Edge 用户数据，约 12 MB）不是本任务产生，未处理。
+- **重新导出（2026-10-19，`r01-v2`，8 进程，171 秒）**：26 份 Mirage demo、25 场比赛（新增 20 场来自 Hugging Face `opencs2_dataset_demo`，HLTV 镜像，清单见 `data/demos/pro_mirage/manifest.json`）。触发回合 297、窗口 1485；路径距离缺失 0；主标签 hold 372 / advance 279 / retreat 318 / lateral 146 / unknown 370（24.9%，其中 332 个落在阈值之间、38 个窗口不足 1 秒）。跳过：第一杀为 CT 阵亡 213、本回合无敌对击杀 1。战队分布不均：Spirit、Falcons 各 7 场，Aurora、MOUZ 各 5 场；赛事以 IEM Rio 2026（15 场）为主。
