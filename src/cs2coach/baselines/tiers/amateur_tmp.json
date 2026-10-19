@@ -1841,126 +1841,168 @@
     "slow_reaction": {
       "hits": 345,
       "rounds": 4930,
+      "evaluated": 2802,
+      "per_100_evaluated": 12.31,
       "per_10_rounds": 0.7,
       "player_share_pct": 77.0
     },
     "poor_crosshair_placement": {
       "hits": 526,
       "rounds": 4930,
+      "evaluated": 2314,
+      "per_100_evaluated": 22.73,
       "per_10_rounds": 1.07,
       "player_share_pct": 86.1
     },
     "shot_while_moving": {
       "hits": 283,
       "rounds": 4930,
+      "evaluated": 1193,
+      "per_100_evaluated": 23.72,
       "per_10_rounds": 0.57,
       "player_share_pct": 66.1
     },
     "peeked_into_held_angle": {
       "hits": 289,
       "rounds": 4930,
+      "evaluated": 2533,
+      "per_100_evaluated": 11.41,
       "per_10_rounds": 0.59,
       "player_share_pct": 69.1
     },
     "dry_peek_with_utility": {
       "hits": 93,
       "rounds": 4930,
+      "evaluated": 289,
+      "per_100_evaluated": 32.18,
       "per_10_rounds": 0.19,
       "player_share_pct": 33.5
     },
     "overpeek_in_advantage": {
       "hits": 44,
       "rounds": 4930,
+      "evaluated": 88,
+      "per_100_evaluated": 50.0,
       "per_10_rounds": 0.09,
       "player_share_pct": 17.4
     },
     "died_without_seeing": {
       "hits": 188,
       "rounds": 4930,
+      "evaluated": 196,
+      "per_100_evaluated": 95.92,
       "per_10_rounds": 0.38,
       "player_share_pct": 53.9
     },
     "saw_but_no_shot": {
       "hits": 114,
       "rounds": 4930,
+      "evaluated": 2250,
+      "per_100_evaluated": 5.07,
       "per_10_rounds": 0.23,
       "player_share_pct": 37.4
     },
     "turned_into_flash": {
       "hits": 153,
       "rounds": 4930,
+      "evaluated": 3501,
+      "per_100_evaluated": 4.37,
       "per_10_rounds": 0.31,
       "player_share_pct": 47.8
     },
     "died_while_reloading": {
       "hits": 16,
       "rounds": 4930,
+      "evaluated": 3459,
+      "per_100_evaluated": 0.46,
       "per_10_rounds": 0.03,
       "player_share_pct": 7.0
     },
     "missed_trade": {
       "hits": 214,
       "rounds": 4930,
+      "evaluated": 500,
+      "per_100_evaluated": 42.8,
       "per_10_rounds": 0.43,
       "player_share_pct": 56.1
     },
     "post_plant_utility_unused": {
       "hits": 17,
       "rounds": 4930,
+      "evaluated": 270,
+      "per_100_evaluated": 6.3,
       "per_10_rounds": 0.03,
       "player_share_pct": 6.5
     },
     "weapon_not_ready": {
       "hits": 159,
       "rounds": 4930,
+      "evaluated": 3501,
+      "per_100_evaluated": 4.54,
       "per_10_rounds": 0.32,
       "player_share_pct": 41.3
     },
     "awp_unscoped_shot": {
       "hits": 0,
       "rounds": 4930,
+      "evaluated": 65,
+      "per_100_evaluated": 0.0,
       "per_10_rounds": 0.0,
       "player_share_pct": 0.0
     },
     "deagle_moving_shot": {
       "hits": 11,
       "rounds": 4930,
+      "evaluated": 81,
+      "per_100_evaluated": 13.58,
       "per_10_rounds": 0.02,
       "player_share_pct": 3.9
     },
     "glock_long_range": {
       "hits": 5,
       "rounds": 4930,
+      "evaluated": 187,
+      "per_100_evaluated": 2.67,
       "per_10_rounds": 0.01,
       "player_share_pct": 2.2
     },
     "spray_control": {
       "hits": 129,
       "rounds": 4930,
+      "evaluated": 219,
+      "per_100_evaluated": 58.9,
       "per_10_rounds": 0.26,
       "player_share_pct": 41.3
     },
     "spray_while_moving": {
       "hits": 11,
       "rounds": 4930,
+      "evaluated": 366,
+      "per_100_evaluated": 3.01,
       "per_10_rounds": 0.02,
       "player_share_pct": 4.8
     },
     "good_trade": {
       "hits": 645,
       "rounds": 4930,
+      "evaluated": 0,
+      "per_100_evaluated": 0.0,
       "per_10_rounds": 1.31,
       "player_share_pct": 90.4
     },
     "flash_assist": {
       "hits": 109,
       "rounds": 4930,
+      "evaluated": 0,
+      "per_100_evaluated": 0.0,
       "per_10_rounds": 0.22,
       "player_share_pct": 30.4
     },
     "won_duel_seen_first": {
       "hits": 328,
       "rounds": 4930,
+      "evaluated": 0,
+      "per_100_evaluated": 0.0,
       "per_10_rounds": 0.67,
       "player_share_pct": 73.5
     }
@@ -10908,46 +10950,6 @@
         "q25": 14.37,
         "q75": 17.92
       },
-      "adr": {
-        "values": [
-          39.08,
-          53.3,
-          57.52,
-          65.73,
-          66.58,
-          68.39,
-          74.41,
-          78.57,
-          80.74,
-          81.03,
-          82.08,
-          96.68,
-          107.08
-        ],
-        "standard": 74.41,
-        "q25": 65.73,
-        "q75": 81.03
-      },
-      "adr_won": {
-        "values": [
-          40.81,
-          55.55,
-          57.51,
-          79.57,
-          85.69,
-          88.64,
-          92.82,
-          92.88,
-          93.37,
-          100.0,
-          108.32,
-          109.4,
-          129.73
-        ],
-        "standard": 92.82,
-        "q25": 79.57,
-        "q75": 100.0
-      },
       "blind_time_per_round": {
         "values": [
           0.29,
@@ -10967,37 +10969,6 @@
         "standard": 1.31,
         "q25": 0.5,
         "q75": 1.48
-      },
-      "clutch_1v1_win_pct": {
-        "values": [
-          75.0,
-          80.0,
-          100.0,
-          100.0
-        ],
-        "standard": 90.0,
-        "q25": 78.75,
-        "q75": 100.0
-      },
-      "clutch_win_pct": {
-        "values": [
-          0.0,
-          0.0,
-          9.52,
-          14.29,
-          15.0,
-          16.67,
-          16.67,
-          20.0,
-          23.08,
-          25.0,
-          28.0,
-          30.36,
-          44.44
-        ],
-        "standard": 16.67,
-        "q25": 14.29,
-        "q75": 25.0
       },
       "counter_strafing_pct": {
         "values": [
@@ -11119,66 +11090,6 @@
         "q25": 41.9,
         "q75": 52.46
       },
-      "kill_round_pct": {
-        "values": [
-          21.43,
-          37.8,
-          39.36,
-          40.62,
-          42.24,
-          42.68,
-          47.93,
-          48.36,
-          50.89,
-          54.17,
-          54.89,
-          57.74,
-          60.64
-        ],
-        "standard": 47.93,
-        "q25": 40.62,
-        "q75": 54.17
-      },
-      "kpr": {
-        "values": [
-          0.24,
-          0.43,
-          0.52,
-          0.52,
-          0.62,
-          0.63,
-          0.65,
-          0.68,
-          0.77,
-          0.79,
-          0.88,
-          0.88,
-          1.04
-        ],
-        "standard": 0.65,
-        "q25": 0.52,
-        "q75": 0.79
-      },
-      "kpr_won": {
-        "values": [
-          0.35,
-          0.53,
-          0.58,
-          0.76,
-          0.77,
-          0.8,
-          0.96,
-          0.96,
-          1.0,
-          1.05,
-          1.09,
-          1.22,
-          1.34
-        ],
-        "standard": 0.96,
-        "q25": 0.76,
-        "q75": 1.05
-      },
       "missed_trade_pct": {
         "values": [
           16.666666666666668,
@@ -11190,26 +11101,6 @@
         "standard": 40.0,
         "q25": 16.666666666666668,
         "q75": 55.0
-      },
-      "multikill_round_pct": {
-        "values": [
-          2.38,
-          4.88,
-          8.07,
-          9.57,
-          13.11,
-          14.79,
-          15.85,
-          18.75,
-          18.8,
-          20.71,
-          24.4,
-          26.39,
-          30.21
-        ],
-        "standard": 15.85,
-        "q25": 9.57,
-        "q75": 20.71
       },
       "opening_kills_per10": {
         "values": [
@@ -11230,21 +11121,6 @@
         "standard": 0.83,
         "q25": 0.61,
         "q75": 1.33
-      },
-      "opening_round_win_pct": {
-        "values": [
-          50.0,
-          58.33,
-          65.0,
-          71.43,
-          75.0,
-          75.86,
-          76.92,
-          93.33
-        ],
-        "standard": 73.215,
-        "q25": 63.332499999999996,
-        "q75": 76.125
       },
       "opening_win_pct": {
         "values": [
@@ -11497,46 +11373,6 @@
         "q25": 14.37,
         "q75": 17.92
       },
-      "adr": {
-        "values": [
-          39.08,
-          53.3,
-          57.52,
-          65.73,
-          66.58,
-          68.39,
-          74.41,
-          78.57,
-          80.74,
-          81.03,
-          82.08,
-          96.68,
-          107.08
-        ],
-        "standard": 74.41,
-        "q25": 65.73,
-        "q75": 81.03
-      },
-      "adr_won": {
-        "values": [
-          40.81,
-          55.55,
-          57.51,
-          79.57,
-          85.69,
-          88.64,
-          92.82,
-          92.88,
-          93.37,
-          100.0,
-          108.32,
-          109.4,
-          129.73
-        ],
-        "standard": 92.82,
-        "q25": 79.57,
-        "q75": 100.0
-      },
       "blind_time_per_round": {
         "values": [
           0.29,
@@ -11556,37 +11392,6 @@
         "standard": 1.31,
         "q25": 0.5,
         "q75": 1.48
-      },
-      "clutch_1v1_win_pct": {
-        "values": [
-          75.0,
-          80.0,
-          100.0,
-          100.0
-        ],
-        "standard": 90.0,
-        "q25": 78.75,
-        "q75": 100.0
-      },
-      "clutch_win_pct": {
-        "values": [
-          0.0,
-          0.0,
-          9.52,
-          14.29,
-          15.0,
-          16.67,
-          16.67,
-          20.0,
-          23.08,
-          25.0,
-          28.0,
-          30.36,
-          44.44
-        ],
-        "standard": 16.67,
-        "q25": 14.29,
-        "q75": 25.0
       },
       "counter_strafing_pct": {
         "values": [
@@ -11688,66 +11493,6 @@
         "q25": 41.9,
         "q75": 52.46
       },
-      "kill_round_pct": {
-        "values": [
-          21.43,
-          37.8,
-          39.36,
-          40.62,
-          42.24,
-          42.68,
-          47.93,
-          48.36,
-          50.89,
-          54.17,
-          54.89,
-          57.74,
-          60.64
-        ],
-        "standard": 47.93,
-        "q25": 40.62,
-        "q75": 54.17
-      },
-      "kpr": {
-        "values": [
-          0.24,
-          0.43,
-          0.52,
-          0.52,
-          0.62,
-          0.63,
-          0.65,
-          0.68,
-          0.77,
-          0.79,
-          0.88,
-          0.88,
-          1.04
-        ],
-        "standard": 0.65,
-        "q25": 0.52,
-        "q75": 0.79
-      },
-      "kpr_won": {
-        "values": [
-          0.35,
-          0.53,
-          0.58,
-          0.76,
-          0.77,
-          0.8,
-          0.96,
-          0.96,
-          1.0,
-          1.05,
-          1.09,
-          1.22,
-          1.34
-        ],
-        "standard": 0.96,
-        "q25": 0.76,
-        "q75": 1.05
-      },
       "missed_trade_pct": {
         "values": [
           15.79,
@@ -11766,26 +11511,6 @@
         "standard": 37.5,
         "q25": 27.957500000000003,
         "q75": 50.5
-      },
-      "multikill_round_pct": {
-        "values": [
-          2.38,
-          4.88,
-          8.07,
-          9.57,
-          13.11,
-          14.79,
-          15.85,
-          18.75,
-          18.8,
-          20.71,
-          24.4,
-          26.39,
-          30.21
-        ],
-        "standard": 15.85,
-        "q25": 9.57,
-        "q75": 20.71
       },
       "opening_kills_per10": {
         "values": [
@@ -11806,21 +11531,6 @@
         "standard": 0.83,
         "q25": 0.61,
         "q75": 1.33
-      },
-      "opening_round_win_pct": {
-        "values": [
-          50.0,
-          58.33,
-          65.0,
-          71.43,
-          75.0,
-          75.86,
-          76.92,
-          93.33
-        ],
-        "standard": 73.215,
-        "q25": 63.332499999999996,
-        "q75": 76.125
       },
       "opening_win_pct": {
         "values": [

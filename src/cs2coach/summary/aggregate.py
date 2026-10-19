@@ -39,7 +39,6 @@ class MatchSummary(BaseModel):
 
 
 class SummaryFrequencyRow(FrequencyRow):
-    matches_with_hits: int
     matches_above_pro: int
     by_map: dict[str, int]
 
@@ -81,6 +80,8 @@ def aggregate_matches(steamid: int, games: list[tuple[DemoRef, MatchMoments, Pro
     """聚合已解析的比赛；测试可用手工 MatchMoments/ProblemReport 验证口径。"""
     games = sorted(games, key=lambda item: item[0].match_id)
     counts: Counter[str] = Counter()
+    evaluated: Counter[str] = Counter()
+    has_evaluated = all("evaluated" in report.model_fields_set for _, _, report, _ in games)
     by_map: dict[str, Counter[str]] = {}
     with_hits: Counter[str] = Counter()
     above_pro: Counter[str] = Counter()
@@ -98,6 +99,7 @@ def aggregate_matches(steamid: int, games: list[tuple[DemoRef, MatchMoments, Pro
         disabled.update(report.disabled)
         local = Counter(hit.problem for hit in report.hits if hit.target != "match")
         counts.update(local)
+        evaluated.update(report.evaluated)
         by_map.setdefault(mm.map_name, Counter()).update(local)
         with_hits.update(pid for pid, count in local.items() if count > 0)
         local_frequency = problem_frequency(report, mm, baseline, cfg)
@@ -109,8 +111,10 @@ def aggregate_matches(steamid: int, games: list[tuple[DemoRef, MatchMoments, Pro
             deaths=sum(m.kind == "death" for m in mm.moments),
             assists=sum(m.kind == "assist" for m in mm.moments), aim_stats=mm.aim_stats,
             prominent_problems=[row.problem for row in local_frequency if row.prominent]))
-    base_rows = frequency_from_counts(counts, rounds_total, disabled, baseline, cfg)
-    frequency = [SummaryFrequencyRow(**row.model_dump(), matches_with_hits=with_hits[row.problem],
+    base_rows = frequency_from_counts(counts, rounds_total, disabled, baseline, cfg,
+                                      evaluated=evaluated if has_evaluated else None)
+    frequency = [SummaryFrequencyRow(**(row.model_dump() | {"matches_with_hits": with_hits[row.problem],
+        "matches": len(matches)}),
         matches_above_pro=above_pro[row.problem],
         by_map={name: group[row.problem] for name, group in sorted(by_map.items())
                 if group[row.problem] > 0}) for row in base_rows]

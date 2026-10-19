@@ -2926,126 +2926,168 @@
     "slow_reaction": {
       "hits": 155,
       "rounds": 5620,
+      "evaluated": 3024,
+      "per_100_evaluated": 5.13,
       "per_10_rounds": 0.28,
       "player_share_pct": 44.6
     },
     "poor_crosshair_placement": {
       "hits": 312,
       "rounds": 5620,
+      "evaluated": 2377,
+      "per_100_evaluated": 13.13,
       "per_10_rounds": 0.56,
       "player_share_pct": 67.3
     },
     "shot_while_moving": {
       "hits": 225,
       "rounds": 5620,
+      "evaluated": 1228,
+      "per_100_evaluated": 18.32,
       "per_10_rounds": 0.4,
       "player_share_pct": 55.0
     },
     "peeked_into_held_angle": {
       "hits": 233,
       "rounds": 5620,
+      "evaluated": 2439,
+      "per_100_evaluated": 9.55,
       "per_10_rounds": 0.41,
       "player_share_pct": 54.2
     },
     "dry_peek_with_utility": {
       "hits": 53,
       "rounds": 5620,
+      "evaluated": 232,
+      "per_100_evaluated": 22.84,
       "per_10_rounds": 0.09,
       "player_share_pct": 18.8
     },
     "overpeek_in_advantage": {
       "hits": 35,
       "rounds": 5620,
+      "evaluated": 77,
+      "per_100_evaluated": 45.45,
       "per_10_rounds": 0.06,
       "player_share_pct": 11.5
     },
     "died_without_seeing": {
       "hits": 189,
       "rounds": 5620,
+      "evaluated": 201,
+      "per_100_evaluated": 94.03,
       "per_10_rounds": 0.34,
       "player_share_pct": 53.1
     },
     "saw_but_no_shot": {
       "hits": 64,
       "rounds": 5620,
+      "evaluated": 2208,
+      "per_100_evaluated": 2.9,
       "per_10_rounds": 0.11,
       "player_share_pct": 21.5
     },
     "turned_into_flash": {
       "hits": 244,
       "rounds": 5620,
+      "evaluated": 3628,
+      "per_100_evaluated": 6.73,
       "per_10_rounds": 0.43,
       "player_share_pct": 57.3
     },
     "died_while_reloading": {
       "hits": 2,
       "rounds": 5620,
+      "evaluated": 3589,
+      "per_100_evaluated": 0.06,
       "per_10_rounds": 0.0,
       "player_share_pct": 0.8
     },
     "missed_trade": {
       "hits": 143,
       "rounds": 5620,
+      "evaluated": 448,
+      "per_100_evaluated": 31.92,
       "per_10_rounds": 0.25,
       "player_share_pct": 40.4
     },
     "post_plant_utility_unused": {
       "hits": 6,
       "rounds": 5620,
+      "evaluated": 325,
+      "per_100_evaluated": 1.85,
       "per_10_rounds": 0.01,
       "player_share_pct": 2.3
     },
     "weapon_not_ready": {
       "hits": 177,
       "rounds": 5620,
+      "evaluated": 3628,
+      "per_100_evaluated": 4.88,
       "per_10_rounds": 0.31,
       "player_share_pct": 41.5
     },
     "awp_unscoped_shot": {
       "hits": 2,
       "rounds": 5620,
+      "evaluated": 75,
+      "per_100_evaluated": 2.67,
       "per_10_rounds": 0.0,
       "player_share_pct": 0.8
     },
     "deagle_moving_shot": {
       "hits": 5,
       "rounds": 5620,
+      "evaluated": 91,
+      "per_100_evaluated": 5.49,
       "per_10_rounds": 0.01,
       "player_share_pct": 1.9
     },
     "glock_long_range": {
       "hits": 14,
       "rounds": 5620,
+      "evaluated": 249,
+      "per_100_evaluated": 5.62,
       "per_10_rounds": 0.02,
       "player_share_pct": 5.4
     },
     "spray_control": {
       "hits": 39,
       "rounds": 5620,
+      "evaluated": 102,
+      "per_100_evaluated": 38.24,
       "per_10_rounds": 0.07,
       "player_share_pct": 13.5
     },
     "spray_while_moving": {
       "hits": 4,
       "rounds": 5620,
+      "evaluated": 224,
+      "per_100_evaluated": 1.79,
       "per_10_rounds": 0.01,
       "player_share_pct": 1.5
     },
     "good_trade": {
       "hits": 697,
       "rounds": 5620,
+      "evaluated": 0,
+      "per_100_evaluated": 0.0,
       "per_10_rounds": 1.24,
       "player_share_pct": 88.5
     },
     "flash_assist": {
       "hits": 199,
       "rounds": 5620,
+      "evaluated": 0,
+      "per_100_evaluated": 0.0,
       "per_10_rounds": 0.35,
       "player_share_pct": 49.2
     },
     "won_duel_seen_first": {
       "hits": 304,
       "rounds": 5620,
+      "evaluated": 0,
+      "per_100_evaluated": 0.0,
       "per_10_rounds": 0.54,
       "player_share_pct": 65.8
     }

@@ -194,14 +194,17 @@ def problem_rates(mms: list[MatchMoments], baseline: dict, cfg: dict) -> dict:
     calibration = deepcopy(cfg)
     calibration["problems"]["disabled"] = []
     calibration["problems"]["spray_match_enabled"] = True
-    hits, players = Counter(), Counter()
+    hits, players, evaluated = Counter(), Counter(), Counter()
     for mm in mms:
         report = detect_problems(mm, baseline, calibration)
         counts = Counter(h.problem for h in report.hits if h.target != "match")
         hits.update(counts)
         players.update(counts.keys())
+        evaluated.update(report.evaluated)
     rounds = sum(mm.rounds_played for mm in mms)
     return {pid: {"hits": hits[pid], "rounds": rounds,
+                  "evaluated": evaluated[pid],
+                  "per_100_evaluated": round(100 * hits[pid] / evaluated[pid], 2) if evaluated[pid] else 0.0,
                   "per_10_rounds": round(10 * hits[pid] / rounds, 2) if rounds > 0 else 0.0,
                   "player_share_pct": round(100 * players[pid] / len(mms), 1) if mms else 0.0}
             for pid in DETECTED_PROBLEMS}

@@ -17,7 +17,7 @@ from cs2coach.features.labels import weapon_label
 from cs2coach.features.ladder import LadderResult, ladder_points, ladder_position
 from cs2coach.features.models import MatchMoments, Moment
 from cs2coach.features.panel import PANEL_METRICS, PanelCounts, panel_sample
-from cs2coach.features.problems import ProblemReport, _poisson_tail
+from cs2coach.features.problems import PROBLEMS, ProblemReport, _poisson_tail
 from cs2coach.features.radar import RADAR_METRICS, axis_values, median_axes, percentile, player_metrics, sample_count, typical_player_metrics
 from cs2coach.features.trades import trade_chance_skip
 from cs2coach.report.basic import problem_texts
@@ -73,6 +73,10 @@ class Row(BaseModel):
     unit: str
     measure: str = ""  # 这个数是什么，页面上显示在名称下面
     expected: float | None = None  # 问题：按目标分段的频率，这些回合里应有的次数
+    per_10_rounds: float | None = None
+    opportunity_label: str | None = None
+    matches_with_hits: int | None = None
+    matches: int | None = None
     percentile: float | None = None
     ladder: LadderResult | None = None
     samples: int = 0
@@ -251,15 +255,29 @@ def _rows(games, frequency, cfg, tier, ladder=None, target_level=None, points_by
     rates = tier.get("problem_rates", {})
 
     def expected(row):
-        return _expected_hits(rates.get(row.problem, {}), rounds)
+        return _expected_hits(rates.get(row.problem, {}), rounds, row.evaluated)
+
+    def candidate_key(row):
+        exp = expected(row)
+        excess = row.hits - exp
+        repeat = (row.matches_with_hits / row.matches
+                  if row.matches and row.matches_with_hits is not None else 0)
+        focusable = (len(games) > 1 and row.matches and row.matches_with_hits is not None
+                     and repeat >= cfg["problems"]["focus_min_match_share"]
+                     and excess >= radar["problem_min_excess"]
+                     and _poisson_tail(row.hits, exp) < cfg["problems"]["frequency_max_chance"])
+        return (not focusable if len(games) > 1 else False, -excess, -repeat, -row.hits, row.problem)
 
     candidates = sorted((r for r in frequency if r.hits > 0 and
                          (e := expected(r)) is not None and r.hits > e),
-                        key=lambda r: (-(r.hits - expected(r)), -r.hits, r.problem))[:radar["max_problems"]]
+                        key=candidate_key)[:radar["max_problems"]]
     for row in candidates:
         exp = expected(row)
         rate = rates[row.problem]
-        target = rate.get("per_10_rounds", 10 * rate["hits"] / rate["rounds"])
+        opportunity = (row.evaluated is not None and row.evaluated > 0
+                       and rate.get("evaluated", 0) > 0)
+        target = (100 * rate["hits"] / rate["evaluated"] if opportunity else
+                  rate.get("per_10_rounds", 10 * rate["hits"] / rate["rounds"]))
         excess = row.hits - exp
         severity = ("bad" if _poisson_tail(row.hits, exp) < cfg["problems"]["frequency_max_chance"]
                     and excess >= radar["problem_min_excess"] else "warn" if excess > 0 else "ok")
@@ -283,7 +301,14 @@ def _rows(games, frequency, cfg, tier, ladder=None, target_level=None, points_by
         unique = {(e.match_label, e.round, e.tick): e for e in examples}
         why = texts.get(row.problem, {}).get("why", "")
         problems.append(Row(id=row.problem, name=row.label, axis=_axis(PROBLEM_METRICS.get(row.problem), axes),
-            you=row.per_10_rounds, target=target, unit="次", measure=PROBLEM_MEASURE, count=row.hits,
+            you=100 * row.hits / row.evaluated if opportunity else row.per_10_rounds,
+            target=target, unit="次",
+            measure=f"每 100 次{PROBLEMS[row.problem].opportunity_label}出现的次数"
+                    if opportunity else PROBLEM_MEASURE,
+            per_10_rounds=row.per_10_rounds,
+            opportunity_label=PROBLEMS[row.problem].opportunity_label if opportunity else None,
+            matches_with_hits=row.matches_with_hits, matches=row.matches,
+            count=row.hits,
             expected=exp, severity=severity, evidence_ticks=evidence_ticks,
             text=why.split("。", 1)[0] + ("。" if why else ""), examples=list(unique.values())[:limit]))
     strengths = []
@@ -331,12 +356,33 @@ def _rows(games, frequency, cfg, tier, ladder=None, target_level=None, points_by
     return strengths, problems
 
 
-def _expected_hits(rate: dict, rounds: int) -> float | None:
+def _expected_hits(rate: dict, rounds: int, evaluated: int | None = None) -> float | None:
     """与现有问题汇总共用段位预期口径。"""
+    if evaluated is not None and rate.get("evaluated", 0) > 0:
+        hits = rate.get("hits")
+        if hits is None or hits < 0:
+            return None
+        return evaluated * hits / rate["evaluated"]
     hits, total = rate.get("hits"), rate.get("rounds")
     if hits is None or hits < 0 or total is None or total <= 0:
         return None
     return rounds * (hits if hits else 0.5) / total
+
+
+def _focus_problem(kind, bad, cfg):
+    """多场先要求跨场重复，再按多出次数和重复率选择。"""
+    if kind == "match":
+        return max(bad, key=lambda row: row.count - row.expected) if bad else None
+    eligible = [row for row in bad if not row.matches or row.matches_with_hits is None
+                or row.matches_with_hits / row.matches >= cfg["problems"]["focus_min_match_share"]]
+    return max(eligible, key=lambda row: (row.count - row.expected,
+               row.matches_with_hits / row.matches if row.matches and row.matches_with_hits is not None else 0)) if eligible else None
+
+
+def _scarce_problem(kind, bad):
+    if kind == "match" or not bad:
+        return None
+    return max(bad, key=lambda row: row.count - row.expected)
 
 
 def _pro_verdict_suffix(kind, games, frequency, cfg, tier, tiers, problems) -> str:
@@ -348,7 +394,10 @@ def _pro_verdict_suffix(kind, games, frequency, cfg, tier, tiers, problems) -> s
     bad = [row for row in pro_problems if row.severity == "bad"]
     if not bad:
         return ""
-    top = max(bad, key=lambda row: row.count - row.expected)
+    top = _focus_problem(kind, bad, cfg)
+    if top is None:
+        scarce = _scarce_problem(kind, bad)
+        return f"相对职业，{scarce.name}偏多，但集中在少数几场。"
     scope = "这场" if kind == "match" else f"{len(games)} 场里"
     return (f"相对职业，最该练的是{top.name}：{scope}出现 {top.count} 次，"
             f"按职业的频率约 {round(top.expected)} 次。")
@@ -357,10 +406,11 @@ def _pro_verdict_suffix(kind, games, frequency, cfg, tier, tiers, problems) -> s
 def _verdict(kind, games, tier_name, problems, axes, values, cfg, pro_suffix=""):
     bad = [row for row in problems if row.severity == "bad"]
     if bad:
-        top = max(bad, key=lambda row: row.count - row.expected)
+        top = _focus_problem(kind, bad, cfg)
         scope = "这场" if kind == "match" else f"{len(games)} 场里"
         verdict = (f"相对{tier_name}，最该练的是{top.name}：{scope}出现 {top.count} 次，"
-                   f"按{tier_name}的频率约 {round(top.expected)} 次。")
+                   f"按{tier_name}的频率约 {round(top.expected)} 次。" if top else
+                   f"相对{tier_name}，{_scarce_problem(kind, bad).name}偏多，但集中在少数几场。")
     else:
         period = "这场" if kind == "match" else "这段时间"
         verdict = f"相对{tier_name}，{period}没有明显偏多的问题。" + pro_suffix
@@ -379,9 +429,10 @@ def _verdict(kind, games, tier_name, problems, axes, values, cfg, pro_suffix="")
 def _ladder_verdict(games, tier, problems, axes, results, cfg, pro_suffix=""):
     bad = [row for row in problems if row.severity == "bad"]
     if bad:
-        top = max(bad, key=lambda row: row.count - row.expected)
+        top = _focus_problem("summary", bad, cfg)
         verdict = (f"相对{tier['name']}，最该练的是{top.name}：{len(games)} 场里出现 {top.count} 次，"
-                   f"按{tier['name']}的频率约 {round(top.expected)} 次。")
+                   f"按{tier['name']}的频率约 {round(top.expected)} 次。" if top else
+                   f"相对{tier['name']}，{_scarce_problem('summary', bad).name}偏多，但集中在少数几场。")
     else:
         verdict = f"相对{tier['name']}，这段时间没有明显偏多的问题。" + pro_suffix
     valid = [(axis["name"], results[axis["id"]]) for axis in axes

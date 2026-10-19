@@ -288,6 +288,8 @@ spray_match_enabled = false
 frequency_max_chance = 0.05
 # 相比职业频率预期至少多出几次才算突出
 frequency_min_excess = 2
+# 多场问题至少在该比例的场次出现，才进入“最该练”候选
+focus_min_match_share = 0.3
 # AWP 超过此距离的未开镜射击参与检测（米，待用数据校准）
 awp_noscope_max_distance_m = 5.0
 # 单次交火压枪评价从第 4 发开始，recoil_index 从 0 起算
@@ -859,4 +861,5 @@ server_fallback = true
 
 [tools]
 # 逐场处理的脚本同时运行的进程数；每个进程约占 1.3 GB 内存
-jobs = 6
+# 2026-10-19 产品负责人要求尽量少占 CPU：默认 2，需要快时用 --jobs 指定
+jobs = 2

@@ -7,7 +7,7 @@ import math
 from collections import Counter
 from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from cs2coach.baseline import EXCLUDED_TAGS, engagement_weapon, spray_segments, spray_stats, weapon_threshold
 from cs2coach.features.crosshair import active_exclusions
@@ -23,6 +23,7 @@ class ProblemSpec(BaseModel):
     category: Literal["aim", "duel", "utility_team", "weapon", "highlight"]
     applies_to: list[Literal["kill", "death", "assist", "round", "match"]]
     reliability: Literal["high", "medium", "low"]
+    opportunity_label: str = "可判断的交火"
 
 
 class ProblemHit(BaseModel):
@@ -38,6 +39,7 @@ class ProblemReport(BaseModel):
     disabled: list[str]
     skipped: dict[str, int]
     baseline_source: str | None
+    evaluated: dict[str, int] = Field(default_factory=dict)
 
 
 class FrequencyRow(BaseModel):
@@ -52,6 +54,10 @@ class FrequencyRow(BaseModel):
     excess_hits: float | None = None
     chance: float | None = None
     needs_more_matches: bool = False
+    evaluated: int | None = None
+    per_100_evaluated: float | None = None
+    matches_with_hits: int | None = None
+    matches: int | None = None
 
 
 # 登记目录的全部编号；仅下方 detect_problems 中明确实现的规则参与检测。
@@ -84,7 +90,9 @@ _SPECS = [
     ("glock_long_range", "用 Glock 远距离对枪", "weapon", ["death"], "medium"),
     ("other", "AI 判断，无程序依据", "duel", ["kill", "death", "assist", "round", "match"], "low"),
 ]
-PROBLEMS: dict[str, ProblemSpec] = {pid: ProblemSpec(id=pid, label=label, category=cat, applies_to=kinds, reliability=rel)
+PROBLEMS: dict[str, ProblemSpec] = {pid: ProblemSpec(id=pid, label=label, category=cat, applies_to=kinds,
+                                                    reliability=rel,
+                                                    opportunity_label="补枪机会" if pid == "missed_trade" else "可判断的交火")
             for pid, label, cat, kinds, rel in _SPECS}
 # 用户确认：频率只统计实际实现的规则，待开发、仅登记及 other 不作零频率比较。
 DETECTED_PROBLEMS = (
@@ -128,21 +136,32 @@ def detect_problems(mm: MatchMoments, baseline: dict | None, cfg: dict) -> Probl
     disabled = list(p["disabled"])
     hits: list[ProblemHit] = []
     skipped: Counter = Counter()
+    evaluated: Counter = Counter()
     automatic = cfg["baseline"]["automatic_weapons"]
 
     def missing(pid):
         if pid not in disabled:
             skipped[pid] += 1
 
+    def excluded(pid, moment):
+        active = active_exclusions(moment, p)
+        return [condition for condition, ids in p["exclusions"].items()
+                if condition in active and pid in ids]
+
+    def consider(pid, moment=None):
+        # 未命中也经过同一套排除条件；被排除的对象不是可判断机会。
+        if pid not in disabled and PROBLEMS[pid].category != "highlight" and not excluded(pid, moment):
+            evaluated[pid] += 1
+
     def emit(pid, target, weapon, evidence, thresholds=None, moment=None):
         if pid not in disabled:
-            excluded = active_exclusions(moment, p)
-            reasons = [condition for condition, ids in p["exclusions"].items()
-                       if condition in excluded and pid in ids]
+            reasons = excluded(pid, moment)
             if reasons:
                 for reason in reasons:
                     skipped[f"{pid}/{reason}"] += 1
                 return
+            if target != "match" and PROBLEMS[pid].category != "highlight":
+                evaluated[pid] += 1
             hits.append(ProblemHit(problem=pid, target=target, weapon=weapon,
                                    evidence={"weapon": weapon, **evidence}, thresholds=thresholds or {}))
 
@@ -181,9 +200,11 @@ def detect_problems(mm: MatchMoments, baseline: dict | None, cfg: dict) -> Probl
                             if m.kind == "kill" and not _finite(opp):
                                 # 035：击杀了根本没打到你的对手，出枪慢不值得提醒（第三轮审计）
                                 skipped["slow_reaction/opponent_no_damage"] += 1
+                                consider("slow_reaction", m)
                             elif m.kind == "kill" and opp >= ttd:
                                 # 037：击杀时对手出枪比自己还慢，慢也没有代价（第四轮审计 2026-10-17）
                                 skipped["slow_reaction/opponent_slower"] += 1
+                                consider("slow_reaction", m)
                             elif m.kind == "kill" or opp < ttd:
                                 hit("slow_reaction", {"seen_to_first_shot_ms": react * 1000,
                                     "first_shot_to_damage_ms": (e.first_shot_to_damage_s * 1000
@@ -195,6 +216,10 @@ def detect_problems(mm: MatchMoments, baseline: dict | None, cfg: dict) -> Probl
                                     {"seen_to_first_shot_ms": limit, "margin_ratio": p["slow_reaction_margin_ratio"],
                                      "source": "pro_p75", "ttd_max_seconds": cap,
                                      "ttd_max_source": "config"})
+                            else:
+                                consider("slow_reaction", m)
+                        elif limit is not None:
+                            consider("slow_reaction", m)
                 cp = e.crosshair_initial_offset_m
                 if w not in cfg["aim_stats"]["weapons"]:
                     if "poor_crosshair_placement" not in disabled:
@@ -207,12 +232,14 @@ def detect_problems(mm: MatchMoments, baseline: dict | None, cfg: dict) -> Probl
                         # 035：近身遭遇的准星偏差不值得提醒（第三轮审计）；距离缺失时照常判
                         if c is not None and _finite(c.distance) and c.distance < p["crosshair_min_distance_m"]:
                             skipped["poor_crosshair_placement/close_range"] += 1
+                            consider("poor_crosshair_placement", m)
                         elif (m.kind == "kill" and _finite(e.seen_to_first_shot_s)
                               and (react_limit := weapon_threshold(baseline, w, "seen_to_first_shot_ms", "p75")) is not None
                               and e.seen_to_first_shot_s * 1000 <= react_limit):
                             # 037：击杀时"看见 → 开枪"不慢于职业 p75，准星偏了也没有代价（第四轮审计 2026-10-17）；
                             # 阈值取不到时照常判，死亡瞬间不受影响
                             skipped["poor_crosshair_placement/no_cost"] += 1
+                            consider("poor_crosshair_placement", m)
                         else:
                             hit("poor_crosshair_placement", {
                                 "crosshair_initial_offset_m": cp,
@@ -222,6 +249,8 @@ def detect_problems(mm: MatchMoments, baseline: dict | None, cfg: dict) -> Probl
                                 "distance_m": c.distance if c is not None else None},
                                 {"crosshair_initial_offset_m": limit, "margin_ratio": p["crosshair_margin_ratio"],
                                  "source": "pro_p75"})
+                    elif limit is not None:
+                        consider("poor_crosshair_placement", m)
 
                 if w in automatic and (not _finite(c.distance) or c.distance <= p["spray_max_distance_m"]):
                     eligible = [s for s in e.shots if s.weapon == w and _finite(s.recoil_index)
@@ -247,6 +276,8 @@ def detect_problems(mm: MatchMoments, baseline: dict | None, cfg: dict) -> Probl
                                      "margin_pct": p["spray_margin_pct"], "min_shots": p["spray_min_late_shots"],
                                     "min_recoil_index": p["spray_late_recoil_index"],
                                     "max_distance_m": p["spray_max_distance_m"], "limits_source": "config"})
+                            else:
+                                consider("spray_control", m)
 
         if m.kind == "death":
             # 死时还在被闪白，开不了枪，不算犹豫（039 审查补充）
@@ -259,6 +290,10 @@ def detect_problems(mm: MatchMoments, baseline: dict | None, cfg: dict) -> Probl
                     "opponent_ttd_ms": (e.opponent_time_to_damage_s * 1000
                                         if _finite(e.opponent_time_to_damage_s) else None)},
                     {"min_seen_seconds": p["no_shot_min_seen_seconds"], "source": "config"})
+            elif (e is not None and d is not None and d.blinded is False and holding_gun
+                  and e.visibility_note is None and e.seen_to_death_s is not None
+                  and d.shots_last_2s is not None):
+                consider("saw_but_no_shot", m)
             if e is not None:
                 if e.shots and (e.first_seen_shot_stopped is None or e.first_seen_shot_hit is None):
                     missing("shot_while_moving")
@@ -278,6 +313,9 @@ def detect_problems(mm: MatchMoments, baseline: dict | None, cfg: dict) -> Probl
                         "first_seen_shot_speed_ratio": first_seen.speed_ratio},
                         {"min_speed_ratio": speed_limit, "weapon_name": weapon_label(shot_weapon), "source": "config"},
                         weapon=shot_weapon)
+                elif (e.first_seen_shot_stopped is not None and e.first_seen_shot_hit is not None
+                      and speed_limit is not None and first_seen is not None and _finite(first_seen.speed_ratio)):
+                    consider("shot_while_moving", m)
                 if e.contact_type == "peek":
                     hit("peeked_into_held_angle", {"contact_type": e.contact_type})
                     if d is None:
@@ -287,6 +325,8 @@ def detect_problems(mm: MatchMoments, baseline: dict | None, cfg: dict) -> Probl
                     if d is not None and set(p["dry_peek_grenades"]).intersection(d.unused_grenades) and e.opponent_blind is None:
                         hit("dry_peek_with_utility", {"contact_type": e.contact_type,
                             "unused_grenades": _json(d.unused_grenades), "opponent_blind": None})
+                    elif d is not None and e.opponent_blind is None:
+                        consider("dry_peek_with_utility", m)
                     # CT 已下包时必须去拆包，拉出是被迫的
                     forced_retake = c.side == "CT" and c.bomb_planted
                     # 035：T 方未下包的开局阶段拉出是正常进点（第三轮审计），CT 不受影响
@@ -297,6 +337,10 @@ def detect_problems(mm: MatchMoments, baseline: dict | None, cfg: dict) -> Probl
                     if ("man_advantage" in m.tags and m.trade is not None and m.trade.traded is False
                             and not forced_retake and not t_early_round and not t_hunting_last):
                         hit("overpeek_in_advantage", {"man_advantage": True, "contact_type": e.contact_type, "traded": False})
+                    elif "man_advantage" in m.tags and m.trade is not None and m.trade.traded is not None:
+                        consider("overpeek_in_advantage", m)
+                elif e.contact_type is not None:
+                    consider("peeked_into_held_angle", m)
                 if (shot_weapon == "deagle" and e.first_seen_shot_stopped is False and
                         first_seen is not None and _finite(first_seen.speed_ratio) and
                         first_seen.speed_ratio >= speed_limit):
@@ -304,6 +348,9 @@ def detect_problems(mm: MatchMoments, baseline: dict | None, cfg: dict) -> Probl
                         "first_seen_shot_speed_ratio": first_seen.speed_ratio},
                         {"min_speed_ratio": speed_limit, "weapon_name": weapon_label(shot_weapon), "source": "config"},
                         weapon=shot_weapon)
+                elif (shot_weapon == "deagle" and e.first_seen_shot_stopped is not None
+                      and first_seen is not None and _finite(first_seen.speed_ratio) and speed_limit is not None):
+                    consider("deagle_moving_shot", m)
                 if w == "awp" and e.shots:
                     first = min(e.shots, key=lambda s: s.tick)
                     if first.scoped is False and not _finite(c.distance):
@@ -311,6 +358,8 @@ def detect_problems(mm: MatchMoments, baseline: dict | None, cfg: dict) -> Probl
                     elif first.scoped is False and c.distance > p["awp_noscope_max_distance_m"]:
                         hit("awp_unscoped_shot", {"first_shot_tick": first.tick, "scoped": first.scoped,
                             "distance_m": c.distance}, {"distance_m": p["awp_noscope_max_distance_m"], "source": "config"})
+                    elif first.scoped is not None and (first.scoped or _finite(c.distance)):
+                        consider("awp_unscoped_shot", m)
                 if w in automatic:
                     moving = [s for s in e.shots if s.weapon == w and _finite(s.recoil_index)
                               and s.recoil_index >= p["spray_moving_min_recoil_index"]
@@ -327,6 +376,8 @@ def detect_problems(mm: MatchMoments, baseline: dict | None, cfg: dict) -> Probl
                                     "shot_stopped": _json([s.stopped for s in moving])},
                                     {"moving_ratio": p["spray_moving_ratio"], "min_shots": p["spray_moving_min_shots"],
                                      "min_recoil_index": p["spray_moving_min_recoil_index"], "source": "config"})
+                            else:
+                                consider("spray_while_moving", m)
 
             # 只算"对手在屏幕外"：双方有视线但对手不在本人屏幕内（侧面或背后）。完全没有几何视线却被打死
             # 多半是几何误差，不判（2026-10-17 审计：189/197 属于前者；游戏内确认 3/3）
@@ -334,6 +385,8 @@ def detect_problems(mm: MatchMoments, baseline: dict | None, cfg: dict) -> Probl
                     and e is not None and e.opponent_off_screen is True):
                 hit("died_without_seeing", {"died_without_seeing": True, "opponent_off_screen": True,
                     "wallbang": m.wallbang, "through_smoke": m.through_smoke, "blinded": d.blinded})
+            elif d is not None and d.blinded is False and e is not None and e.opponent_off_screen is not None:
+                consider("died_without_seeing", m)
             blind = e.player_blind if e is not None else None
             if blind is not None:
                 if blind.blinded_at_event and blind.thrower_role is None:
@@ -341,11 +394,15 @@ def detect_problems(mm: MatchMoments, baseline: dict | None, cfg: dict) -> Probl
                 if blind.blinded_at_event and blind.thrower_role in ("opponent", "enemy"):
                     hit("turned_into_flash", {"blind_source": "engagement.player_blind",
                         "blinded_at_event": blind.blinded_at_event, "thrower_role": blind.thrower_role})
+                elif not blind.blinded_at_event or blind.thrower_role is not None:
+                    consider("turned_into_flash", m)
             elif d is not None and d.blinded and d.blinded_by_teammate is False:
                 hit("turned_into_flash", {"blind_source": "death", "player_blind": None,
                     "blinded": d.blinded, "blinded_by_teammate": d.blinded_by_teammate})
             elif d is not None and d.blinded and d.blinded_by_teammate is None:
                 missing("turned_into_flash")
+            elif d is not None and d.blinded is not None:
+                consider("turned_into_flash", m)
             if d is not None and d.reloading_at_death:
                 if d.ammo_before_reload is None or d.magazine_size is None:
                     missing("died_while_reloading")
@@ -360,13 +417,21 @@ def detect_problems(mm: MatchMoments, baseline: dict | None, cfg: dict) -> Probl
                         {"min_ammo_left": p["reload_min_ammo_left"],
                          "min_ammo_fraction": p["reload_min_ammo_fraction"],
                          "min_seconds": p["reload_min_seconds"], "source": "config"})
+                elif d.reload_started_s is not None:
+                    consider("died_while_reloading", m)
+            elif d is not None and d.reloading_at_death is False:
+                consider("died_while_reloading", m)
             if (d is not None and c.side == "T" and c.bomb_planted and {"molotov", "incgrenade"}.intersection(d.unused_grenades)
                     and _finite(c.seconds_since_plant) and c.seconds_since_plant >= p["post_plant_min_alive_seconds"]):
                 hit("post_plant_utility_unused", {"side": c.side, "bomb_planted": c.bomb_planted,
                     "unused_grenades": _json(d.unused_grenades), "seconds_since_plant": c.seconds_since_plant},
                     {"min_alive_seconds": p["post_plant_min_alive_seconds"], "source": "config"})
+            elif d is not None and c.side == "T" and c.bomb_planted and _finite(c.seconds_since_plant):
+                consider("post_plant_utility_unused", m)
             if "weapon_not_ready" in m.tags:
                 hit("weapon_not_ready", {"weapon_not_ready": True})
+            else:
+                consider("weapon_not_ready", m)
             if w == "glock":
                 if not _finite(c.distance):
                     missing("glock_long_range")
@@ -375,6 +440,8 @@ def detect_problems(mm: MatchMoments, baseline: dict | None, cfg: dict) -> Probl
                     # m.weapon 是击杀者的武器：Glock 对 Glock 远距离对枪是对称的，不算失误
                     if limit is not None and c.distance > limit and m.weapon in p["glock_long_range_opponent_weapons"]:
                         hit("glock_long_range", {"distance_m": c.distance}, {"distance_m": limit, "source": "pro_p90"})
+                    elif limit is not None:
+                        consider("glock_long_range", m)
 
         if m.kind == "kill":
             if "trade_kill" in m.tags:
@@ -389,6 +456,10 @@ def detect_problems(mm: MatchMoments, baseline: dict | None, cfg: dict) -> Probl
         if m.kind == "assist" and m.assist is not None and m.assist.flash_assist:
             hit("flash_assist", {"flash_assist": True})
 
+    # 补上的机会也是可判断样本；漏补记录只包含没有由本人补上的机会。
+    for record in mm.trade_chances:
+        if record.traded_by_me and trade_chance_skip(record, cfg) is None:
+            consider("missed_trade")
     for record in mm.missed_trades:
         reason = trade_chance_skip(record, cfg)
         if reason is not None:
@@ -414,6 +485,7 @@ def detect_problems(mm: MatchMoments, baseline: dict | None, cfg: dict) -> Probl
                      "margin_pct": p["spray_margin_pct"], "min_shots": p["spray_min_segment_shots"], "limits_source": "config"})
 
     return ProblemReport(hits=hits, disabled=disabled, skipped=dict(sorted(skipped.items())),
+                         evaluated=dict(sorted(evaluated.items())),
                          baseline_source=baseline.get("source") if baseline is not None else None)
 
 
@@ -443,11 +515,13 @@ def problem_frequency(report: ProblemReport, mm: MatchMoments, baseline: dict | 
     """每十回合的问题频率与职业对比；不含整场目标、停用项和亮点。"""
     counts = Counter(h.problem for h in report.hits if h.target != "match")
     disabled = set(report.disabled) | set(cfg["problems"]["disabled"])
-    return frequency_from_counts(counts, mm.rounds_played, disabled, baseline, cfg)
+    return frequency_from_counts(counts, mm.rounds_played, disabled, baseline, cfg,
+                                 evaluated=report.evaluated if "evaluated" in report.model_fields_set else None)
 
 
 def frequency_from_counts(counts: Counter, rounds: int, disabled: set[str],
-                          baseline: dict | None, cfg: dict) -> list[FrequencyRow]:
+                          baseline: dict | None, cfg: dict,
+                          evaluated: dict[str, int] | None = None) -> list[FrequencyRow]:
     """单场与多场共用的频率、职业预期及突出判断。"""
     rates = baseline.get("problem_rates", {}) if baseline is not None else {}
     rows = []
@@ -462,16 +536,25 @@ def frequency_from_counts(counts: Counter, rounds: int, disabled: set[str],
         valid_rate = (_finite(pro_hits) and _finite(pro_rounds) and
                       pro_hits >= 0 and pro_rounds > 0)
         pro = 10 * pro_hits / pro_rounds if valid_rate else None
-        expected = rounds * pro_hits / pro_rounds if valid_rate else None
+        opportunities = evaluated.get(pid, 0) if evaluated is not None else None
+        valid_opportunity_rate = (_finite(pro_hits) and _finite(rate.get("evaluated"))
+                                  and pro_hits >= 0 and rate["evaluated"] > 0
+                                  and opportunities is not None)
+        expected = (opportunities * pro_hits / rate["evaluated"] if valid_opportunity_rate else
+                    rounds * pro_hits / pro_rounds if valid_rate else None)
         excess = hits - expected if expected is not None else None
         chance = (_poisson_tail(hits, expected) if expected is not None and expected > 0
-                  and rounds > 0 else None)
-        ratio = frequency / pro if pro is not None and pro > 0 else None
+                  and (opportunities > 0 if valid_opportunity_rate else rounds > 0) else None)
+        ratio = ((hits / opportunities) / (pro_hits / rate["evaluated"])
+                 if valid_opportunity_rate and opportunities > 0 and pro_hits > 0 else
+                 frequency / pro if pro is not None and pro > 0 else None)
         prominent = (chance is not None and chance < cfg["problems"]["frequency_max_chance"]
                      and excess >= cfg["problems"]["frequency_min_excess"])
         rows.append(FrequencyRow(problem=pid, label=spec.label, hits=hits, per_10_rounds=frequency,
             pro_per_10_rounds=pro, ratio=ratio, prominent=prominent,
             expected_hits=expected, excess_hits=excess, chance=chance,
+            evaluated=opportunities,
+            per_100_evaluated=100 * hits / opportunities if opportunities else None,
             needs_more_matches=excess is not None and excess > 0 and not prominent))
     return sorted(rows, key=lambda row: (not row.prominent,
                   -row.excess_hits if row.excess_hits is not None else math.inf))

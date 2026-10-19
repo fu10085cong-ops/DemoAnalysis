@@ -266,7 +266,11 @@ function drawList(id, list, problems) {
     dot.title = {bad: "差距较大", warn: "需要关注", ok: "达到基准"}[severity];
     const name = node("span", item.name, "name");
     const axis = page.axes.find(axis => axis.id === item.axis)?.name || "";
-    name.append(node("small", [item.measure, problems && item.count ? `共 ${item.count} 次` : ""].filter(Boolean).join(" · ")));
+    const extra = problems && item.opportunity_label
+      ? [`每 10 回合 ${number(item.per_10_rounds)} 次`,
+         item.matches != null ? `${item.matches} 场里 ${item.matches_with_hits} 场出现` : ""]
+      : [item.measure, problems && item.count ? `共 ${item.count} 次` : ""];
+    name.append(node("small", extra.filter(Boolean).join(" · ")));
     const bar = node("span", null, "bar");
     bar.title = `你 ${withUnit(item.you, item.unit)}，分段 ${withUnit(target, item.unit)}`;
     const max = Math.max(item.you, target ?? 0, 1e-9) * 1.15;
@@ -280,7 +284,13 @@ function drawList(id, list, problems) {
       bar.append(marker);
     }
     const rate = node("span", null, "rate");
-    rate.append(node("span", "你 "), withUnit(item.you, item.unit), node("span", ` · 分段 ${withUnit(target, item.unit)}`), node("span", " ▶", "chev"));
+    if (problems && item.opportunity_label) {
+      rate.append(node("span", `每 100 次${item.opportunity_label}出现 `),
+        withUnit(item.you, item.unit), node("span", ` · 分段 ${withUnit(target, item.unit)}`));
+    } else {
+      rate.append(node("span", "你 "), withUnit(item.you, item.unit), node("span", ` · 分段 ${withUnit(target, item.unit)}`));
+    }
+    rate.append(node("span", " ▶", "chev"));
     row.append(dot, name, bar, rate);
     const detail = node("div", null, "detail");
     detail.id = `${id}-detail-${index}`;

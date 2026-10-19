@@ -148,8 +148,10 @@ def test_calibration_counts_match_filter_and_player_share_without_mutating_confi
     monkeypatch.setattr("cs2coach.features.problems.detect_problems", detect)
     rates = problem_rates(mms, baseline, cfg)
     assert cfg == original and calls == mms
-    assert rates["slow_reaction"] == {"hits": 3, "rounds": 30, "per_10_rounds": 1, "player_share_pct": 100}
-    assert rates["weapon_not_ready"] == {"hits": 1, "rounds": 30, "per_10_rounds": .33, "player_share_pct": 50}
+    assert rates["slow_reaction"] == {"hits": 3, "rounds": 30, "evaluated": 0,
+                                      "per_100_evaluated": 0, "per_10_rounds": 1, "player_share_pct": 100}
+    assert rates["weapon_not_ready"] == {"hits": 1, "rounds": 30, "evaluated": 0,
+                                          "per_100_evaluated": 0, "per_10_rounds": .33, "player_share_pct": 50}
     assert rates["good_trade"]["player_share_pct"] == 50
     assert rates["spray_control"]["hits"] == rates["spray_control"]["player_share_pct"] == 0
     assert "other" not in rates
@@ -160,7 +162,8 @@ def test_calibration_reenables_default_disabled_detection_and_handles_empty_samp
     mm = make_mm([make_moment(tags=["weapon_not_ready"])], rounds=10)
     assert "weapon_not_ready" not in {h.problem for h in detect_problems(mm, None, cfg).hits}
     assert problem_rates([mm], {}, cfg)["weapon_not_ready"]["hits"] == 1
-    assert all(v == {"hits": 0, "rounds": 0, "per_10_rounds": 0, "player_share_pct": 0} for v in problem_rates([], {}, cfg).values())
+    assert all(v == {"hits": 0, "rounds": 0, "evaluated": 0, "per_100_evaluated": 0,
+                     "per_10_rounds": 0, "player_share_pct": 0} for v in problem_rates([], {}, cfg).values())
 
 
 def test_build_script_uses_fresh_thresholds_instead_of_existing_file(tmp_path, monkeypatch):
@@ -183,7 +186,8 @@ def test_build_script_uses_fresh_thresholds_instead_of_existing_file(tmp_path, m
                         "--jobs", "1"]) == 0
     baseline = json.loads(out.read_text(encoding="utf-8"))
     assert baseline["weapons"]["ak47"]["time_to_damage_ms"]["p75"] == 650
-    assert baseline["problem_rates"]["slow_reaction"] == {"hits": 1, "rounds": 10, "per_10_rounds": 1, "player_share_pct": 100}
+    assert baseline["problem_rates"]["slow_reaction"] == {"hits": 1, "rounds": 10, "evaluated": 4,
+        "per_100_evaluated": 25, "per_10_rounds": 1, "player_share_pct": 100}
 
 
 def test_default_disabled_rules_and_match_toggle_preserve_detection_conditions():

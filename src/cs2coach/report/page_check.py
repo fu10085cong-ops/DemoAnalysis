@@ -1,7 +1,7 @@
 """检查每个分段内的统计说明和区块是否一致，不中断报告输出。"""
 
 from cs2coach.features.radar import minimum_samples
-from cs2coach.report.page_data import ReportPage
+from cs2coach.report.page_data import ReportPage, _focus_problem
 
 
 def check_page(page: ReportPage, cfg: dict) -> list[str]:
@@ -29,8 +29,11 @@ def check_page(page: ReportPage, cfg: dict) -> list[str]:
                 add("优点样本不足", tier.id, row.id)
         bad = [row for row in tier.problems if row.severity == "bad"]
         if bad:
-            top = max(bad, key=lambda row: row.count - row.expected if row.expected is not None else float("-inf"))
-            if not tier.verdict.startswith(f"相对{tier.name}，最该练的是{top.name}："):
+            top = _focus_problem(page.kind, bad, cfg)
+            if top is None:
+                if "集中在少数几场" not in tier.verdict or "最该练" in tier.verdict:
+                    add("结论选题不符", tier.id, "跨场重复不足")
+            elif not tier.verdict.startswith(f"相对{tier.name}，最该练的是{top.name}："):
                 add("结论选题不符", tier.id, top.id)
         elif "最该练" in tier.verdict and "相对职业，最该练的是" not in tier.verdict:
             add("结论选题不符", tier.id, "没有 bad 问题")

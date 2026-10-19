@@ -1,6 +1,6 @@
 # 056 问题按机会衡量：出现率 = 命中 / 可判断次数，跨场重复参与排序
 
-状态：待做
+状态：待审查
 难度：A（改问题检测的统计口径，跨问题检测、基准、多场汇总、报告页）
 执行：Codex（思考强度 high）
 分支：`task/056-problem-opportunity-rates`（基于 055 合并后的 `task/053-tier-ladder`，起点 e859afc 之后）
@@ -71,8 +71,8 @@
 
 ## 完成报告（实现方填写，尽量简短）
 
-- 改动的文件及原因：
-- 测试结果（最后一行）：
-- 遗留问题 / 需要确认的地方：
+- 改动的文件及原因：`features/problems.py`、`baseline.py`、`summary/aggregate.py` 增加逐规则可判断次数、基准与多场合并，旧缓存/基准回退；`report/page_data.py`、`page_template.html`、`page_check.py` 展示机会率及跨场重复并据此选“最该练”；`config/default.toml` 加跨场门槛，`ProblemSpec` 保存各规则的静态分母文案（漏补为“补枪机会”）；`docs/features.md` 更新口径；新增 `tests/test_problem_opportunity_056.py`，调整旧测试的基准字段断言。
+- 测试结果（最后一行）：`1192 passed, 4 skipped in 35.39s`
+- 遗留问题 / 需要确认的地方：基准重建、真实多场页面截图及全量规则回归由 Claude 按任务单完成。
 
 ## 审查意见（Claude 填写）
