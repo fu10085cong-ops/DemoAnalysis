@@ -25,7 +25,7 @@ def landmarks(match: MatchData) -> dict[str, tuple[float, float]]:
     t = match.ticks
     t = t[t["is_alive"].astype(bool) & t["last_place_name"].notna() & t["X"].notna()]
     grouped = t.groupby(t["last_place_name"].astype(str), observed=True)[["X", "Y"]].median()
-    return {str(name): (float(row.X), float(row.Y)) for name, row in grouped.iterrows()}
+    return {str(name): (float(row.X), float(row.Y)) for name, row in grouped.iterrows() if str(name).strip()}  # 空报点名不算
 
 
 def look_target(state, marks: dict[str, tuple[float, float]], cfg: dict) -> str | None:

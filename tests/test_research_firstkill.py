@@ -42,3 +42,19 @@ def test_cluster_ci_and_summary():
     text = fk.summarize(frame, CFG)
     assert "| 原位再架 | 12 | 6 | 75% |" in text and "| 换位 | 12 | 6 | 8% |" in text
     assert "描述性结果" in text
+
+
+def test_review_pack_samples_each_behaviour_blind(tmp_path):
+    import tomllib
+
+    rows = []
+    for i in range(40):
+        rows.append(dict(demo_id=f"m{i % 10}.dem", match_id=f"m{i % 10}", round_id=i, player_id=str(1000 + i),
+                         start_tick=100 * i, behaviour=fk.BEHAVIOURS[i % 4], fight_end_s=0.5))
+    out = tmp_path / "data" / "research" / "firstkill" / "x"
+    out.mkdir(parents=True)
+    pd.DataFrame(rows).to_csv(out / "fights.csv", index=False)
+    pack = fk.review_pack("x", "kr", 2, 1, root=tmp_path)
+    items = tomllib.loads((pack / "review.toml").read_text(encoding="utf-8"))["items"]
+    assert len(items) == 8 and len({i["match_id"] for i in items}) == 8
+    assert items[0]["focus"] == [0.5, 3.5] and "behaviour" not in items[0]

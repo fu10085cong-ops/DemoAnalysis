@@ -181,13 +181,56 @@ def run(source: str, name: str, jobs: int | None, root: Path = ROOT) -> Path:
     return out
 
 
+def review_pack(name: str, pack_name: str, per_behaviour: int, seed: int, source: str = "r01-v6",
+                root: Path = ROOT) -> Path:
+    """从全量结果按行为分层抽首杀选手的窗口做盲审复核包；尽量每场比赛只取一条。"""
+    from research_ai import NAMES
+    from research_review import _write_review
+
+    cfg = load_config()
+    fights = pd.read_csv(root / "data" / "research" / "firstkill" / name / "fights.csv", dtype={"player_id": str})
+    rng = random.Random(seed)
+    picked, used = [], set()
+    for behaviour in BEHAVIOURS:
+        rows = fights[fights["behaviour"] == behaviour].to_dict("records")
+        rng.shuffle(rows)
+        for _ in range(min(per_behaviour, len(rows))):
+            row = next((r for r in rows if r["match_id"] not in used), rows[0])  # 先取还没用过的比赛
+            rows.remove(row)
+            used.add(row["match_id"])
+            picked.append(row)
+    rng.shuffle(picked)
+    observe = cfg["research"]["fight"]["observe_seconds"]
+    items = []
+    for i, row in enumerate(picked, 1):
+        end = float(row["fight_end_s"])
+        items.append({"id": f"k{i}", "demo_id": row["demo_id"], "match_id": row["match_id"], "round_id": int(row["round_id"]),
+                      "player_id": str(row["player_id"]), "start_tick": int(row["start_tick"]),
+                      "replay_until_s": max(11.0, end + observe + 1), "focus": [end, end + observe],
+                      "focus_note": f"他拿下首杀后，交火在 {end:+.1f} 秒结束（程序判断），看之后 {observe:g} 秒",
+                      "result": "", "comment": ""})
+    pack = root / "data" / "research" / "review" / pack_name
+    pack.mkdir(parents=True, exist_ok=True)
+    header = {"source": source, "labels": NAMES,
+              "note": "看拿下首杀的这名 CT：交火结束后约 3 秒内他做了什么（盲审：不显示程序的答案）"}
+    _write_review(pack, header, items)
+    print(f"已生成 {len(items)} 条：{pack / 'review.toml'}（{len({r['match_id'] for r in picked})} 场比赛）")
+    return pack
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--source", default="r01-v6")
     parser.add_argument("--name", default="fk-1")
     parser.add_argument("--jobs", type=int, default=None)
+    parser.add_argument("--review", metavar="复核包名", help="不重新分析，从已有结果抽首杀选手的复核包")
+    parser.add_argument("--per-behaviour", type=int, default=3)
+    parser.add_argument("--seed", type=int, default=20261020)
     args = parser.parse_args(argv)
-    run(args.source, args.name, args.jobs)
+    if args.review:
+        review_pack(args.name, args.review, args.per_behaviour, args.seed, args.source)
+    else:
+        run(args.source, args.name, args.jobs)
     return 0
 
 
