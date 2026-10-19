@@ -15,6 +15,8 @@ import copy
 import json
 import random
 import sys
+import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 import pandas as pd
@@ -192,7 +194,7 @@ def parse_answer(text: str) -> dict:
 
 def run(name: str, model: str | None, repeats: int | None, yes: bool, root: Path = ROOT, client=None,
         provider: str | None = None) -> Path:
-    from cs2coach.ai.providers import make_provider
+    from cs2coach.ai.providers import ProviderError, make_provider
     from cs2coach.env import load_env_file
 
     cfg = load_config()
@@ -216,16 +218,44 @@ def run(name: str, model: str | None, repeats: int | None, yes: bool, root: Path
         run_cfg["ai"][provider]["temperature"] = ai["temperature"]
     results = out / "results"
     results.mkdir(exist_ok=True)
-    for k in range(1, repeats + 1):
-        path = results / f"{model}-{ai['prompt_version']}-r{k}.jsonl"
-        done = {r["id"] for r in _load(path)} if path.exists() else set()
-        with path.open("a", encoding="utf-8", newline="\n") as stream:
-            for record in records:
-                if record["id"] in done:
-                    continue
+    concurrency, retries = ai["concurrency"], ai["retries"]
+
+    def ask(record: dict):
+        """一次请求；网络或限流错误按指数退避重试，配置或凭据错误直接抛出。"""
+        for attempt in range(retries + 1):
+            try:
                 service = make_provider(run_cfg, client)
                 service.start(SYSTEM, [record["text"]], [])
                 turn = service.send()
+                if turn.stop != "end" or not turn.text:
+                    raise RuntimeError(f"空回复（{turn.stop}：{turn.detail}）")
+                return turn
+            except ProviderError:
+                raise
+            except Exception as exc:  # noqa: BLE001 —— 各家 SDK 的异常类型不同
+                if attempt == retries:
+                    raise
+                wait = 2 ** attempt * 5
+                print(f"{record['id']} 请求失败（{type(exc).__name__}），{wait} 秒后重试", flush=True)
+                time.sleep(wait)
+
+    for k in range(1, repeats + 1):
+        path = results / f"{model}-{ai['prompt_version']}-r{k}.jsonl"
+        # 没有得到有效标签的（空回复、格式错）下次重跑；compare 取同一编号的最后一条
+        done = {r["id"] for r in _load(path) if r.get("label")} if path.exists() else set()
+        todo = [r for r in records if r["id"] not in done]
+        with path.open("a", encoding="utf-8", newline="\n") as stream, \
+                ThreadPoolExecutor(max_workers=concurrency) as pool:
+            futures = {pool.submit(ask, record): record for record in todo}
+            for future in as_completed(futures):  # 只在主线程写文件
+                record = futures[future]
+                try:
+                    turn = future.result()
+                except ProviderError:
+                    raise
+                except Exception as exc:  # noqa: BLE001
+                    print(f"[第 {k} 遍] {record['id']} 放弃：{exc}", flush=True)
+                    continue
                 answer = parse_answer(turn.text)
                 stream.write(json.dumps({"id": record["id"], "model": turn.model or model,
                                          "prompt_version": ai["prompt_version"], **answer, "raw": turn.text,
@@ -273,7 +303,7 @@ def compare(name: str, model: str | None = None, seed: int = 20261019, root: Pat
     lines += _matrix([(records[i]["rule"], first[i].get("label")) for i in ids], "规则", "AI")
     review_ids = [i for i in ids if records[i]["rule"] != first[i].get("label")
                   or any(i in a and a[i].get("label") != first[i].get("label") for a in answers[1:])]
-    agreed = [i for i in ids if i not in review_ids]
+    agreed = [i for i in ids if i not in review_ids and records[i]["rule"] != "看不出"]  # 两边都"看不出"的不必抽查
     review_ids += random.Random(seed).sample(agreed, min(5, len(agreed)))
     human = _human(root, name)
     if human:

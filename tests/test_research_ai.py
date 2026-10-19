@@ -43,7 +43,8 @@ class FakeProvider:
 
     def send(self):
         label = self.labels[self.text]
-        return SimpleNamespace(text=json.dumps({"label": label, "evidence": "e", "confidence": "高"}, ensure_ascii=False),
+        return SimpleNamespace(stop="end", detail=None,
+                               text=json.dumps({"label": label, "evidence": "e", "confidence": "高"}, ensure_ascii=False),
                                model="fake", usage=SimpleNamespace(input_tokens=10, output_tokens=5))
 
 
@@ -86,3 +87,26 @@ def test_temperature_passed_only_when_configured():
     base = {"model": "m", "max_tokens": 10, "api_key_env": "", "base_url": "http://x"}
     assert "temperature" not in OpenAICompatProvider("t", base, client=object()).params
     assert OpenAICompatProvider("t", {**base, "temperature": 0}, client=object()).params["temperature"] == 0.0
+
+
+def test_run_retries_failed_requests_concurrently(tmp_path, monkeypatch):
+    out = tmp_path / "data" / "research" / "ai" / "t"
+    out.mkdir(parents=True)
+    records = [dict(id=f"f{i}", text=f"时间线{i}") for i in range(1, 6)]
+    (out / "timelines.jsonl").write_text("\n".join(json.dumps(r, ensure_ascii=False) for r in records), encoding="utf-8")
+    failed = set()
+
+    class Flaky(FakeProvider):
+        def send(self):
+            if self.text not in failed:  # 每条第一次请求失败
+                failed.add(self.text)
+                raise ConnectionError("限流")
+            return super().send()
+
+    import cs2coach.ai.providers as providers
+
+    monkeypatch.setattr(providers, "make_provider", lambda cfg, client=None: Flaky({r["text"]: "换位" for r in records}))
+    monkeypatch.setattr(ra.time, "sleep", lambda s: None)
+    ra.run("t", None, 1, yes=True, root=tmp_path)
+    rows = [json.loads(line) for line in next((out / "results").glob("*-r1.jsonl")).read_text(encoding="utf-8").splitlines()]
+    assert sorted(r["id"] for r in rows) == [r["id"] for r in records] and {r["label"] for r in rows} == {"换位"}

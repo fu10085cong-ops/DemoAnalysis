@@ -926,6 +926,8 @@ model = "deepseek-flash"
 repeats = 2
 prompt_version = "r03-v3"   # v2：按区域层级定义；v3：判断顺序写死、标出观察期结束行、阵亡行不丢
 temperature = 0            # 随机程度降到最低，减少同一条两遍答案不同
+concurrency = 10           # 同时发出的请求数（只是等网络，不占本机 CPU）
+retries = 4                # 网络或限流失败时重试几次（间隔 5、10、20、40 秒）
 
 [research.zones.de_mirage]
 # 防守区组：起点和终点在同一组内（含同一报点）判"保持"，从某组或纵深进入另一组判"转点"；先于距离阈值判断。
