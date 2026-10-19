@@ -206,15 +206,17 @@ def test_cli_writes_moments_and_facts_without_ai(tmp_path, monkeypatch):
 
     m = scenario()
     mm = find_moments(m, A, CFG)
+    demo = tmp_path / "test.dem"
+    demo.write_bytes(b"demo")
     monkeypatch.setattr("cs2coach.cli.resolve_demo", lambda path, member=None: path)
     monkeypatch.setattr("cs2coach.parsing.match.parse_match", lambda path, cfg: m)
     monkeypatch.setattr("cs2coach.features.moments.find_moments", lambda match, sid, cfg, **kwargs: mm)
-    assert main(["analyze", "test.dem", "--player", str(A), "--out", str(tmp_path)]) == 0
+    assert main(["analyze", str(demo), "--player", str(A), "--out", str(tmp_path)]) == 0
     folder = tmp_path / f"alice_{A}" / "test"
     expected = folder / "facts.md"
     assert expected.read_text(encoding="utf-8") == render_facts_file(mm, NAMES)
     assert json.loads((folder / "moments.json").read_text(encoding="utf-8")) == json.loads(mm.model_dump_json())
-    assert {p.name for p in folder.iterdir()} == {"moments.json", "facts.md", "problems.md", "basic_report.md", "report_data.json", "report.html"}
+    assert {p.name for p in folder.iterdir()} == {"moments.json", "facts.md", "problems.md", "basic_report.md", "report_data.json", "report.html", ".demo_id"}
 
 
 @pytest.mark.parametrize("subject,field", [("你", "player_blind"), ("对手", "opponent_blind")])

@@ -2,7 +2,8 @@
 
 支持：.dem、.dem.bz2、.dem.gz、.zip、.rar。
 - 压缩包内有多个 .dem（如 HLTV 一个 rar 打包多张图）时，必须用 member 指定，否则报错并列出候选。
-- 解压结果写入 cache_dir（默认与输入文件同目录下的 .extracted/），已存在则复用。
+- 解压结果写入 cache_dir（默认与输入文件同目录下的 .extracted/）。旁边的 .source.json 记录源文件签名
+  （路径、大小、修改时间、包内路径与 CRC），签名一致才复用，源文件更新后会重新解压。
 - .rar：用 rarfile 读目录（纯 Python），解压调用系统工具（unrar / 7z / bsdtar 任一）。
   不用 rarfile 自带的解压：它的 bsdtar 后端会传 `-f -- <文件>`，bsdtar 会把 `--` 当成归档名而失败。
 """
@@ -11,6 +12,8 @@ from __future__ import annotations
 
 import bz2
 import gzip
+import hashlib
+import json
 import os
 import shutil
 import subprocess
@@ -46,9 +49,9 @@ def resolve_demo(path: Path, cache_dir: Path | None = None, member: str | None =
     cache_dir = Path(cache_dir) if cache_dir else path.parent / ".extracted"
 
     if name.endswith(".dem.bz2"):
-        return _decompress_stream(path, cache_dir / path.name[: -len(".bz2")], bz2.open)
+        return _decompress_stream(path, cache_dir, path.name[: -len(".bz2")], bz2.open)
     if name.endswith(".dem.gz"):
-        return _decompress_stream(path, cache_dir / path.name[: -len(".gz")], gzip.open)
+        return _decompress_stream(path, cache_dir, path.name[: -len(".gz")], gzip.open)
     if name.endswith(".zip"):
         return _extract_zip(path, cache_dir, member)
     if name.endswith(".rar"):
@@ -57,15 +60,69 @@ def resolve_demo(path: Path, cache_dir: Path | None = None, member: str | None =
     raise DemoLoadError(f"不支持的文件类型: {path.name}（支持 .dem / .dem.bz2 / .dem.gz / .zip / .rar）")
 
 
-def _decompress_stream(src: Path, dst: Path, opener) -> Path:
-    if dst.is_file():
+def demo_fingerprint(path: Path) -> str:
+    """按内容识别同一场比赛：文件大小加开头、结尾各 1 MB 的 SHA-256。
+
+    文件名或所在目录不同但内容相同的 demo 得到相同结果；不同比赛的开头（玩家名单）和结尾（最后一回合）都不同。
+    只读 2 MB，汇总扫描几十场时不必完整读取每个文件。
+    """
+    path = Path(path)
+    size = path.stat().st_size
+    h = hashlib.sha256(str(size).encode())
+    with open(path, "rb") as f:
+        h.update(f.read(_CHUNK))
+        if size > _CHUNK:
+            f.seek(max(_CHUNK, size - _CHUNK))
+            h.update(f.read(_CHUNK))
+    return h.hexdigest()
+
+
+def _cache_target(src: Path, cache_dir: Path, member_name: str, in_archive: bool = True) -> Path:
+    """按压缩包完整文件名分子目录（x.zip 与 x.rar 不共用）；包内成员再按完整包内路径的哈希分一层，
+    a/map.dem 与 b/map.dem 不互相复用。文件名只取最后一段：避免路径穿越，也保持 demo 名不变（输出目录用它命名）。"""
+    member_name = member_name.replace("\\", "/")
+    base = cache_dir / src.name
+    if in_archive:
+        base = base / hashlib.sha256(member_name.encode("utf-8")).hexdigest()[:12]
+    return base / PurePosixPath(member_name).name
+
+
+def _source_stamp(src: Path, member: str | None = None, **extra) -> str:
+    st = src.stat()
+    return json.dumps({"source": str(src.resolve()), "size": st.st_size, "mtime_ns": st.st_mtime_ns,
+                       "member": member, **extra}, sort_keys=True, ensure_ascii=False)
+
+
+def _stamp_path(dst: Path) -> Path:
+    return dst.with_name(dst.name + ".source.json")
+
+
+def _is_fresh(dst: Path, stamp: str) -> bool:
+    """已解压文件存在且记录的源文件签名与当前一致；没有记录（旧版本缓存）也视为过期。"""
+    try:
+        return dst.is_file() and _stamp_path(dst).read_text(encoding="utf-8") == stamp
+    except OSError:
+        return False
+
+
+def _commit(tmp: Path, dst: Path, stamp: str) -> Path:
+    # 先删旧签名再替换：中途中断时缺少签名，下次会重新解压，不会把新旧内容对错
+    _stamp_path(dst).unlink(missing_ok=True)
+    tmp.replace(dst)
+    _stamp_path(dst).write_text(stamp, encoding="utf-8")
+    return dst
+
+
+def _decompress_stream(src: Path, cache_dir: Path, dem_name: str, opener) -> Path:
+    dst = _cache_target(src, cache_dir, dem_name, in_archive=False)
+    stamp = _source_stamp(src)
+    if _is_fresh(dst, stamp):
         return dst
     dst.parent.mkdir(parents=True, exist_ok=True)
     tmp = dst.with_suffix(dst.suffix + ".part")
     with opener(src, "rb") as fin, open(tmp, "wb") as fout:
         shutil.copyfileobj(fin, fout, _CHUNK)
-    tmp.replace(dst)
-    return dst
+    return _commit(tmp, dst, stamp)
 
 
 def _pick_member(src: Path, names: list[str], member: str | None) -> str:
@@ -85,24 +142,20 @@ def _pick_member(src: Path, names: list[str], member: str | None) -> str:
     return matches[0]
 
 
-def _cache_target(src: Path, cache_dir: Path, member_name: str) -> Path:
-    # 按压缩包名分子目录，避免不同压缩包里同名 demo 互相复用缓存；只取文件名，避免路径穿越
-    return cache_dir / src.stem / PurePosixPath(member_name.replace("\\", "/")).name
-
-
 def _extract_zip(src: Path, cache_dir: Path, member: str | None) -> Path:
     with zipfile.ZipFile(src) as zf:
         names = [m.filename for m in zf.infolist() if m.filename.lower().endswith(".dem") and not m.is_dir()]
         chosen = _pick_member(src, names, member)
+        info = zf.getinfo(chosen)
         dst = _cache_target(src, cache_dir, chosen)
-        if dst.is_file():
+        stamp = _source_stamp(src, chosen, member_size=info.file_size, crc=info.CRC)
+        if _is_fresh(dst, stamp):
             return dst
         dst.parent.mkdir(parents=True, exist_ok=True)
         tmp = dst.with_suffix(".dem.part")
         with zf.open(chosen) as fin, open(tmp, "wb") as fout:
             shutil.copyfileobj(fin, fout, _CHUNK)
-        tmp.replace(dst)
-        return dst
+        return _commit(tmp, dst, stamp)
 
 
 def _extract_rar(src: Path, cache_dir: Path, member: str | None) -> Path:
@@ -123,7 +176,8 @@ def _extract_rar(src: Path, cache_dir: Path, member: str | None) -> Path:
         raise DemoLoadError(f"不支持以 '-' 开头的文件名: {chosen}")
 
     dst = _cache_target(src, cache_dir, chosen)
-    if dst.is_file() and dst.stat().st_size == info.file_size:
+    stamp = _source_stamp(src, chosen, member_size=info.file_size, crc=getattr(info, "CRC", None))
+    if _is_fresh(dst, stamp):
         return dst
     dst.parent.mkdir(parents=True, exist_ok=True)
 
@@ -139,8 +193,7 @@ def _extract_rar(src: Path, cache_dir: Path, member: str | None) -> Path:
             f"解压 {chosen} 失败（工具 {Path(cmd[0]).name}，退出码 {proc.returncode}，"
             f"得到 {size} / 期望 {info.file_size} 字节）: {err}"
         )
-    tmp.replace(dst)
-    return dst
+    return _commit(tmp, dst, stamp)
 
 
 def _rar_extract_cmd(archive: Path, member: str) -> list[str]:

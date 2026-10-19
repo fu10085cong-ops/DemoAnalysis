@@ -43,12 +43,14 @@ def test_discover_prefers_archive_over_extracted_and_sorts(tmp_path, monkeypatch
     for name in ("b", "a"):
         archive = tmp_path / f"{name}.zip"
         with zipfile.ZipFile(archive, "w") as zf:
-            zf.writestr(f"{name}.dem", b"demo")
+            zf.writestr(f"{name}.dem", f"demo {name}")
         cached = tmp_path / ".extracted" / name / f"{name}.dem"
         cached.parent.mkdir(parents=True, exist_ok=True)
-        cached.write_bytes(b"demo")
+        cached.write_bytes(f"demo {name}".encode())
+    # 真实的 resolve_demo 把压缩包成员解压成 .dem；这里直接指向内容相同的解压副本
     monkeypatch.setattr("cs2coach.summary.discover.resolve_demo",
-                        lambda path, member=None: path)
+                        lambda path, member=None: tmp_path / ".extracted" / path.stem / f"{path.stem}.dem"
+                        if member else path)
 
     class Parser:
         def __init__(self, path):
@@ -65,6 +67,30 @@ def test_discover_prefers_archive_over_extracted_and_sorts(tmp_path, monkeypatch
     assert [item.match_id for item in found] == ["a", "b"]
     assert all(item.path.suffix == ".zip" for item in found)
     assert [item.member for item in found] == ["a.dem", "b.dem"]
+
+
+class _RosterParser:
+    def __init__(self, path):
+        pass
+
+    def parse_player_info(self):
+        return pd.DataFrame([dict(steamid=A, name="alice", team_number=2)])
+
+    def parse_header(self):
+        return {"map_name": "de_dust2"}
+
+
+def test_discover_keeps_different_matches_with_same_file_name(tmp_path, monkeypatch):
+    for folder, content in (("week1", b"demo one"), ("week2", b"demo two"), ("copy", b"demo one")):
+        (tmp_path / folder).mkdir()
+        (tmp_path / folder / "match.dem").write_bytes(content)
+    monkeypatch.setattr("cs2coach.summary.discover.DemoParser", _RosterParser)
+    found = find_player_demos(A, tmp_path)
+    # copy/ 与 week1/ 内容相同只保留一份；week2/ 是另一场，match_id 加指纹后缀
+    assert len(found) == 2
+    assert {item.path.parent.name for item in found} == {"copy", "week2"}
+    ids = [item.match_id for item in found]
+    assert ids[0] == "match" and ids[1].startswith("match_") and len(set(ids)) == 2
 
 
 def test_discover_skips_unreadable_and_uses_tick_roster_fallback(tmp_path, monkeypatch):

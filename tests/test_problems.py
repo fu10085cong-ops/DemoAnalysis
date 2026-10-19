@@ -554,6 +554,8 @@ def test_cli_writes_problem_report_without_ai_or_baseline(tmp_path, monkeypatch,
     cfg = load_config()
     match = scenario()
     mm = make_mm([make_moment(tags=["weapon_not_ready"])])
+    demo = tmp_path / "test.dem"
+    demo.write_bytes(b"demo")
     monkeypatch.setattr("cs2coach.cli.resolve_demo", lambda path, member=None: path)
     monkeypatch.setattr("cs2coach.parsing.match.parse_match", lambda path, cfg: match)
     monkeypatch.setattr("cs2coach.features.moments.find_moments", lambda match, sid, cfg, **kwargs: mm)
@@ -562,7 +564,7 @@ def test_cli_writes_problem_report_without_ai_or_baseline(tmp_path, monkeypatch,
     def unexpected(*args, **kwargs):
         pytest.fail("无 AI 模式不应进入诊断")
     monkeypatch.setattr("cs2coach.cli._diagnose", unexpected)
-    assert main(["analyze", "test.dem", "--player", str(A), "--out", str(tmp_path)]) == 0
+    assert main(["analyze", str(demo), "--player", str(A), "--out", str(tmp_path)]) == 0
     detected = detect_problems(mm, None, cfg)
     expected = render_problem_report(detected, problem_frequency(detected, mm, None, cfg))
     assert (tmp_path / f"alice_{A}" / "test" / "problems.md").read_text(encoding="utf-8") == expected

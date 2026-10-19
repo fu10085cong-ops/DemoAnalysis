@@ -13,15 +13,21 @@ from pathlib import Path
 
 from cs2coach.config import ConfigError, load_config
 from cs2coach.console import ensure_utf8_stdio
-from cs2coach.parsing.loader import DemoLoadError, resolve_demo
+from cs2coach.parsing.loader import DemoLoadError, demo_fingerprint, resolve_demo
 from cs2coach.report.index_page import write_index
 
 
-def _output_folder(root: Path, demo: Path, name: str, steamid: int) -> Path:
+_DEMO_ID_FILE = ".demo_id"
+
+
+def _output_folder(root: Path, demo: Path, name: str, steamid: int, fingerprint: str | None = None) -> Path:
     """<输出根目录>/<玩家名>_<steamid>/<比赛名>/。
 
     按 steamid 归到同一个玩家文件夹：同一个人在不同平台的名字可能不同（如 5E 和完美），
     已有以 _<steamid> 结尾的文件夹时沿用它，不按新名字另建。
+
+    fingerprint（demo_fingerprint）用来区分文件名相同的不同比赛：比赛文件夹里的 .demo_id 记录它属于哪份 demo，
+    同名文件夹已属于另一份 demo 时改用 <比赛名>_<指纹前 8 位>。没有记录的旧文件夹由第一次重跑的 demo 接管。
     """
     existing = sorted(p for p in root.glob(f"*_{steamid}") if p.is_dir()) if root.is_dir() else []
     if existing:
@@ -29,7 +35,25 @@ def _output_folder(root: Path, demo: Path, name: str, steamid: int) -> Path:
     else:
         safe_name = re.sub(r'[\\/:*?"<>|]', "_", name.strip()) or "player"
         player_dir = root / f"{safe_name}_{steamid}"
-    return player_dir / demo.stem
+    folder = player_dir / demo.stem
+    if fingerprint is None:
+        return folder
+    for candidate in (folder, player_dir / f"{demo.stem}_{fingerprint[:8]}"):
+        owner = _folder_owner(candidate)
+        if owner is None or owner == fingerprint:
+            return candidate
+    return player_dir / f"{demo.stem}_{fingerprint[:16]}"
+
+
+def _folder_owner(folder: Path) -> str | None:
+    try:
+        return (folder / _DEMO_ID_FILE).read_text(encoding="utf-8").strip() or None
+    except OSError:
+        return None
+
+
+def _claim_folder(folder: Path, fingerprint: str) -> None:
+    (folder / _DEMO_ID_FILE).write_text(fingerprint + "\n", encoding="utf-8")
 
 
 def _check_report_page(page, cfg: dict) -> None:
@@ -311,8 +335,10 @@ def _analyze(args: argparse.Namespace) -> int:
                                 shots_with_targets=shots_with_targets)
     print(format_moments(moments))
 
-    folder = _output_folder(args.out, demo, player.name, player.steamid)
+    fingerprint = demo_fingerprint(demo)
+    folder = _output_folder(args.out, demo, player.name, player.steamid, fingerprint)
     folder.mkdir(parents=True, exist_ok=True)
+    _claim_folder(folder, fingerprint)
     _archive_reports(folder)
     out = folder / "moments.json"
     out.write_text(moments.model_dump_json(indent=2), encoding="utf-8")

@@ -69,13 +69,21 @@ def test_main_exit_code(monkeypatch, tmp_path, capsys):
     assert main([str(path)]) == 1
 
 
-_FILES = sorted(PLATFORM_DIR.glob("*.toml"))
+def _platform_files() -> tuple[list[Path], str]:
+    # data/eval/platform 可能是指向网络共享的链接；共享离线或凭据失效时只跳过本用例，不能让整个收集失败
+    try:
+        return sorted(PLATFORM_DIR.glob("*.toml")), "没有平台数据文件"
+    except OSError as exc:
+        return [], f"平台数据目录无法读取：{exc}"
+
+
+_FILES, _NO_FILES_REASON = _platform_files()
 
 
 @pytest.mark.parametrize("path", _FILES or [None], ids=lambda path: path.name if path else "无平台文件")
 def test_real_platform_data(path):
     if path is None:
-        pytest.skip("没有平台数据文件")
+        pytest.skip(_NO_FILES_REASON)
     data = tomllib.loads(path.read_text(encoding="utf-8"))
     demo = Path(data["demo"])
     if not demo.is_absolute():

@@ -4,7 +4,7 @@ import os
 from datetime import datetime
 from pathlib import Path
 
-from cs2coach.cli import _build_parser, _output_folder, _page_tiers, main
+from cs2coach.cli import _build_parser, _claim_folder, _output_folder, _page_tiers, main
 from cs2coach.config import load_config
 from tests.helpers.synthetic import A
 from tests.test_moments import find_moments, scenario
@@ -23,10 +23,32 @@ def test_output_folder_reuses_player_folder_by_steamid(tmp_path):
     assert folder == tmp_path / f"玩家03_{A}" / "9215177492731139980_0"
 
 
+def test_output_folder_separates_different_demos_with_same_name(tmp_path):
+    demo = Path("x/match.dem")
+    first = _output_folder(tmp_path, demo, "alice", A, "a" * 64)
+    assert first == tmp_path / f"alice_{A}" / "match"
+    first.mkdir(parents=True)
+    _claim_folder(first, "a" * 64)
+    # 同名不同内容：另建带指纹后缀的文件夹；原 demo 重跑仍回到原文件夹
+    second = _output_folder(tmp_path, Path("y/match.dem"), "alice", A, "b" * 64)
+    assert second == tmp_path / f"alice_{A}" / f"match_{'b' * 8}"
+    second.mkdir()
+    _claim_folder(second, "b" * 64)
+    assert _output_folder(tmp_path, demo, "alice", A, "a" * 64) == first
+    assert _output_folder(tmp_path, Path("y/match.dem"), "alice", A, "b" * 64) == second
+
+
+def test_output_folder_adopts_legacy_folder_without_record(tmp_path):
+    legacy = tmp_path / f"alice_{A}" / "match"
+    legacy.mkdir(parents=True)
+    assert _output_folder(tmp_path, Path("match.dem"), "alice", A, "c" * 64) == legacy
+
+
 def test_rerun_moves_both_ai_files_and_keeps_program_outputs(tmp_path, monkeypatch, capsys):
     cfg = load_config()
     match = scenario()
     mm = find_moments(match, A, cfg)
+    (tmp_path / "inside.dem").write_bytes(b"demo")
     monkeypatch.setattr("cs2coach.cli.resolve_demo", lambda path, member=None: tmp_path / "inside.dem")
     monkeypatch.setattr("cs2coach.parsing.match.parse_match", lambda path, config: match)
     monkeypatch.setattr("cs2coach.features.moments.find_moments", lambda *args, **kwargs: mm)
@@ -48,7 +70,7 @@ def test_rerun_moves_both_ai_files_and_keeps_program_outputs(tmp_path, monkeypat
     assert (archive / f"report_{label}.html").read_text(encoding="utf-8") == "first report.html"
     assert 'id="page-data"' in (folder / "report.html").read_text(encoding="utf-8")
     assert b"\r\n" not in (folder / "report.html").read_bytes()
-    assert {p.name for p in folder.iterdir()} == {"moments.json", "facts.md", "problems.md", "basic_report.md", "report_data.json", "report.html", "历史版本"}
+    assert {p.name for p in folder.iterdir()} == {"moments.json", "facts.md", "problems.md", "basic_report.md", "report_data.json", "report.html", "历史版本", ".demo_id"}
 
     for name in ("report.md", "submission.json"):
         old = folder / name
