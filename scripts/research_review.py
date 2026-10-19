@@ -141,7 +141,7 @@ def build(args, root: Path, cfg: dict) -> Path:
 
 
 def _toml_value(value) -> str:
-    return json.dumps(value, ensure_ascii=False) if isinstance(value, str) else str(value)
+    return json.dumps(value, ensure_ascii=False) if isinstance(value, (str, list)) else str(value)
 
 
 def _write_review(pack: Path, header: dict, items: list[dict]) -> None:
@@ -165,7 +165,7 @@ def import_results(args, root: Path, cfg: dict) -> None:
         answer = results.get(item["id"])
         if not answer:
             continue
-        if answer.get("result") and answer["result"] not in LABELS:
+        if answer.get("result") and answer["result"] not in data.get("labels", LABELS):
             raise ValueError(f"{item['id']} 的答案无效：{answer['result']}")
         item["result"] = answer.get("result", item["result"])
         item["comment"] = answer.get("comment", item["comment"])

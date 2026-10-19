@@ -290,3 +290,13 @@ Valve 匹配的样本不在当前机器上，尚未用解析层核对。
 - `CDemoFileHeader` 字段 2 是 `network_protocol`（demoparser2 `parse_header()` 中的 `patch_version`），字段 13 是 `build_num`
 - CS2 播放时用 `network_protocol` 与游戏版本（`game/csgo/steam.inf` 的 `PatchVersion` 去掉点）比较，不同即拒绝；网络格式未变时把副本的该字段改成当前版本即可播放（实机：14188 → 14191）。实现：`scripts/research_review.py::patch_protocol`
 
+
+## 声音与标点事件（2026-10-19，R03）
+
+在 HLTV 职业 Mirage demo（`data/demos/pro_mirage/`）上用 `parse_event` 实测：
+- `player_sound`：服务器记录的发声事件，一场约 2.3 万条。字段 `tick`、`user_steamid`（字符串）、`radius`（游戏自己的可听范围，单位与坐标相同）、`duration`、`step`（是否脚步）。坐标要用 `player=["X", "Y", "Z"]` 请求，返回列名为 `user_X` 等
+  - 脚步 `step=True` 的 `radius` 全部是 1100；静步、蹲走不产生脚步事件
+  - 非脚步（跳、落地、刀、投掷物等）`radius` 有 1100、98、1070、597、1000、1400、800 等
+  - **不含枪声**：4044 次 `weapon_fire` 中只有 161 次同 tick 有非脚步声，且都是刀、投掷物、手枪切换等，步枪 / 狙击枪开枪没有对应事件。枪声的可听范围只能按距离近似（`[research.timeline] gunshot_radius`）
+- `player_ping`：玩家在地图上标点，字段 `tick`、`user_steamid`、`x`、`y`、`z`、`urgent`；一场只有几十条
+- 用途：R03 选手视角时间线中的"听到"和"队友标点"（`src/cs2coach/research/timeline.py`）。只是近似：不计墙体隔音、音量衰减和声音遮蔽；语音沟通不在 demo 中

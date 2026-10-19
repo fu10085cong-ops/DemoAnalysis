@@ -897,6 +897,35 @@ regroup_min_distance = 300
 regroup_max_end_distance = 600
 min_window_seconds = 1
 
+[research.fight]
+# R03 交战后换位（docs/tasks/research/R03-ai-post-fight-reposition.md）；游戏单位与秒，均为待复核的工程假设
+gap_seconds = 1            # 开枪 / 伤害 / 击杀事件间隔不超过这个值算同一段交火
+observe_seconds = 3        # 交火结束后看多久
+min_observe_seconds = 1.5  # 观察期（因阵亡或回合结束）短于这个值判"看不出"
+stay_max_move = 100        # 位置挪动小于这个值为"原位再架"
+push_min_closer = 150      # 离交火对手近了这么多为"继续压"
+leave_min_farther = 250    # 离交火对手远了这么多为"撤离"
+
+[research.timeline]
+# 交给 AI 的选手视角时间线
+lead_seconds = 3           # 从触发前几秒开始
+step_seconds = 0.5         # 每行间隔
+teammate_every_seconds = 1 # 队友位置每隔几秒列一次
+look_max_angle = 35        # "看向某报点"：视线与报点中心的水平夹角上限（度）
+look_max_distance = 3000
+# 枪声没有游戏给的可听范围（player_sound 不含枪声），按距离近似；消音武器更短
+gunshot_radius = 2500
+silenced_gunshot_radius = 900
+silenced_weapons = ["m4a1_silencer", "usp_silencer"]  # 事件里的规范武器名（parsing/weapons.py）
+moving_speed = 10          # 水平速度（单位/秒）低于此为静止
+running_speed = 150        # 高于此为跑
+
+[research.ai]
+# R03 AI 判定试点；真实调用会产生费用，运行前先征得产品负责人同意
+model = "deepseek-flash"
+repeats = 2
+prompt_version = "r03-v1"
+
 [research.zones.de_mirage]
 # 防守区组：起点和终点在同一组内（含同一报点）判"保持"，从某组或纵深进入另一组判"转点"；先于距离阈值判断。
 # 一个地点可以属于多组。2026-10-19 产品负责人确认（R02 第 1 轮：主防在自己区域内换位仍算保持）

@@ -41,7 +41,8 @@ def extract(match: MatchData, items: list[dict], cfg: dict) -> dict[str, dict]:
     for item in items:
         t0 = int(item["start_tick"])
         lo = t0 - round(review["lead_seconds"] * rate)
-        hi = t0 + round((cfg["research"]["window_seconds"] + review["replay_tail_seconds"]) * rate)
+        until = max(cfg["research"]["window_seconds"] + review["replay_tail_seconds"], item.get("replay_until_s", 0))
+        hi = t0 + round(until * rate)
         part = ticks[(ticks["tick"] >= lo) & (ticks["tick"] <= hi) & ((ticks["tick"] - lo) % step == 0)
                      & ticks["team_num"].isin((2, 3))]
         frames = []
@@ -105,7 +106,8 @@ def build(name: str, jobs: int | None, root: Path = ROOT) -> Path:
                      "round_time": round(float(row["round_time_s"]), 0)})
     map_cfg = json.loads((AWPY / "map_data.json").read_text(encoding="utf-8"))["de_mirage"]
     radar = base64.b64encode((AWPY / "radars" / "de_mirage.png").read_bytes()).decode()
-    payload = {"pack": name, "map": map_cfg, "window": cfg["research"]["window_seconds"], "items": meta, "replays": replays}
+    payload = {"pack": name, "map": map_cfg, "window": cfg["research"]["window_seconds"], "items": meta, "replays": replays,
+               "labels": data.get("labels"), "note": data.get("note")}
     template = (root / "scripts" / "research_replay.html").read_text(encoding="utf-8")
     html = template.replace("__RADAR__", radar).replace("__DATA__", json.dumps(payload, ensure_ascii=False, separators=(",", ":")))
     out = pack / "replay.html"

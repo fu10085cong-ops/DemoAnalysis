@@ -66,7 +66,7 @@ textarea { width: 100%; height: 70px; background: #262b34; color: var(--fg); bor
 <script>
 const data = JSON.parse(document.getElementById("data").textContent);
 const radar = "data:image/png;base64,__RADAR__";
-const LABELS = ["保持", "前压", "后撤", "横向调整", "转点", "看不出"];
+const LABELS = data.labels || ["保持", "前压", "后撤", "横向调整", "转点", "看不出"];
 const store = `research-review-${data.pack}`;
 let answers = {};
 try { answers = JSON.parse(localStorage.getItem(store) || "{}"); } catch (e) { answers = {}; }
@@ -201,7 +201,7 @@ $("export").onclick = () => {
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob); a.download = `${data.pack}-results.json`; a.click();
 };
-$("window-note").textContent = `时间 0 = T 方第一个人阵亡；绿色时段是要判断的 ${data.window} 秒（判断他知道有人阵亡之后的动作；之前的几秒用来看他原来在做什么）`;
+$("window-note").textContent = data.note ? `时间 0 = T 方第一个人阵亡。${data.note}` : `时间 0 = T 方第一个人阵亡；绿色时段是要判断的 ${data.window} 秒（判断他知道有人阵亡之后的动作；之前的几秒用来看他原来在做什么）`;
 select(0);
 requestAnimationFrame(tick);
 </script>
