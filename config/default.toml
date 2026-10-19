@@ -389,7 +389,7 @@ min_player_matches = 3
 min_players = 8
 
 [radar]
-default_tier = "5e_a"  # 2026-10-18 起默认与 5E A 段比较；--target 可指定 5e_b / 5e_s / amateur_tmp / pro
+default_tier = "5e_b"  # 2026-10-19 起默认与入门（5E B 段，8 名代表玩家）比较；--target 可指定 amateur_tmp / pro
 strength_min_percentile = 65
 verdict_min_axes = 3  # 至少有这些可用维度才判断雷达上的整体强弱（雷达剩 4 个维度后从 4 降到 3）
 verdict_weak_percentile = 40  # 最低的维度低于这个百分位，结论才说"最弱的是……"

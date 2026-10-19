@@ -9,7 +9,7 @@
 
 **诊断程序冻结前的收尾**（做完即冻结，之后只修 bug）：
 - [ ] 052–056 审查、合并、推送（052 类别面板、053 段位阶梯、054 汇总提速、055 页面口径、056 问题按机会衡量）
-- [ ] 清理：旧解压缓存、旧 B 段文件夹、已合并的本地分支、`find_missed_trades`、`scripts/audit_sample.py`
+- [ ] 056 验证（全量规则回归、重建 5E B 段基准）：延后；审计共享目录 `//192.168.1.163/cs2coach-shared/audit` 当前不可访问
 - [ ] 报告页注明"试用版"与已知局限
 - 暂停：A、S 段代表玩家收集（只服务于段位阶梯）；雷达遗留指标精简
 
@@ -126,7 +126,6 @@
 | `python scripts/eval_batch.py --label <说明> [--only 关键词] [--jobs 5]` | `data/output/评测/<时间>_<label>/summary.md` | 固定评测集批量生成；API 模型默认 5 个并行；会先确认（花钱） |
 | `python scripts/eval_recheck.py <评测目录>` | 终端输出 | 用当前检查器重查已保存的提交，**不调用模型、不花钱**；改了检查规则后先用它 |
 | `python scripts/build_baseline.py` | `baselines/pro_sample.json` | 按 `baselines/pro_demos.toml`（26 份职业 demo）重建职业基准 |
-| `python scripts/tiered_experiment.py --provider local` | `data/output/评测/*_分级L0L1_*` | 分级报告实验（L0 程序 + L1 逐个交火写两三句话） |
 
 报告准确性的机制（详见 `docs/features.md` 的"结构化诊断与报告"）：
 - AI 文字里不能写数字，用占位符 `{对象.字段}`，由程序填写（019）；

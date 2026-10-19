@@ -664,11 +664,6 @@ def _assist(match: MatchData, p: _Params, sid: int, row: pd.Series) -> Moment | 
 
 # ---------- 漏补 ----------
 
-def find_missed_trades(match: MatchData, p: _Params, sid: int) -> list[MissedTrade]:
-    """保留原漏补接口，由全部机会派生，不携带自己补上的字段。"""
-    return _missed_trades(find_trade_chances(match, p, sid))
-
-
 def _missed_trades(chances: list[TradeChance]) -> list[MissedTrade]:
     return [MissedTrade.model_validate(c.model_dump(exclude={"traded_by_me", "my_trade_tick"}))
             for c in chances if not c.traded_by_me]

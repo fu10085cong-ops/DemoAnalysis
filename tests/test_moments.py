@@ -14,7 +14,7 @@ import pytest
 from cs2coach.config import load_config
 from cs2coach.features.moments import bomb_planted
 from cs2coach.features.moments import find_moments as _find_moments
-from cs2coach.features.moments import _Params, find_missed_trades, trade_info
+from cs2coach.features.moments import _Params, _missed_trades, find_trade_chances, trade_info
 from cs2coach.features.visibility import Sight
 from cs2coach.parsing.match import (
     add_death_inventory,
@@ -112,7 +112,7 @@ def test_trade_and_missed_trade_use_five_second_window(delay_seconds, traded):
     assert params.trade == 5 * 64
     assert trade_info(match, params, B, C, 100, "death").traded is traded
     assert trade_info(match, params, A, C, revenge_tick, "kill").is_trade_kill is traded
-    assert bool(find_missed_trades(match, params, A)) is not traded
+    assert bool(_missed_trades(find_trade_chances(match, params, A))) is not traded
 
 
 def test_one_trade_kill_can_avenge_two_teammates():

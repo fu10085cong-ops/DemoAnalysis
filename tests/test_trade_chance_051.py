@@ -6,7 +6,7 @@ import pytest
 from cs2coach.config import ConfigError, load_config
 from cs2coach.features.lobby import lobby_line
 from cs2coach.features.models import LobbyLine, MatchMoments, MissedTrade, TradeChance
-from cs2coach.features.moments import _Params, find_missed_trades, find_moments, find_trade_chances
+from cs2coach.features.moments import _Params, _missed_trades, find_moments, find_trade_chances
 from cs2coach.features.problems import FrequencyRow, ProblemReport, detect_problems
 from cs2coach.features.radar import minimum_samples, percentile, player_metrics, sample_count
 from cs2coach.features.trades import trade_chance_skip
@@ -53,10 +53,10 @@ def test_self_trade_window_and_visibility_cutoff(delay, traded):
     assert record.killer_traded_by_other is False
     assert record.killer_first_in_view_s == 0
     assert record.killer_in_view_s == round((min(delay, 320) + 1) / 64, 3)
-    assert bool(find_missed_trades(match, params, A)) is not traded
+    assert bool(_missed_trades(find_trade_chances(match, params, A))) is not traded
     mm = find_moments(match, A, cfg, sight=params.sight)
     assert mm.trade_chances == [record]
-    assert mm.missed_trades == find_missed_trades(match, params, A)
+    assert mm.missed_trades == _missed_trades(find_trade_chances(match, params, A))
 
 
 def test_other_teammate_trade():
@@ -115,7 +115,7 @@ def test_detection_consistency_and_original_skip_counts(disabled):
 
 @pytest.mark.parametrize("visible", [False, True])
 def test_legacy_missed_records_unchanged(visible):
-    # 旧 find_missed_trades 在这一合成场景的完整输出，含每个默认字段。
+    # 漏补记录（原 find_missed_trades，2026-10-19 删除）在这一合成场景的完整输出，含每个默认字段。
     cfg = load_config()
     overrides = {(A, t): {"X": 3.5, "yaw": 90.0} for t in range(150, 200)} if visible else None
     match = scenario(extra_ticks=overrides)
@@ -126,7 +126,7 @@ def test_legacy_missed_records_unchanged(visible):
                     killer_first_in_view_s=0.0 if visible else None, reloading_at_death=False,
                     other_fight_s=None, side="T", alive_own=1, alive_enemy=1,
                     round_time_s=2.19, bomb_planted=False)
-    assert [r.model_dump() for r in find_missed_trades(match, params, A)] == [expected]
+    assert [r.model_dump() for r in _missed_trades(find_trade_chances(match, params, A))] == [expected]
     assert [r.model_dump() for r in find_moments(match, A, cfg, sight=params.sight).missed_trades] == [expected]
 
 

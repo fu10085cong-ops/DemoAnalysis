@@ -48,8 +48,8 @@ def test_empty_input_and_outcome_shape():
 
 def test_default_jobs_from_config_and_validation(tmp_path):
     cfg = load_config()
-    assert cfg["tools"]["jobs"] == 6
-    assert default_jobs(cfg) == min(6, os.cpu_count() or 1)
+    assert cfg["tools"]["jobs"] == 2  # 2026-10-19 起默认 2，尽量少占 CPU
+    assert default_jobs(cfg) == min(2, os.cpu_count() or 1)
     bad = tmp_path / "bad.toml"
     bad.write_text("[tools]\njobs = 0\n", encoding="utf-8")
     with pytest.raises(ConfigError):
