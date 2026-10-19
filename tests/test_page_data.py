@@ -57,9 +57,9 @@ def test_severity_and_problem_template(hits, severity):
     assert problem.examples[0].match_label == "本场"
     assert problem.examples[0].situation == "T 方，2v2，未下包"
     if severity == "bad":
-        assert page.tiers[0].verdict.startswith("最该练的是出枪慢：这场出现 6 次，按业余（临时）的频率约 2 次。")
+        assert page.tiers[0].verdict.startswith("相对业余（临时），最该练的是出枪慢：这场出现 6 次，按业余（临时）的频率约 2 次。")
     else:
-        assert page.tiers[0].verdict == "这场没有检出明显多于业余（临时）的问题。可用的指标不够多，暂不判断整体强弱。"
+        assert page.tiers[0].verdict == "相对业余（临时），这场没有明显偏多的问题。可用的指标不够多，暂不判断整体强弱。"
 
 
 def test_missing_tier_and_empty_samples(tmp_path, monkeypatch):
@@ -310,7 +310,7 @@ def test_verdict_picks_largest_excess_not_largest_ratio():
     mm = make_mm([make_moment()], lobby=[line()], rounds=169)
     page = build_match_page(mm, report(), rows, load_config(), data)
     assert [p.id for p in page.tiers[0].problems] == ["poor_crosshair_placement", "spray_control"]
-    assert page.tiers[0].verdict.startswith("最该练的是准星没提前放好：这场出现 34 次，按业余（临时）的频率约 23 次。")
+    assert page.tiers[0].verdict.startswith("相对业余（临时），最该练的是准星没提前放好：这场出现 34 次，按业余（临时）的频率约 23 次。")
     # 压枪差倍数够高，但只多出约 2.6 次：黄色，不是红色
     assert [p.severity for p in page.tiers[0].problems] == ["bad", "warn"]
 

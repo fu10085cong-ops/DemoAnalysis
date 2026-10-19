@@ -37,11 +37,9 @@ def load_config(path: Path | None = None) -> dict[str, Any]:
 
 
 def _validate_ladder(cfg: dict[str, Any]) -> None:
-    if type(cfg["min_player_matches"]) is not int or cfg["min_player_matches"] < 1:
-        raise ConfigError("配置项 ladder.min_player_matches 应为正整数")
-    quantile = cfg["reach_quantile"]
-    if type(quantile) not in (int, float) or not math.isfinite(quantile) or not 0 < quantile < 0.5:
-        raise ConfigError("配置项 ladder.reach_quantile 应在 (0, 0.5) 内")
+    for key in ("min_player_matches", "min_players"):
+        if type(cfg[key]) is not int or cfg[key] < 1:
+            raise ConfigError(f"配置项 ladder.{key} 应为正整数")
 
 
 def _validate_tools(cfg: dict[str, Any]) -> None:
@@ -56,6 +54,8 @@ def _validate_panel(cfg: dict[str, Any]) -> None:
     for key in ("sniper_min_kills", "flash_match_ticks"):
         if type(cfg[key]) is not int or cfg[key] < 0:
             raise ConfigError(f"配置项 panel.{key} 应为非负整数")
+    if type(cfg["small_sample_below"]) is not int or cfg["small_sample_below"] < 1:
+        raise ConfigError("配置项 panel.small_sample_below 应为正整数")
     if cfg["sniper_min_kills"] < 1:
         raise ConfigError("配置项 panel.sniper_min_kills 应为正整数")
     if (not isinstance(cfg["sniper_weapons"], list) or not cfg["sniper_weapons"]

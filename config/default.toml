@@ -383,7 +383,8 @@ incomplete_visibility_notes = ["not_seen", "lost_sight", "first_hit_unseen", "sm
 
 [ladder]
 min_player_matches = 3
-reach_quantile = 0.25
+# 每档至少这么多名独立玩家才进入阶梯；不足的分段不画刻度，页脚注明（2026-10-19 产品负责人确定）
+min_players = 8
 
 [radar]
 default_tier = "5e_a"  # 2026-10-18 起默认与 5E A 段比较；--target 可指定 5e_b / 5e_s / amateur_tmp / pro
@@ -403,6 +404,8 @@ problem_min_excess = 3
 sniper_min_kills = 5
 sniper_weapons = ["awp", "ssg08"]
 flash_match_ticks = 0
+# 比例类指标分母少于此值时显示"分子/分母（样本较少）"而不是百分比（2026-10-19 产品负责人确定）
+small_sample_below = 20
 
 [panel.min_samples]
 rounds = 20

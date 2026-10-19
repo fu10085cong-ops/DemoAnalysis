@@ -75,7 +75,7 @@ def test_verdict_selects_largest_bad_excess_and_ignores_warn():
     other = top.model_copy(deep=True, update={"id": "slow_reaction", "name": "问题乙", "count": 30, "expected": 20})
     warn = other.model_copy(update={"id": "spray_control", "name": "问题丙", "severity": "warn", "count": 100})
     view.problems = [other, warn, top]
-    view.verdict = "最该练的是问题甲：这场出现 20 次。"
+    view.verdict = f"相对{view.name}，最该练的是问题甲：这场出现 20 次。"
     assert check_page(page, load_config()) == []
     view.verdict = "最该练的是问题乙：这场出现 30 次。"
     assert any("结论选题不符" in issue for issue in check_page(page, load_config()))

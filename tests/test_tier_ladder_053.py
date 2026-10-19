@@ -55,12 +55,12 @@ def test_ladder_interpolation_extrapolation_and_reach():
     assert ladder_position(15, points, True).position == 1.5
     assert ladder_position(-100, points, True).position == .5
     assert ladder_position(100, points, True).position == 3.5
-    assert ladder_position(17, points, True).reached.level == 2
+    assert ladder_position(17, points, True).reached.level == 1
     assert ladder_position(14, points, True).reached.level == 1
     lower = [p.model_copy(update={"standard": 40 - p.standard, "q25": 35 - p.standard,
                                    "q75": 45 - p.standard}) for p in points]
     assert ladder_position(25, lower, False).position == 1.5
-    assert ladder_position(25, lower, False).reached.level == 2
+    assert ladder_position(25, lower, False).reached.level == 1
     assert ladder_position(5, lower, False).position == 3.5
     assert ladder_position(15, points[:1], True).position is None
     wrong = [points[0], points[1], points[2].model_copy(update={"standard": 15})]
@@ -82,7 +82,7 @@ def test_per_player_median_and_merged_panel(monkeypatch):
     assert result["per_player"]["matches"] == [3]
     assert result["per_player"]["metrics"]["time_to_damage_ms"]["values"] == [300]
     assert result["per_player"]["panel_metrics"]["time_to_damage_ms"]["values"] == [100]
-    assert result["per_player"]["metrics"]["kpr"]["values"] == [.2]
+    assert "kpr" not in result["per_player"]["metrics"]  # 055：kpr 改"表现"类，不进人均分布和阶梯
     assert str(A) not in json.dumps(result) and str(B) not in json.dumps(result)
     result = build_tier_baseline({"id": "test", "name": "测试"}, games + [_game(B, 600, 10)], 6, {}, cfg)
     assert result["per_player"]["matches"] == [3, 3]

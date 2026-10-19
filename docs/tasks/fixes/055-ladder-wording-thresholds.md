@@ -1,6 +1,6 @@
 # 055 页面口径统一、阶梯门槛与"相对谁"
 
-状态：待做
+状态：完成
 难度：B（照现有写法修改，测试已预写）
 执行：Kimi（额度不足时改 MiMo），在独立工作目录 `C:\Users\David\DemoAnalysis-055` 中
 分支：`task/055-wording-thresholds`
@@ -78,9 +78,13 @@ C:\Users\David\DemoAnalysis\.venv\Scripts\python.exe -m pytest -q tests/test_wor
 
 ## 完成报告（实现方填写，尽量简短）
 
-- 改动的文件及原因：
-- 修改的旧测试及原因：
-- 测试结果（最后一行）：
-- 遗留问题 / 需要确认的地方：
+> Kimi 完成了全部代码与大部分文档后触发 5 小时额度上限（403），未写完成报告；以下由 Claude 根据改动整理。
+
+- 改动的文件及原因：`config/default.toml`、`config.py`（删 `reach_quantile`，加 `ladder.min_players`、`panel.small_sample_below`）；`features/ladder.py`（`ladder_points` 按人数门槛筛选，`reached` 改为不差于标准）；`features/panel.py`（9 项改为"表现"类）；`report/page_data.py`（阶梯文字、页脚人数不足说明、结论"相对谁"与职业补充句、面板枪法四项用典型单场、段位一列用人均标准、小样本 `count_text`）；`report/page_check.py`（一致性检查接受新结论句式）；`report/page_template.html`（后缀与 `count_text` 显示、文字）；`docs/features.md`
+- 修改的旧测试及原因：`test_tier_ladder_053.py`（`reached` 新判定：17 → 第 1 档、25 → 第 1 档；`kpr` 改为表现类，不再进 `per_player`）；`test_page_data.py`、`test_page_check.py`（结论句式加"相对{分段}，"）
+- 测试结果（最后一行）：预写测试 `9 passed`；全部测试 `1181 passed, 4 skipped`
+- 遗留问题：无
 
 ## 审查意见（Claude 填写）
+
+2026-10-19 通过。代码与任务单一致；Claude 补完 `docs/features.md` 中"雷达同心线"与旧结论句式两处，以及完成报告。真实数据验证（重建基准、生成多场汇总、截图）在合并后于主目录完成。

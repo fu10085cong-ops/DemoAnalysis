@@ -312,7 +312,7 @@ function drawLadder() {
     text.append(node("b", axis.you == null ? "样本不足" : withUnit(axis.you, axis.unit)));
     if (result?.ordered === false) {
       // 段位间不是越高档越好：不画阶梯，直接列出各档标准
-      row.append(node("div", "段位间没有明显差别", "sub"));
+      row.append(node("div", "现有基准无法稳定分级", "sub"));
       text.append(node("span", " · " + axis.points.map(p => `${shortTier(p.name)} ${withUnit(p.standard, axis.unit)}`).join(" · "), "sub"));
     } else {
       const track = node("div", null, "ladder-track");
@@ -411,7 +411,7 @@ function drawRadar() {
       const result = tier.ladder?.[axis.id];
       const metric = page.axes[i];
       pair.append(node("b", result?.position == null ? "—" : number(result.position)),
-        node("span", ` · ${result?.text || (result?.ordered === false ? "段位间没有明显差别" : "样本不足")}`, "sub"));
+        node("span", ` · ${result?.text || (result?.ordered === false ? "现有基准无法稳定分级" : "样本不足")}`, "sub"));
     } else pair.append(node("b", pct(tier.you[i])), node("span", ` / ${pct(values[i])}`, "sub"));
     $("axes-list").append(node("span", axis.name), pair);
   });
@@ -452,8 +452,8 @@ function drawCategories() {
     const body = node("tbody");
     category.metrics.forEach(metric => {
       const row = node("tr");
-      const suffix = `${metric.kind === "风格" ? "（风格）" : ""}${metric.zero_sum ? "（同场零和）" : ""}`;
-      [metric.name + suffix, metric.you == null ? "样本不足" : withUnit(metric.you, metric.unit),
+      const suffix = `${metric.kind === "风格" ? "（风格）" : metric.kind === "表现" ? "（比赛表现）" : ""}${metric.zero_sum ? "（同场零和）" : ""}`;
+      [metric.name + suffix, metric.you == null ? "样本不足" : (metric.count_text || withUnit(metric.you, metric.unit)),
        withUnit(tier?.panel_values?.[metric.id], metric.unit), String(metric.sample),
        ...(page.ladder_levels.length ? [metric.kind === "水平" ? metric.ladder_text || "—" : ""] : [])].forEach((value, index) => {
         const cell = node("td", value, index ? "num" : null);

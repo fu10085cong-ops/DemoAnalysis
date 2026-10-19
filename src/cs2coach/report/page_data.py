@@ -39,6 +39,8 @@ METRIC_TEXT = {
     "enemies_flashed_per_flash": ("闪光效果", "每颗闪光平均闪到的敌人数", "人", 1),
 }
 PROBLEM_MEASURE = "每 10 回合出现的次数"
+# 枪法类这四项在类别面板与段位阶梯显示同一个数（典型单场），段位一列用该段人均标准（055）
+AIM_TYPICAL_METRICS = ("time_to_damage_ms", "crosshair_offset_m", "counter_strafing_pct", "spray_accuracy_pct")
 PROBLEM_METRICS = {
     "slow_reaction": "time_to_damage_ms", "poor_crosshair_placement": "crosshair_offset_m",
     "shot_while_moving": "counter_strafing_pct", "spray_while_moving": "counter_strafing_pct",
@@ -146,14 +148,14 @@ def load_tiers(cfg) -> dict[str, dict]:
 
 def _ladder_text(result: LadderResult, points, unit: str, scale: int = 1) -> str:
     if not result.ordered:
-        return "段位间没有明显差别"
+        return "现有基准无法稳定分级"
     if result.position is None:
         return "样本不足，暂不判断阶梯位置"
     if result.reached is None:
         first = points[0]
-        return f"未达到{first.name}（{_num(first.standard * scale)} {unit}）"
+        return f"未达到{first.name}标准（{_num(first.standard * scale)} {unit}）"
     point = result.reached
-    text = f"已达到{point.name}（标准 {_num(point.standard * scale)} {unit}）"
+    text = f"已达到{point.name}标准（{_num(point.standard * scale)} {unit}）"
     if result.next:
         text += f" · 下一档 {result.next.name} {_num(result.next.standard * scale)} {unit}"
     return text
@@ -337,15 +339,31 @@ def _expected_hits(rate: dict, rounds: int) -> float | None:
     return rounds * (hits if hits else 0.5) / total
 
 
-def _verdict(kind, games, tier_name, problems, axes, values, cfg):
+def _pro_verdict_suffix(kind, games, frequency, cfg, tier, tiers, problems) -> str:
+    """当前分段没有 bad 问题且不是职业时，按职业频率再判断一次，避免读成"不用练"。"""
+    pro = tiers.get("pro")
+    if pro is None or tier.get("id") == "pro" or any(row.severity == "bad" for row in problems):
+        return ""
+    _, pro_problems = _rows(games, frequency, cfg, pro)
+    bad = [row for row in pro_problems if row.severity == "bad"]
+    if not bad:
+        return ""
+    top = max(bad, key=lambda row: row.count - row.expected)
+    scope = "这场" if kind == "match" else f"{len(games)} 场里"
+    return (f"相对职业，最该练的是{top.name}：{scope}出现 {top.count} 次，"
+            f"按职业的频率约 {round(top.expected)} 次。")
+
+
+def _verdict(kind, games, tier_name, problems, axes, values, cfg, pro_suffix=""):
     bad = [row for row in problems if row.severity == "bad"]
     if bad:
         top = max(bad, key=lambda row: row.count - row.expected)
         scope = "这场" if kind == "match" else f"{len(games)} 场里"
-        verdict = f"最该练的是{top.name}：{scope}出现 {top.count} 次，按{tier_name}的频率约 {round(top.expected)} 次。"
+        verdict = (f"相对{tier_name}，最该练的是{top.name}：{scope}出现 {top.count} 次，"
+                   f"按{tier_name}的频率约 {round(top.expected)} 次。")
     else:
         period = "这场" if kind == "match" else "这段时间"
-        verdict = f"{period}没有检出明显多于{tier_name}的问题。"
+        verdict = f"相对{tier_name}，{period}没有明显偏多的问题。" + pro_suffix
     valid = [(axis["name"], value) for axis, value in zip(axes, values) if value is not None]
     if len(valid) >= cfg["radar"]["verdict_min_axes"]:
         name, p = min(valid, key=lambda pair: pair[1])
@@ -358,14 +376,14 @@ def _verdict(kind, games, tier_name, problems, axes, values, cfg):
     return verdict
 
 
-def _ladder_verdict(games, tier, problems, axes, results, cfg):
+def _ladder_verdict(games, tier, problems, axes, results, cfg, pro_suffix=""):
     bad = [row for row in problems if row.severity == "bad"]
     if bad:
         top = max(bad, key=lambda row: row.count - row.expected)
-        verdict = (f"最该练的是{top.name}：{len(games)} 场里出现 {top.count} 次，"
+        verdict = (f"相对{tier['name']}，最该练的是{top.name}：{len(games)} 场里出现 {top.count} 次，"
                    f"按{tier['name']}的频率约 {round(top.expected)} 次。")
     else:
-        verdict = f"这段时间没有检出明显多于{tier['name']}的问题。"
+        verdict = f"相对{tier['name']}，这段时间没有明显偏多的问题。" + pro_suffix
     valid = [(axis["name"], results[axis["id"]]) for axis in axes
              if axis["id"] in results and results[axis["id"]].position is not None]
     if len(valid) < cfg["radar"]["verdict_min_axes"]:
@@ -377,7 +395,7 @@ def _ladder_verdict(games, tier, problems, axes, results, cfg):
             if result.reached is None or result.reached.level < target_level]
     if weak:
         name, result = min(weak, key=lambda pair: pair[1].position)
-        return verdict + f"雷达上最弱的是{name}（阶梯位置 {_num(result.position)}）。"
+        return verdict + f"阶梯上最弱的是{name}（阶梯位置 {_num(result.position)}）。"
     if len(valid) < len(axes):
         return verdict + "可用的指标不够多，暂不判断整体强弱。"
     return verdict + f"四个维度都达到了{tier['name']}。"
@@ -403,9 +421,10 @@ def _build_page(kind, games, frequency, cfg, tiers, title, subtitle):
         comparisons.append(Comparison(id="tier_median", name="参考中线（50）", values=[50] * len(axes)))
         strengths, problems = _rows(games, frequency, cfg, tier)
         you = median_axes(values, len(axes))
+        pro_suffix = _pro_verdict_suffix(kind, games, frequency, cfg, tier, tiers, problems)
         views.append(TierView(id=ident, name=tier["name"], source=tier["source"], level=tier.get("level"),
             you=you, comparisons=comparisons, strengths=strengths, problems=problems,
-            verdict=_verdict(kind, games, tier["name"], problems, axes, you, cfg)))
+            verdict=_verdict(kind, games, tier["name"], problems, axes, you, cfg, pro_suffix)))
     order = {"clutch": 0, "multikill": 1, "opening_win": 2, "flash_assist": 3}
     ranked = sorted((((order.get(h.kind, 9), -h.size, index, h.tick), mm, label, h)
                      for index, (mm, _, label) in enumerate(games) for h in mm.highlights), key=lambda item: item[0])
@@ -428,7 +447,8 @@ def build_summary_page(summary: PlayerSummary, cfg, tiers: dict[str, dict]) -> R
                        f"{summary.primary_name} · 多场汇总",
                        f"{len(summary.matches)} 场 · 在场 {summary.rounds_played_total} 回合")
     axes = cfg["radar"]["axes"]
-    points_by_metric = {key: ladder_points(key, tiers, cfg["ladder"]["reach_quantile"])
+    min_players = cfg["ladder"]["min_players"]
+    points_by_metric = {key: ladder_points(key, tiers, min_players)
                         for axis in axes for key in axis["metrics"]}
     complete_ids = set.intersection(*(set(point.tier_id for point in points)
                                       for points in points_by_metric.values()))
@@ -443,9 +463,17 @@ def build_summary_page(summary: PlayerSummary, cfg, tiers: dict[str, dict]) -> R
             f"{tier['name']}：{tier['per_player']['n_players']} 名玩家、{tier.get('demo_count', sum(tier['per_player']['matches']))} 场"
             for tier in sorted(tiers.values(), key=lambda item: item.get("level", 99))
             if tier["id"] in complete_ids)
-        lines = [line for mm, _, _ in games for line in mm.lobby if line.steamid == mm.player]
-        metrics = typical_player_metrics(lines, cfg)
-        results_by_metric = {key: ladder_position(metrics[key], points, not RADAR_METRICS[key])
+        short = [tier for tier in sorted(tiers.values(), key=lambda item: item.get("level", 99))
+                 if tier.get("level") is not None and tier["id"] not in complete_ids
+                 and tier.get("per_player", {}).get("n_players", 0) < min_players]
+        if short:
+            page.ladder_note += "；" + "；".join(
+                f"{tier['name']}：{tier.get('per_player', {}).get('n_players', 0)} 名玩家，"
+                f"不足 {min_players} 名，暂不进入阶梯" for tier in short)
+    lines = [line for mm, _, _ in games for line in mm.lobby if line.steamid == mm.player]
+    typical = typical_player_metrics(lines, cfg)
+    if ladder_enabled:
+        results_by_metric = {key: ladder_position(typical[key], points, not RADAR_METRICS[key])
                              for key, points in points_by_metric.items()}
         for key, result in results_by_metric.items():
             _, _, unit, scale = METRIC_TEXT[key]
@@ -455,7 +483,7 @@ def build_summary_page(summary: PlayerSummary, cfg, tiers: dict[str, dict]) -> R
             _, _, unit, scale = METRIC_TEXT[key]
             page.ladder_axes.append({
                 "id": axis["id"], "name": axis["name"], "unit": unit,
-                "you": metrics[key] * scale if metrics[key] is not None else None,
+                "you": typical[key] * scale if typical[key] is not None else None,
                 "lower_is_better": RADAR_METRICS[key],
                 "points": [{"level": point.level, "name": point.name, "standard": point.standard * scale}
                            for point in points_by_metric[key]]})
@@ -466,7 +494,8 @@ def build_summary_page(summary: PlayerSummary, cfg, tiers: dict[str, dict]) -> R
             view.comparisons = []
             view.strengths, _ = _rows(games, summary.frequency, cfg, tier,
                                       results_by_metric, tier.get("level"), points_by_metric)
-            view.verdict = _ladder_verdict(games, tier, view.problems, axes, view.ladder, cfg)
+            pro_suffix = _pro_verdict_suffix("summary", games, summary.frequency, cfg, tier, tiers, view.problems)
+            view.verdict = _ladder_verdict(games, tier, view.problems, axes, view.ladder, cfg, pro_suffix)
     if summary.panel is None:
         return page
     counts = PanelCounts.model_validate(summary.panel["counts"])
@@ -488,11 +517,17 @@ def build_summary_page(summary: PlayerSummary, cfg, tiers: dict[str, dict]) -> R
         for metric in PANEL_METRICS:
             if metric.category != category["id"]:
                 continue
+            you = values[metric.id]
+            if metric.id in AIM_TYPICAL_METRICS and typical.get(metric.id) is not None:
+                you = typical[metric.id]
             item = dict(id=metric.id, name=metric.name, unit=metric.unit, kind=metric.kind,
                         zero_sum=metric.id in ("opening_win_pct", "clutch_1v1_win_pct"),
-                        you=values[metric.id], sample=panel_sample(counts, metric))
+                        you=you, sample=panel_sample(counts, metric))
+            if (metric.denominator is not None and metric.unit == "%" and you is not None
+                    and item["sample"] < cfg["panel"]["small_sample_below"]):
+                item["count_text"] = f"{getattr(counts, metric.numerator)}/{item['sample']}（样本较少）"
             if ladder_enabled and metric.kind == "水平":
-                points = ladder_points(f"panel:{metric.id}", tiers, cfg["ladder"]["reach_quantile"])
+                points = ladder_points(f"panel:{metric.id}", tiers, min_players)
                 result = ladder_position(values[metric.id], points, metric.direction == "high")
                 item["ladder"] = result.model_dump()
                 item["ladder_text"] = _ladder_text(result, points, metric.unit) if points else "样本不足，暂不判断阶梯位置"
@@ -508,7 +543,12 @@ def build_summary_page(summary: PlayerSummary, cfg, tiers: dict[str, dict]) -> R
     page.panel = {**summary.panel, "matches": summary.panel["n"], "categories": categories}
     for view in page.tiers:
         baseline = tiers[view.id]
-        view.panel_values = baseline.get("panel", {}).get("values", {})
+        view.panel_values = dict(baseline.get("panel", {}).get("values", {}))
+        standards = baseline.get("per_player", {}).get("metrics", {})
+        for key in AIM_TYPICAL_METRICS:
+            standard = standards.get(key, {}).get("standard")
+            if standard is not None:
+                view.panel_values[key] = standard
         rates = baseline.get("problem_rates", {})
         view.panel_expected = {pid: _expected_hits(rates.get(pid, {}), counts.rounds)
                                for cat in categories for pid in (p["id"] for p in cat["problems"])}

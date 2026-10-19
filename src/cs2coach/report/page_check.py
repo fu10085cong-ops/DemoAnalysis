@@ -30,9 +30,9 @@ def check_page(page: ReportPage, cfg: dict) -> list[str]:
         bad = [row for row in tier.problems if row.severity == "bad"]
         if bad:
             top = max(bad, key=lambda row: row.count - row.expected if row.expected is not None else float("-inf"))
-            if not tier.verdict.startswith(f"最该练的是{top.name}："):
+            if not tier.verdict.startswith(f"相对{tier.name}，最该练的是{top.name}："):
                 add("结论选题不符", tier.id, top.id)
-        elif "最该练" in tier.verdict:
+        elif "最该练" in tier.verdict and "相对职业，最该练的是" not in tier.verdict:
             add("结论选题不符", tier.id, "没有 bad 问题")
         for rows, key in ((tier.strengths, "max_strengths"), (tier.problems, "max_problems")):
             if len(rows) > radar[key]:

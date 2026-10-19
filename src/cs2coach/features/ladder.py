@@ -24,8 +24,8 @@ class LadderResult(BaseModel):
     text: str = ""
 
 
-def ladder_points(metric: str, tiers: dict[str, dict], reach_quantile: float = 0.25) -> list[LadderPoint]:
-    """只收有档位和人均数据的分段；其他字段不包含身份。"""
+def ladder_points(metric: str, tiers: dict[str, dict], min_players: int = 8) -> list[LadderPoint]:
+    """只收有档位、人均数据且独立玩家数达标的分段；其他字段不包含身份。"""
     points = []
     section, _, metric_id = metric.partition(":")
     if not metric_id:
@@ -33,26 +33,19 @@ def ladder_points(metric: str, tiers: dict[str, dict], reach_quantile: float = 0
     elif section == "panel":
         section = "panel_metrics"
     for tier_id, tier in tiers.items():
-        stats = tier.get("per_player", {}).get(section, {}).get(metric_id, {})
+        per_player = tier.get("per_player", {})
+        stats = per_player.get(section, {}).get(metric_id, {})
         standard = stats.get("standard")
-        if tier.get("level") is None or standard is None or not math.isfinite(standard):
+        if (tier.get("level") is None or standard is None or not math.isfinite(standard)
+                or per_player.get("n_players", 0) < min_players):
             continue
-        values = stats.get("values", [])
-        q25, q75 = stats.get("q25"), stats.get("q75")
-        if reach_quantile != 0.25 and len(values) >= 2:
-            # 与 baseline.build_baseline 相同的 inclusive 线性分位。
-            def at(p):
-                offset = (len(values) - 1) * p
-                lo = math.floor(offset)
-                return values[lo] + (values[math.ceil(offset)] - values[lo]) * (offset - lo)
-            q25, q75 = at(reach_quantile), at(1 - reach_quantile)
         points.append(LadderPoint(level=tier["level"], tier_id=tier_id, name=tier["name"],
-                                  standard=standard, q25=q25, q75=q75))
+                                  standard=standard, q25=stats.get("q25"), q75=stats.get("q75")))
     return sorted(points, key=lambda point: point.level)
 
 
 def ladder_position(value: float | None, points: list[LadderPoint], higher_is_better: bool) -> LadderResult:
-    """按标准插值，按较差侧分位判断已达到的最高档。"""
+    """按标准插值；达到某档 = 数值不差于该档标准，取达到的最高一档。"""
     points = sorted(points, key=lambda point: point.level)
     if len(points) < 2:
         return LadderResult(position=None, reached=None, next=points[0] if points else None, ordered=True)
@@ -61,9 +54,7 @@ def ladder_position(value: float | None, points: list[LadderPoint], higher_is_be
                   for left, right in zip(points, points[1:]))
     if not ordered or value is None or not math.isfinite(value):
         return LadderResult(position=None, reached=None, next=None, ordered=ordered)
-    reached = next((point for point in reversed(points) if sign * value >= sign *
-                    ((point.q25 if higher_is_better else point.q75) if
-                     (point.q25 if higher_is_better else point.q75) is not None else point.standard)), None)
+    reached = next((point for point in reversed(points) if sign * value >= sign * point.standard), None)
     following = next((point for point in points if reached is None or point.level > reached.level), None)
     if sign * value < sign * points[0].standard:
         left, right = points[:2]
