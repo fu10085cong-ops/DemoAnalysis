@@ -871,6 +871,16 @@ window_seconds = 5
 # 超过这个距离（游戏单位）仍记为缺失（R01 审查：315 个窗口中 112 个因此缺路径距离）
 nav_snap_max_distance = 128
 
+[research.review]
+# R02 人工复核的分层抽样：每种主标签抽几个（unknown 多抽，其中 short_unknown 个取 1 秒内结束的窗口）
+counts = { hold = 3, advance = 3, retreat = 3, lateral = 3, unknown = 8 }
+short_unknown = 2
+# 顶级赛事；pro_mirage 清单中其余赛事算二三线，早期职业样本（pro_demos.toml）算顶级
+top_events = ["IEM Rio 2026", "PGL Bucharest 2026"]
+# 复盘包复制到 CS2 game/csgo 下的子目录；跳转到触发前几秒
+demo_subdir = "replays/research"
+lead_seconds = 2
+
 [research.labels]
 # 以下游戏单位阈值均为待人工校准的工程假设
 hold_max_displacement = 150
