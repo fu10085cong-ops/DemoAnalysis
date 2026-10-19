@@ -17,7 +17,7 @@
 - [x] 盘点现有指标（`docs/research_inventory.md`）
 - [x] CT 首次 5v5 → 5v4 触发器（R01）
 - [x] 5 秒行为窗口抽取，可追溯到 `demo_id` / 回合 / tick（R01：25 场 297 回合 1485 个窗口，`data/research/r01-v2/`）
-- [x] Mirage 区域与前压 / 后撤方向规则：方向用导航路径距离（方案 C）；区域表 17/23 已填，`Truck`、`Ladder`、`House`、`BackAlley`、`SideAlley`、`Scaffolding` 待产品负责人确认
+- [x] Mirage 区域与前压 / 后撤方向规则：方向用导航路径距离（方案 C）；区域表 23/23 已填（6 个经产品负责人看图确认）
 - [x] 基础行为分类（`unknown` 24.9%，待 R02 人工复核校准阈值）
 - 数据：Mirage 职业 demo 25 场（Spirit、Falcons 各 7 场，偏集中）
 - **下一步 R02**：分层抽样做游戏内复盘包，人工判定行为标签，算混淆矩阵、校准阈值
