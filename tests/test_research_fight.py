@@ -130,3 +130,10 @@ def test_timeline_keeps_death_row_close_to_previous_row():
     early = fight_match(extra_kills=[(130, T[1], CT[0])])
     text = build_timeline(early, _window(), reposition(early, CT[0], 1, 100, CFG), None, *_silent(), CFG)
     assert "【观察期结束】" not in text and text.splitlines()[-1].endswith("你已阵亡。")
+
+
+def test_dead_before_fight_end_is_unknown():
+    # 他在 tick 120 阵亡，但交火事件（如子弹）还延续到 tick 150：不能把死人当成"原位再架"
+    match = fight_match({CT[0]: A_SITE}, extra_kills=[(120, T[1], CT[0])], shots=(90, 95, 100, 150))
+    result = reposition(match, CT[0], 1, 100, CFG)
+    assert result.fight.end_tick == 150 and result.label == "unknown" and result.observe_end == 150

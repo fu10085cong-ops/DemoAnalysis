@@ -64,7 +64,7 @@ def fight_row(match, row: dict, sight, cfg: dict, nav=None) -> dict:
     if fight is None:
         return out
     end_state = match.state_at(sid, fight.end_tick)
-    death = _death_tick(match, sid, round_id, fight.end_tick)
+    death = _death_tick(match, sid, round_id, fight.start_tick)  # 死在交火结束前也算（之后的 0 秒被补）
     out["fight_end_s"] = round((fight.end_tick - trigger) / rate, 2)
     out["hp_at_fight_end"] = int(end_state["health"]) if end_state is not None else None
     if death is not None:

@@ -97,9 +97,10 @@ def reposition(match: MatchData, sid: int, round_id: int, trigger: int, cfg: dic
     stop = fight.end_tick + round(limits["observe_seconds"] * rate)
     if rnd is not None:
         stop = min(stop, rnd.end_tick)
-    death = _death_tick(match, sid, round_id, fight.end_tick)
+    # 从交火开始找阵亡：交火事件可能在他死后还有（子弹在飞、燃烧弹），死在交火结束前也要截断
+    death = _death_tick(match, sid, round_id, fight.start_tick)
     if death is not None:
-        stop = min(stop, death)
+        stop = min(stop, max(death, fight.end_tick))  # 死在交火结束前：观察期为 0，判看不出
     result = Reposition(label="unknown", fight=fight, observe_end=stop)
     location, source = _location(match, sid, fight, sight)
     result.location, result.location_source = location, source
