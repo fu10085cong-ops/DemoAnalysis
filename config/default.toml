@@ -924,7 +924,8 @@ running_speed = 150        # 高于此为跑
 # R03 AI 判定试点；真实调用会产生费用，运行前先征得产品负责人同意
 model = "deepseek-flash"
 repeats = 2
-prompt_version = "r03-v2"   # v2：按区域层级定义撤离 / 继续压，时间线加离交火对手的距离
+prompt_version = "r03-v3"   # v2：按区域层级定义；v3：判断顺序写死、标出观察期结束行、阵亡行不丢
+temperature = 0            # 随机程度降到最低，减少同一条两遍答案不同
 
 [research.zones.de_mirage]
 # 防守区组：起点和终点在同一组内（含同一报点）判"保持"，从某组或纵深进入另一组判"转点"；先于距离阈值判断。

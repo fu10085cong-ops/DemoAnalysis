@@ -59,6 +59,8 @@ class OpenAICompatProvider:
             client = openai.OpenAI(api_key=key, base_url=cfg["base_url"])
         self.client = client
         self.params: dict[str, Any] = {"model": cfg["model"], "max_tokens": int(cfg["max_tokens"])}
+        if cfg.get("temperature") is not None:  # 只在配置了时传（研究标注要求输出尽量稳定）
+            self.params["temperature"] = float(cfg["temperature"])
         if "thinking" in cfg:
             if cfg["thinking"]:
                 self.params["reasoning_effort"] = cfg["reasoning_effort"]

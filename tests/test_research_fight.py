@@ -91,3 +91,37 @@ def test_timeline_hides_enemies_not_seen_heard_or_on_radar():
     assert "SecretSpot" not in build_timeline(match, window, result, sight, far, no_ping, CFG)
     near = far.assign(radius=2000.0)
     assert "脚步 SecretSpot方向" in build_timeline(match, window, result, sight, near, no_ping, CFG)
+
+
+def _window():
+    return dict(player_id=str(CT[0]), round_id=1, start_tick=100, start_place="BombsiteA", first_kill_by="self",
+                round_time_s=1.4)
+
+
+def _silent():
+    return (pd.DataFrame(columns=["tick", "steamid", "x", "y", "z", "radius", "step"]),
+            pd.DataFrame(columns=["tick", "steamid", "x", "y", "z"]))
+
+
+def test_timeline_marks_fight_end_and_observation_end_rows():
+    match = fight_match({CT[0]: {**A_SITE, 200: {"Y": 150.0, "last_place_name": "Stairs"}}})
+    result = reposition(match, CT[0], 1, 100, CFG)
+    text = build_timeline(match, _window(), result, None, *_silent(), CFG)
+    fight_rows = [line for line in text.splitlines() if "【程序判断的交火结束】" in line]
+    close_rows = [line for line in text.splitlines() if "【观察期结束】" in line]
+    assert len(fight_rows) == 1 and fight_rows[0].startswith("+0.0s")  # 交火结束在 tick 100，正好一行
+    assert len(close_rows) == 1 and close_rows[0].startswith("+3.0s") and text.splitlines()[-1] == close_rows[0]
+
+
+def test_timeline_keeps_death_row_close_to_previous_row():
+    # 交火后 2.1 秒阵亡（离上一行 +2.0s 只有 0.1 秒）：阵亡行必须保留，观察期结束标在最后一个存活的时刻
+    match = fight_match(extra_kills=[(100 + round(2.1 * RATE), T[1], CT[0])])
+    result = reposition(match, CT[0], 1, 100, CFG)
+    text = build_timeline(match, _window(), result, None, *_silent(), CFG)
+    lines = text.splitlines()
+    assert lines[-1].endswith("你已阵亡。")
+    assert "【观察期结束】" in lines[-2]
+    # 1.5 秒内阵亡：没有观察期结束行
+    early = fight_match(extra_kills=[(130, T[1], CT[0])])
+    text = build_timeline(early, _window(), reposition(early, CT[0], 1, 100, CFG), None, *_silent(), CFG)
+    assert "【观察期结束】" not in text and text.splitlines()[-1].endswith("你已阵亡。")

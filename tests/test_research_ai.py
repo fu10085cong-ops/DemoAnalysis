@@ -73,3 +73,16 @@ def test_run_needs_yes_then_compare_builds_review_pack(tmp_path, monkeypatch):
     ids = [item["id"] for item in pack["items"]]
     assert ids[0] == "f1" and len(ids) == 6  # 不一致的 1 条 + 一致中随机 5 条
     assert "rule" not in pack["items"][0]  # 盲审
+
+
+def test_parse_answer_takes_first_json_object():
+    answer = ra.parse_answer('{"label": "看不出", "evidence": "x"}, {"confidence": "中"}')
+    assert answer["label"] == "看不出" and "error" not in answer
+
+
+def test_temperature_passed_only_when_configured():
+    from cs2coach.ai.openai_compat import OpenAICompatProvider
+
+    base = {"model": "m", "max_tokens": 10, "api_key_env": "", "base_url": "http://x"}
+    assert "temperature" not in OpenAICompatProvider("t", base, client=object()).params
+    assert OpenAICompatProvider("t", {**base, "temperature": 0}, client=object()).params["temperature"] == 0.0

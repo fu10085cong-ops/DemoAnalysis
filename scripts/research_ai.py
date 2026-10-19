@@ -14,7 +14,6 @@ import argparse
 import copy
 import json
 import random
-import re
 import sys
 from pathlib import Path
 
@@ -32,19 +31,22 @@ KEY = ["demo_id", "match_id", "round_id", "player_id", "start_tick"]
 
 SYSTEM = """你是 CS2 职业比赛的分析员。用户会给你一名 CT 选手的"选手视角时间线"：只包含他当时能看到、听到、从雷达和队友那里知道的信息。
 
-任务：判断他在【交火结束】之后约 3 秒内做了什么，从下面五个标签中选一个。时间线每行给出你所在的报点和区域层级
-（后方 < 防守区 < 接触区，防守区还分 A / B / 中路等组）、离交火结束时位置的距离、离交火对手的距离：
-- 原位再架：离交火结束时位置挪动不到约 100 单位（转头看别处、原地调整都算）
-- 换位：挪动超过约 100 单位，但仍在同一个报点或同一组防守区内，换到另一个点或角度
-- 撤离：往后退了一层（接触区→防守区、防守区→后方）；或离开了所在报点 / 防守区组，并且离交火对手明显更远（约 250 以上）
-- 继续压：往前进了一层（例如防守区→接触区）；或离交火对手明显更近（约 150 以上）
-- 看不出：交火后很快阵亡、回合结束，或信息不足以判断
-按观察期结束时（交火结束后约 3 秒）相对交火结束时的位置判断；中途走出去又回来，以结束时为准，并在依据里说明。
+任务：判断他在【交火结束】之后的观察期内做了什么。时间线每行给出所在报点和区域层级（后方 < 防守区 < 接触区，
+防守区还分 A / B / 中路等组）、离交火结束时位置的距离、离交火对手的距离。观察期的最后一行标有【观察期结束】。
+
+只比较【观察期结束】那一行和【程序判断的交火结束】那一行，中途走出去又回来不算。按下面的顺序判断，第一条满足的就是答案：
+1. 看不出：交火结束时或之后 1.5 秒内你已阵亡、回合结束，或没有【观察期结束】行。只要满足就选它，不要拿交火之中的移动来判断
+2. 原位再架：【观察期结束】行"离交火结束时位置"小于 100（转头、原地调整都算）
+3. 撤离：区域层级后退了一层（接触区→防守区、防守区→后方）
+4. 继续压：区域层级前进了一层（后方→防守区、防守区→接触区）
+5. 继续压：离交火对手的距离比交火结束时近了 150 以上
+6. 撤离：离开了交火结束时所在的报点和防守区组，并且离交火对手远了 250 以上
+7. 换位：以上都不满足（在同一区域内换了点或角度）
 
 要求：
-1. 交火结束默认以时间线中"程序判断的交火结束"为准；如果你认为交火在别的时刻结束，用你的判断，并写进 fight_end_s
+1. 交火结束默认以【程序判断的交火结束】为准；如果你认为交火在别的时刻结束，用你的判断，写进 fight_end_s，并说明原因
 2. 只根据时间线里的信息判断，不要猜测语音沟通或时间线以外的事
-3. 依据要写明第几秒发生了什么（例如"+1.5s 到 +3.0s 从 A 包点走到 Jungle，离交火结束时位置 260"）
+3. 依据写明两行的数值（例如"交火结束 +0.5s 在 BombsiteA 离对手 358；观察期结束 +3.5s 在 Jungle 离对手 400、离交火结束位置 260，同一防守区组 A"）以及命中的是第几条
 
 只输出一个 JSON 对象，不要输出其他文字：
 {"label": "换位|原位再架|撤离|继续压|看不出", "fight_end_s": 数字或 null, "evidence": "依据", "confidence": "高|中|低"}"""
@@ -173,13 +175,16 @@ def _load(path: Path) -> list[dict]:
 # ---------- run ----------
 
 def parse_answer(text: str) -> dict:
-    match = re.search(r"\{.*\}", text, re.S)
-    if not match:
+    """取回复里的第一个 JSON 对象（模型偶尔会在后面多写一段）。"""
+    start = text.find("{")
+    if start < 0:
         return {"label": None, "error": "没有 JSON"}
     try:
-        answer = json.loads(match.group())
+        answer, _ = json.JSONDecoder().raw_decode(text[start:])
     except json.JSONDecodeError as exc:
         return {"label": None, "error": f"JSON 无法解析：{exc}"}
+    if not isinstance(answer, dict):
+        return {"label": None, "error": "不是 JSON 对象"}
     if answer.get("label") not in NAMES:
         answer["error"] = f"标签不在 {NAMES} 中"
     return answer
@@ -207,6 +212,8 @@ def run(name: str, model: str | None, repeats: int | None, yes: bool, root: Path
     run_cfg = copy.deepcopy(cfg)
     run_cfg["ai"]["provider"] = provider
     run_cfg["ai"][provider]["model"] = model
+    if ai.get("temperature") is not None:
+        run_cfg["ai"][provider]["temperature"] = ai["temperature"]
     results = out / "results"
     results.mkdir(exist_ok=True)
     for k in range(1, repeats + 1):

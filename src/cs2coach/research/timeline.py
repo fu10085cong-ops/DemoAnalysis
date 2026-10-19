@@ -115,13 +115,26 @@ def build_timeline(match: MatchData, window: dict, result: Reposition, sight, so
     anchor_name = "交火结束时位置" if fight else "0 秒时位置"
     prev = start - 1
     ticks = list(range(start, end + 1, step))
-    if end - ticks[-1] >= step / 2:
-        ticks.append(end)
+    if ticks[-1] != end:  # 观察期结束（或阵亡）那一刻一定要有一行；离上一行太近就替换上一行
+        if end - ticks[-1] < step / 2 and len(ticks) > 1:
+            ticks[-1] = end
+        else:
+            ticks.append(end)
+    close = end
+    last = match.state_at(sid, end)
+    if result.observe_end is not None and (last is None or not bool(last["is_alive"])):
+        close = end - 1  # 观察期因阵亡截断：最后一个存活的 tick 作为观察期结束
+    extra = {close} if result.observe_end is not None else set()
+    if fight is not None and start <= fight.end_tick <= end:
+        extra.add(fight.end_tick)  # 交火结束那一行落在准确时刻
+    ticks = sorted(set(ticks) | extra)
     for tick in ticks:
         me = match.state_at(sid, tick)
         if me is None or not bool(me["is_alive"]):
             lines.append(f"{rel(tick)} 你已阵亡。")
             break
+        min_observe = cfg["research"]["fight"]["min_observe_seconds"] * rate
+        closing = fight is not None and tick == close and close - fight.end_tick >= min_observe
         parts = [_self_text(me, tick, anchor, anchor_name, marks, match, sid, cfg, map_name, result.location)]
         seen = {}
         for enemy in enemies:
@@ -153,8 +166,10 @@ def build_timeline(match: MatchData, window: dict, result: Reposition, sight, so
                     alive.append(f"{match.name_of(mate)} {place_text(st, cfg, map_name)} {int(st['health'])}血")
             parts.append("队友：" + ("、".join(alive) if alive else "无存活"))
         marker = ""
-        if fight is not None and prev < fight.end_tick <= tick:
+        if fight is not None and tick == fight.end_tick:
             marker = " 【程序判断的交火结束】"
+        if closing:
+            marker += " 【观察期结束】"
         lines.append(f"{rel(tick)}{marker} " + " | ".join(parts))
         prev = tick
     return "\n".join(lines)
