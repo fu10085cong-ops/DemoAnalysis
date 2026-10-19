@@ -1,6 +1,6 @@
 # 054 多场汇总提速：缓存只看分析相关配置，`summary` 支持 `--jobs`
 
-状态：待做
+状态：完成
 难度：B（改 2–3 个文件，照现有写法扩展，测试已预写）
 执行：MiMo（经 Codex 驱动），在独立工作目录 `C:\Users\David\DemoAnalysis-054` 中
 分支：`task/054-summary-cache-jobs`
@@ -77,8 +77,18 @@ C:\Users\David\DemoAnalysis\.venv\Scripts\python.exe -m pytest -q tests/test_sum
 
 ## 完成报告（实现方填写，尽量简短）
 
-- 改动的文件及原因：
+- 改动的文件及原因：`cache.py` 只让分析类配置进入缓存键；`summary/aggregate.py` 抽出可 pickle 的逐场分析函数并用 `map_ordered` 按输入顺序汇总；`cli.py` 增加并传递 `summary --jobs`；`docs/features.md` 补充说明。
 - 测试结果（最后一行）：
-- 遗留问题 / 需要确认的地方：
+  - 预写测试：`28 passed in 1.52s`
+  - 全部测试：`2 failed, 1170 passed, 4 skipped in 45.20s`
+- 遗留问题 / 需要确认的地方：全量测试中 `tests/test_summary.py` 的两个旧用例依赖 Windows 多进程不会继承 `monkeypatch` 的函数补丁，因而失败；未修改测试或绕过默认并行。请 Claude 审查是否更新这两个旧用例为 `jobs=1`（或给它们的调用显式传 `jobs=1`）。真实 demo 对照仍按任务单由 Claude 在主目录验证。
 
 ## 审查意见（Claude 填写）
+
+2026-10-19 通过（审查时改三处）。
+
+- `build_summary` 恢复按 `match_id` 排序后再分发：实现中去掉了排序，会让多场编号（Dust2 M1、M2…）随扫描顺序变化。
+- `cli.py` 直接传 `jobs=args.jobs`；原实现为了兼容旧测试里不接受 `jobs` 的假 `build_summary` 写了条件分支。改为让 `tests/test_local_provider.py` 的两个假函数、`tests/test_summary.py` 的 lambda 接受 `jobs`。
+- `tests/test_summary.py` 两个替换了分析函数的用例显式 `jobs=1`（子进程拿不到 monkeypatch）。
+- 全部测试 `1172 passed, 4 skipped`。
+- 已知：并行时 demoparser2 的 `PanicException` 无法传回主进程，跳过原因显示为 `PicklingError…`（048 的 `map_ordered` 一直如此，基准构建相同）；比赛仍正确跳过。

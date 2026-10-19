@@ -2,7 +2,8 @@
 
 只缓存小而稳定的结果（MatchMoments、ProblemReport、比分），不缓存逐 tick 数据（一场约 90 MB）。
 键包含：demo 文件路径、大小、修改时间、压缩包成员、玩家、职业基准文件、完整配置，以及解析层、
-特征层、基准代码的内容哈希；任何一项变化都会重新计算。缓存目录在 data/cache/（已被 git 忽略）。
+特征层、基准代码的内容哈希，以及会影响分析结果的配置段；任何一项变化都会重新计算。展示类配置段
+不影响 MatchMoments、问题检测和比分，不放进缓存键。缓存目录在 data/cache/（已被 git 忽略）。
 """
 
 from __future__ import annotations
@@ -18,6 +19,9 @@ ROOT = Path(__file__).resolve().parents[2]
 CACHE_DIR = ROOT / "data" / "cache" / "analysis"
 _SOURCE_DIRS = ("parsing", "features")
 _SOURCE_FILES = ("baseline.py", "baselines/pro_sample.json")
+# 只影响报告展示、不影响单场分析结果（MatchMoments、问题检测、比分）的配置段；不放进缓存键。
+# 新增配置段默认放进缓存键：宁可多算一次，也不能读到过期结果。
+DISPLAY_SECTIONS = ("training", "summary", "report", "audit", "ladder", "radar", "review", "checker", "ai", "tools")
 _code_hash: str | None = None
 
 
@@ -42,8 +46,9 @@ def cache_key(demo: Path, member: str | None, steamid: int, cfg: dict[str, Any])
         stat = demo.stat()
     except OSError:
         return None
+    analysis_cfg = {key: value for key, value in cfg.items() if key not in DISPLAY_SECTIONS}
     parts = {"demo": str(demo.resolve()), "size": stat.st_size, "mtime": stat.st_mtime_ns, "member": member,
-             "player": int(steamid), "cfg": cfg, "code": code_hash()}
+             "player": int(steamid), "cfg": analysis_cfg, "code": code_hash()}
     return hashlib.sha256(json.dumps(parts, sort_keys=True, default=str, ensure_ascii=False).encode()).hexdigest()
 
 

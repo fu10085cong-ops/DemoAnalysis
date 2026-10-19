@@ -112,6 +112,8 @@ def _build_parser() -> argparse.ArgumentParser:
     summary.add_argument("--out", type=Path, default=Path("data/output"), help="输出目录")
     summary.add_argument("--config", type=Path, default=None, help="阈值配置文件（TOML）")
     summary.add_argument("--target", default=None, help="报告对比的目标分段 id")
+    summary.add_argument("--jobs", type=int, default=None,
+                         help="并行进程数（默认取配置 tools.jobs 与 CPU 核数的较小值）")
     summary.add_argument("--ai", action="store_true", help="调用 AI 生成多场中文复盘报告")
     summary.add_argument("--provider", choices=("deepseek", "mimo", "claude", "local"), help="覆盖配置中的 AI 模型服务")
     summary.add_argument("--model", default=None, help="覆盖所选模型服务的模型名，例如 deepseek-v4-pro")
@@ -182,7 +184,7 @@ def _summary(args: argparse.Namespace) -> int:
         print(f"错误: 没有找到玩家 {steamid} 的可用 demo", file=sys.stderr)
         return 1
     baseline = load_baseline()
-    result = build_summary(steamid, refs, cfg, baseline)
+    result = build_summary(steamid, refs, cfg, baseline, jobs=args.jobs)
     folder = _output_folder(args.out, Path("汇总.dem"), result.primary_name, steamid)
     folder.mkdir(parents=True, exist_ok=True)
     _archive_reports(folder, ("problems.md", "summary.json", "basic_report.md", "report_data.json", "report.html"))
