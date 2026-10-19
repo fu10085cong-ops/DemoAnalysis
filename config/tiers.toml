@@ -14,7 +14,7 @@ manifest = "src/cs2coach/baselines/pro_demos.toml"
 # 旧 A 段中与原 B 目录重复、段位不明的两场仍排除。
 [[tier]]
 id = "5e_b"
-name = "入门标准（5E B 段）"
+name = "入门（5E B 段）"
 level = 1
 players_file = "data/tiers/5e_b_players.toml"
 

@@ -43,7 +43,7 @@ def _tier(ident, level, ttd, offset=1.0, strafe=70, spray=40):
                for key, value in zip(("time_to_damage_ms", "crosshair_offset_m",
                                       "counter_strafing_pct", "spray_accuracy_pct"),
                                      (ttd, offset, strafe, spray))}
-    return {"id": ident, "name": {1: "入门标准（5E B 段）", 2: "5E A 段", 3: "5E S 段"}[level],
+    return {"id": ident, "name": {1: "入门（5E B 段）", 2: "5E A 段", 3: "5E S 段"}[level],
             "level": level, "source": "合成样本", "per_player": {"n_players": 8,
                 "matches": [10] * 8, "metrics": metrics}, "metrics": {}, "problem_rates": {}}
 
@@ -110,6 +110,8 @@ def test_summary_ladder_and_old_baseline_fallback():
     assert view.ladder["ttd"].reached.level == 3
     assert view.strengths and view.strengths[0].id == "time_to_damage_ms"
     assert "最弱的是" in view.verdict
+    # 结论里写这一项的阶梯文字，不写玩家看不懂的"阶梯位置 1.28"
+    assert "阶梯位置" not in view.verdict and "标准（" in view.verdict
     assert page.ladder_levels and "8 名玩家" in page.ladder_note
     # 多场页改画横向阶梯条：每个维度带你的数值、各档标准（展示单位）和方向
     ttd = next(axis for axis in page.ladder_axes if axis["id"] == "ttd")

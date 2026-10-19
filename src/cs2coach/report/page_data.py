@@ -395,7 +395,7 @@ def _ladder_verdict(games, tier, problems, axes, results, cfg, pro_suffix=""):
             if result.reached is None or result.reached.level < target_level]
     if weak:
         name, result = min(weak, key=lambda pair: pair[1].position)
-        return verdict + f"阶梯上最弱的是{name}（阶梯位置 {_num(result.position)}）。"
+        return verdict + f"阶梯上最弱的是{name}：{result.text}。"
     if len(valid) < len(axes):
         return verdict + "可用的指标不够多，暂不判断整体强弱。"
     return verdict + f"四个维度都达到了{tier['name']}。"
