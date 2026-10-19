@@ -863,3 +863,47 @@ server_fallback = true
 # 逐场处理的脚本同时运行的进程数；每个进程约占 1.3 GB 内存
 # 2026-10-19 产品负责人要求尽量少占 CPU：默认 2，需要快时用 --jobs 指定
 jobs = 2
+
+[research]
+# R01 的观察时长，待人工复核后校准
+window_seconds = 5
+# 玩家位置不在任何导航区域内（站在箱子上、高度偏差）时，退回到最近的导航区域中心，
+# 超过这个距离（游戏单位）仍记为缺失（R01 审查：315 个窗口中 112 个因此缺路径距离）
+nav_snap_max_distance = 128
+
+[research.labels]
+# 以下游戏单位阈值均为待人工校准的工程假设
+hold_max_displacement = 150
+hold_max_nav_delta = 100
+move_min_nav_delta = 250
+lateral_min_displacement = 300
+regroup_min_distance = 300
+regroup_max_end_distance = 600
+min_window_seconds = 1
+
+[research.regions.de_mirage]
+# 地点键来自真实 demo；纵深等级由人工填写，空字符串表示未复核。CT 视角：deep 深处 / hold 防守位 / contact 接触区。
+# 2026-10-19 Claude 填写有把握的 17 个；Truck、Ladder、House、BackAlley、SideAlley、Scaffolding 待产品负责人确认位置后再填
+Apartments = "contact"
+BackAlley = ""
+BombsiteA = "hold"
+BombsiteB = "hold"
+CTSpawn = "deep"
+Catwalk = "contact"
+Connector = "hold"
+House = ""
+Jungle = "hold"
+Ladder = ""
+Middle = "contact"
+PalaceAlley = "contact"
+PalaceInterior = "contact"
+Scaffolding = ""
+Shop = "hold"
+SideAlley = ""
+SnipersNest = "hold"
+Stairs = "hold"
+TRamp = "contact"
+TSpawn = "contact"
+TopofMid = "contact"
+Truck = ""
+Underpass = "contact"

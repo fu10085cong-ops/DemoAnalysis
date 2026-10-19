@@ -15,7 +15,7 @@ from tests.test_visibility import duel
 
 # 会影响单场分析结果（MatchMoments、问题检测、比分）的配置段
 ANALYSIS_SECTIONS = ("parsing", "moments", "economy", "weapons", "aim", "aim_stats", "visibility",
-                     "counter_strafe", "baseline", "problems", "panel")
+                     "counter_strafe", "baseline", "problems", "panel", "research")
 
 
 @pytest.fixture

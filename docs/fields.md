@@ -1,5 +1,9 @@
 # demoparser2 字段调研
 
+## R01 awpy 导航网格验证（2026-10-19）
+
+本机 awpy 3.0.0 可用 `NavMesh(str(Path.home() / ".awpy/2000930/navs/de_mirage.nav"))` 加载，`areas` 为 Polars DataFrame（Mirage 2544 行）；`find_area((x, y, z))` 返回整数区域 ID，找不到则为 `None`；`find_path(start, end)` 返回区域 ID 列表，同一区域示例为 `[1]`，不同区域示例为 `[1, 3, 2]`，找不到路径时为 `[]`。`area(id)["centroid"]` 返回区域中心坐标。R01 用区域中心折线近似导航路径长度。
+
 > 所有结论都来自对实际 demo 的解析，不是凭记忆写的。复现方法：
 >
 > ```bash

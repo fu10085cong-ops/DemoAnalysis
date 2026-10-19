@@ -1,6 +1,6 @@
 # R01 Mirage CT 首次 5v4：触发器、5 秒行为窗口与研究表
 
-状态：待做
+状态：完成（导航退回修正后待重新导出）
 难度：A（新模块：局势触发、逐 tick 窗口抽取、导航网格路径距离、初版行为标签）
 执行：Codex（思考强度 high）
 分支：`research/R01-ct-5v4-windows`
@@ -108,11 +108,51 @@
 
 ## 完成报告（实现方填写，尽量简短）
 
-- 改动的文件及原因：
-- awpy 导航网格验证：
-- 测试结果（最后一行）：
-- 真实 demo 验证（summary.md 与 5 个样例）：
-- Mirage 地点名清单：
-- 遗留问题 / 需要确认的地方：
+- 改动的文件及原因：新增 `src/cs2coach/research/{models,triggers,windows,labels}.py`、`scripts/research_export.py` 和 `tests/test_research_r01.py`，完成可追溯窗口与导出；新增 `docs/research.md`，更新 `config/default.toml`、`docs/fields.md`。`tests/test_summary_cache_jobs_054.py` 只补充新配置段的缓存分类断言，诊断代码未改。
+- awpy 导航网格验证：awpy 3.0.0 用 `NavMesh(str(Path.home() / ".awpy/2000930/navs/de_mirage.nav"))` 成功加载 2544 个区域；`find_area` 返回区域 ID 或 `None`；`find_path` 返回区域 ID 列表（同区域 `[1]`，不同区域 `[1, 3, 2]`，找不到为 `[]`）；`area(id)["centroid"]` 可取路径中心点。结果已写入 `docs/fields.md`。
+- 测试结果（最后一行）：`1208 passed, 4 skipped in 41.86s`
+- 真实 demo 验证：仅导出一次，`.venv/Scripts/python.exe scripts/research_export.py --name r01-dev --jobs 2`。使用 6 份 Mirage：Falcons–NaVi m3 p1/p2、Falcons–Spirit m1、MOUZ–Spirit m2、Vitality–Falcons m3、FURIA–Aurora m2；输出在 `data/research/r01-dev/`。`summary.md` 内容：
+
+  ```text
+  # R01 Mirage CT 5v4 导出摘要
+
+  Demo 数：6
+  比赛数：5
+  触发回合数：63
+  窗口数：315
+
+  ## 主标签
+
+  - hold: 53
+  - advance: 41
+  - retreat: 37
+  - lateral: 23
+  - unknown: 161
+
+  unknown 比例：51.1%
+
+  ## 跳过原因
+
+  - first_enemy_kill_ct: 40
+  ```
+
+  固定随机种子抽取 5 个窗口（列序：demo_id / round_id / player / start_tick / 主标签 / nav_delta / 位移）：
+
+  ```text
+  falcons-vs-spirit-m1-mirage.dem / 1 / （已匿名） / 3015 / advance / -261.6 / 282.9
+  furia-vs-aurora-m2-mirage.dem / 13 / （已匿名） / 110622 / hold / -6.1 / 114.0
+  falcons-vs-natus-vincere-m3-mirage-p1.dem / 9 / （已匿名） / 78348 / unknown / 空 / 165.7
+  mouz-vs-spirit-m2-mirage.dem / 2 / （已匿名） / 7956 / unknown / 229.3 / 200.7
+  falcons-vs-natus-vincere-m3-mirage-p2.dem / 20 / （已匿名） / 58734 / advance / -539.5 / 386.2
+  ```
+- Mirage 地点名清单：另用 `--list-places --jobs 2` 只读取地点字段，按出现次数排序（非空 23 个）：CTSpawn 1997834、TSpawn 1464237、BombsiteA 995632、BombsiteB 612736、PalaceInterior 485535、TopofMid 454967、Catwalk 333608、Apartments 327059、Underpass 299180、Middle 291852、PalaceAlley 247542、SideAlley 240756、BackAlley 220890、Connector 194859、Shop 162565、TRamp 153446、Truck 136948、Jungle 136787、SnipersNest 123515、House 116081、Stairs 70193、Scaffolding 38323、Ladder 25462。另有空地点名 1976 条，不作为区域键。
+- 遗留问题 / 需要确认的地方：315 个窗口中 112 个缺导航变化，初版主标签 `unknown` 共 161 个；待 R02 人工复核和阈值校准。导出后补了首杀前掉线校验，合成测试已通过；遵照只导出一次的要求，未重导真实 demo，现有导出仍是补丁前版本。运行期间出现未跟踪目录 `.tmp-hltv-browser/`，来源不明，未触碰。
 
 ## 审查意见（Claude 填写）
+
+2026-10-19 通过，审查时改一处：
+
+- **导航距离缺失**：315 个窗口中 112 个缺 `nav_delta`（起点 68、终点 64 个位置不在任何导航区域内），是 161 个 `unknown` 的主要来源；缺失不按回合聚集，与 T 出生区无关。原因是 `find_area` 只认严格落在区域多边形内的点（站在箱子上、高度偏差即失败）。新增 `_snap`：找不到所在区域时退回到 `[research] nav_snap_max_distance`（128）以内最近的区域中心，并把这段直线距离计入路径；T 出生区的检查同样使用。补测试 `test_nav_distance_snaps_to_nearest_area_within_limit`。全部测试 `1209 passed, 4 skipped`。
+- 现有 `data/research/r01-dev` 是修正前的导出，需要重新导出（解析 6 份 demo，`--jobs 2`，约 5–10 分钟）后再看 `unknown` 比例。
+- 区域纵深表：Claude 填写有把握的 17 个地点；`Truck`、`Ladder`、`House`、`BackAlley`、`SideAlley`、`Scaffolding` 待产品负责人确认。
+- 运行期间出现的 `.tmp-hltv-browser/`（Edge 用户数据，约 12 MB）不是本任务产生，未处理。
