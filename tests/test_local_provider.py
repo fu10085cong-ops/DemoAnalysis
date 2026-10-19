@@ -107,7 +107,7 @@ def test_provider_override_for_both_commands_and_local_factory(monkeypatch, tmp_
                                            "--provider", "local"]).provider == "local"
     summary, _, _ = sample()
     seen = {}
-    def build(sid, refs, config, baseline):
+    def build(sid, refs, config, baseline, jobs=None):
         seen["provider"] = config["ai"]["provider"]
         return summary
     monkeypatch.setattr(cli, "load_config", lambda path=None: copy.deepcopy(load_config()))
@@ -123,7 +123,7 @@ def test_provider_override_for_both_commands_and_local_factory(monkeypatch, tmp_
 def test_model_flag_overrides_selected_provider_model(monkeypatch, tmp_path):
     summary, _, _ = sample()
     seen = {}
-    def build(sid, refs, config, baseline):
+    def build(sid, refs, config, baseline, jobs=None):
         seen["ai"] = copy.deepcopy(config["ai"])
         return summary
     monkeypatch.setattr(cli, "load_config", lambda path=None: copy.deepcopy(load_config()))

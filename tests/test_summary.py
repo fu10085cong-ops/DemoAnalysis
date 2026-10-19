@@ -162,7 +162,7 @@ def test_build_summary_skips_one_failed_match(tmp_path, monkeypatch):
                         make_mm(rounds=10))
     monkeypatch.setattr("cs2coach.summary.aggregate.detect_problems", lambda *args: report("slow_reaction", 1))
     monkeypatch.setattr("cs2coach.summary.aggregate.match_score", lambda *args: (6, 4))
-    result = build_summary(A, refs, load_config(), None)
+    result = build_summary(A, refs, load_config(), None, jobs=1)  # 测试替换了分析函数，子进程拿不到
     assert [m.match_id for m in result.matches] == ["b"]
     assert result.matches[0].number == "M1"
     assert len(result.skipped) == 1 and "覆盖率不足" in result.skipped[0].reason
@@ -185,9 +185,9 @@ def test_build_summary_does_not_cache_match_without_visibility(tmp_path, monkeyp
                         make_mm(rounds=10).model_copy(update={"visibility_unavailable": next(reasons)}))
     monkeypatch.setattr("cs2coach.summary.aggregate.detect_problems", lambda *args: report("slow_reaction", 1))
     monkeypatch.setattr("cs2coach.summary.aggregate.match_score", lambda *args: (6, 4))
-    build_summary(A, refs, load_config(), None)
+    build_summary(A, refs, load_config(), None, jobs=1)
     assert not list((tmp_path / "c").glob("*.pkl.gz"))       # 视野失败的结果不写入
-    build_summary(A, refs, load_config(), None)
+    build_summary(A, refs, load_config(), None, jobs=1)
     assert len(list((tmp_path / "c").glob("*.pkl.gz"))) == 1  # 重新计算成功后写入
 
 
@@ -196,7 +196,7 @@ def test_summary_cli_writes_and_archives_files(tmp_path, monkeypatch, capsys):
     sample = aggregate_matches(A, [(ref("a"), mm, report("slow_reaction", 1), (6, 4))],
                                None, load_config())
     monkeypatch.setattr("cs2coach.summary.discover.find_player_demos", lambda *args: [ref("a")])
-    monkeypatch.setattr("cs2coach.summary.aggregate.build_summary", lambda *args: sample)
+    monkeypatch.setattr("cs2coach.summary.aggregate.build_summary", lambda *args, **kwargs: sample)
     monkeypatch.setattr("cs2coach.baseline.load_baseline", lambda: None)
     folder = tmp_path / f"earlier_name_{A}" / "汇总"
     folder.mkdir(parents=True)

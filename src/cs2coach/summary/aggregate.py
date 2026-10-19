@@ -15,6 +15,7 @@ from cs2coach.features.problems import (FrequencyRow, ProblemReport, detect_prob
                                          frequency_from_counts, problem_frequency)
 from cs2coach.parsing.loader import resolve_demo
 from cs2coach.parsing.match import parse_match
+from cs2coach.parallel import Outcome, default_jobs, map_ordered
 from cs2coach.summary.discover import DemoRef, SkippedDemo
 from cs2coach.tools.digest import match_score
 
@@ -128,39 +129,56 @@ def aggregate_matches(steamid: int, games: list[tuple[DemoRef, MatchMoments, Pro
     return summary
 
 
-def build_summary(steamid: int, refs: list[DemoRef], cfg: dict,
-                  baseline: dict | None, use_cache: bool = True) -> PlayerSummary:
-    """逐场解析与检测；失败的比赛记录原因，其余比赛继续。"""
+def _analyse_match(path: Path, member: str | None, steamid: int, cfg: dict,
+                   baseline: dict | None, use_cache: bool) -> tuple[MatchMoments, ProblemReport, tuple[int, int]]:
+    """解析、检测并计算一场比赛；作为模块级函数供多进程调用。"""
     from cs2coach.features.moments import find_moments
     from cs2coach.features.lobby import lobby_line
 
-    games = []
-    skipped = list(getattr(refs, "skipped", []))
+    def analyse():
+        demo = resolve_demo(path, member=member)
+        match = parse_match(demo, cfg)
+        player = match.require_player(steamid, cfg["parsing"]["min_target_coverage"])
+        mm = find_moments(match, player.steamid, cfg)
+        mm.lobby = [lobby_line(match, steamid, cfg, mm)]
+        return mm, detect_problems(mm, baseline, cfg), match_score(match, steamid)
+
+    # 同一份 demo、分析配置和代码不变时直接读缓存（汇总 21 场从约 5 分钟降到十几秒）；
+    # 视野计算失败（如地图网格下载不完整）的结果不写入，下次重新计算
+    key = cache_key(Path(path), member, steamid, cfg)
+    return cached(key, analyse, enabled=use_cache,
+                  store=lambda value: value[0].visibility_unavailable is None)
+
+
+def build_summary(steamid: int, refs: list[DemoRef], cfg: dict, baseline: dict | None,
+                  use_cache: bool = True, jobs: int | None = None) -> PlayerSummary:
+    """逐场解析与检测；失败的比赛记录原因，其余比赛继续，结果按输入顺序返回。"""
+    selected = []
     seen = set()
     for ref in sorted(refs, key=lambda item: item.match_id):
         if ref.match_id in seen:
             continue
         seen.add(ref.match_id)
-        print(f"正在处理 {ref.match_id} …", flush=True)
-        try:
-            def analyse():
-                demo = resolve_demo(ref.path, member=ref.member)
-                match = parse_match(demo, cfg)
-                player = match.require_player(steamid, cfg["parsing"]["min_target_coverage"])
-                mm = find_moments(match, player.steamid, cfg)
-                mm.lobby = [lobby_line(match, steamid, cfg, mm)]
-                return mm, detect_problems(mm, baseline, cfg), match_score(match, steamid)
+        selected.append(ref)
 
-            # 同一份 demo、配置和代码不变时直接读缓存（汇总 21 场从约 5 分钟降到十几秒）；
-            # 视野计算失败（如地图网格下载不完整）的结果不写入，下次重新计算
-            key = cache_key(Path(ref.path), ref.member, steamid, cfg)
-            mm, report, score = cached(key, analyse, enabled=use_cache,
-                                       store=lambda value: value[0].visibility_unavailable is None)
-        except Exception as exc:  # 单场坏数据不能中断其余比赛
-            skipped.append(SkippedDemo(path=ref.path, member=ref.member,
-                                       match_id=ref.match_id, reason=str(exc)))
-            print(f"跳过 {ref.match_id}：{exc}", flush=True)
-            continue
-        games.append((ref, mm, report, score))
+    def report_progress(index: int, outcome: Outcome) -> None:
+        ref = selected[index]
+        if outcome.error is not None:
+            print(f"跳过 {ref.match_id}：{outcome.error}", flush=True)
+            return
+        mm = outcome.value[0]
         print(f"完成 {ref.match_id}：{mm.map_name}，在场 {mm.rounds_played} 回合", flush=True)
+
+    outcomes = map_ordered(_analyse_match,
+                           [(ref.path, ref.member, steamid, cfg, baseline, use_cache) for ref in selected],
+                           default_jobs(cfg) if jobs is None else jobs,
+                           on_done=report_progress)
+    games = []
+    skipped = list(getattr(refs, "skipped", []))
+    for ref, outcome in zip(selected, outcomes):
+        if outcome.error is not None:
+            skipped.append(SkippedDemo(path=ref.path, member=ref.member,
+                                       match_id=ref.match_id, reason=outcome.error))
+            continue
+        games.append((ref, *outcome.value))
     return aggregate_matches(steamid, games, baseline, cfg, skipped)
