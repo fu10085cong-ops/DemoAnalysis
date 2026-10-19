@@ -67,3 +67,39 @@ def test_score_confusion_matrix_and_disagreements(tmp_path):
     assert "已填 3 / 20 条" in score and "（2/3）" in score
     assert "| 程序 / 人工 |" in score
     assert score.count("| w") == 1  # 只有一条不一致
+
+
+def _fake_demo(path, protocol, compressed=False):
+    def field_str(n, text):
+        data = text.encode()
+        return bytes([n << 3 | 2]) + rr._encode_varint(len(data)) + data
+    payload = field_str(1, "PBDEMS2") + bytes([2 << 3]) + rr._encode_varint(protocol) + field_str(5, "de_mirage")
+    cmd = 1 | (64 if compressed else 0)
+    body = rr._encode_varint(cmd) + rr._encode_varint(0) + rr._encode_varint(len(payload)) + payload
+    path.write_bytes(b"PBDEMS2" + bytes([0]) + bytes(8) + body + b"REST-OF-DEMO")
+
+
+def test_patch_protocol_rewrites_only_the_version_field(tmp_path):
+    demo = tmp_path / "x.dem"
+    _fake_demo(demo, 14141)
+    before = demo.read_bytes()
+    assert rr.patch_protocol(demo, 14191) == 14141
+    after = demo.read_bytes()
+    assert len(after) == len(before) and after.endswith(b"REST-OF-DEMO")
+    assert sum(a != b for a, b in zip(before, after)) <= 2  # 只改了版本号的两个字节
+    assert rr.patch_protocol(demo, 14191) is None  # 已经一致，不再改
+
+
+def test_patch_protocol_skips_compressed_headers_and_length_changes(tmp_path):
+    demo = tmp_path / "c.dem"
+    _fake_demo(demo, 14141, compressed=True)
+    assert rr.patch_protocol(demo, 14191) is None
+    short = tmp_path / "s.dem"
+    _fake_demo(short, 100)  # 一个字节的编码，换成两个字节会挪动后面的内容
+    assert rr.patch_protocol(short, 14191) is None
+
+
+def test_game_protocol_from_steam_inf(tmp_path):
+    (tmp_path / "steam.inf").write_text("ClientVersion=2000933\nPatchVersion=1.41.9.1\n", encoding="utf-8")
+    assert rr.game_protocol(tmp_path) == 14191
+    assert rr.game_protocol(tmp_path / "missing") is None

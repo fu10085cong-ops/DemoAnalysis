@@ -11,7 +11,6 @@
 from __future__ import annotations
 
 import argparse
-import filecmp
 import json
 import random
 import re
@@ -156,6 +155,75 @@ def _demo_paths(root: Path) -> dict[str, tuple[Path, str | None]]:
     return {(member or path.name): (path, member) for path, member in sources("de_mirage")}
 
 
+def _varint(buf: bytes, i: int) -> tuple[int, int]:
+    shift = value = 0
+    while True:
+        byte = buf[i]
+        i += 1
+        value |= (byte & 0x7F) << shift
+        shift += 7
+        if not byte & 0x80:
+            return value, i
+
+
+def _encode_varint(value: int) -> bytes:
+    out = bytearray()
+    while True:
+        byte, value = value & 0x7F, value >> 7
+        out.append(byte | (0x80 if value else 0))
+        if not value:
+            return bytes(out)
+
+
+def game_protocol(csgo: Path) -> int | None:
+    """CS2 安装目录 steam.inf 的 PatchVersion（如 1.41.9.1）去掉点即 demo 文件头的网络协议版本（14191）。"""
+    inf = csgo / "steam.inf"
+    if not inf.exists():
+        return None
+    for line in inf.read_text(encoding="utf-8", errors="ignore").splitlines():
+        if line.startswith("PatchVersion="):
+            digits = line.split("=", 1)[1].strip().replace(".", "")
+            return int(digits) if digits.isdigit() else None
+    return None
+
+
+def patch_protocol(path: Path, protocol: int) -> int | None:
+    """把 demo 副本文件头（第一条 DEM_FileHeader，未压缩）的 network_protocol（字段 2）改成 protocol。
+
+    只在新旧版本号编码长度相同时原地改写，文件其余字节不动；返回原版本号，无需修改或无法修改时返回 None。
+    游戏更新后旧 demo 只是被版本检查拒绝、网络格式未变时，这样即可播放（2026-10-19 实机：14188 → 14191 正常）。
+    """
+    with path.open("r+b") as f:
+        head = f.read(4096)
+        if head[:8] != b"PBDEMS2\x00":
+            return None
+        cmd, i = _varint(head, 16)
+        _, i = _varint(head, i)
+        size, i = _varint(head, i)
+        if cmd != 1:  # 必须是未压缩的文件头
+            return None
+        j, end = i, i + size
+        while j < end:
+            key, j = _varint(head, j)
+            field, wire = key >> 3, key & 7
+            if wire == 0:
+                start = j
+                value, j = _varint(head, j)
+                if field == 2:
+                    new = _encode_varint(protocol)
+                    if value == protocol or len(new) != j - start:
+                        return None
+                    f.seek(start)
+                    f.write(new)
+                    return value
+            elif wire == 2:
+                length, j = _varint(head, j)
+                j += length
+            else:
+                return None
+    return None
+
+
 def install(args, root: Path, cfg: dict) -> None:
     pack = _pack_dir(root, args.name)
     data = tomllib.loads((pack / "review.toml").read_text(encoding="utf-8"))
@@ -172,12 +240,17 @@ def install(args, root: Path, cfg: dict) -> None:
         copies[demo_id] = (resolve_demo(path, member=member), csgo / data["demo_subdir"] / (_stem(demo_id) + ".dem"))
     copies["cfg"] = (pack / "cs2coach_research.cfg", csgo / "cfg" / "cs2coach_research.cfg")
     for source, target in copies.values():
-        if target.exists() and source.suffix != ".cfg" and filecmp.cmp(source, target, shallow=False):
-            print(f"相同，跳过：{target.name}")
+        if target.exists() and source.suffix != ".cfg" and source.stat().st_size == target.stat().st_size:
+            print(f"已存在，跳过：{target.name}")  # 副本的版本号可能已改过，不按内容比较
             continue
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(source, target)
         print(f"已复制：{target}")
+    protocol = game_protocol(csgo)
+    if protocol is not None:
+        for demo_id, (_, target) in copies.items():
+            if demo_id != "cfg" and (before := patch_protocol(target, protocol)) is not None:
+                print(f"已把副本版本号 {before} 改为 {protocol}：{target.name}")
     print("CS2 控制台先输入：exec cs2coach_research")
 
 

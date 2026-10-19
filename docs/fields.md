@@ -283,3 +283,10 @@ Valve 匹配的样本不在当前机器上，尚未用解析层核对。
 ## 11. 局限
 
 - 已验证 4 个 demo：1 个 Valve 匹配，3 个同一场 ESL 赛事。FACEIT 和 128 tick 的 demo 还没验证。
+
+## demo 文件头与游戏版本兼容（2026-10-19）
+
+- 文件以 `PBDEMS2 ` 开头，第 8–15 字节是两个偏移量，第 16 字节起是第一条消息：varint 命令（1 = `DEM_FileHeader`，带 64 表示 snappy 压缩）、varint tick、varint 长度、protobuf 内容
+- `CDemoFileHeader` 字段 2 是 `network_protocol`（demoparser2 `parse_header()` 中的 `patch_version`），字段 13 是 `build_num`
+- CS2 播放时用 `network_protocol` 与游戏版本（`game/csgo/steam.inf` 的 `PatchVersion` 去掉点）比较，不同即拒绝；网络格式未变时把副本的该字段改成当前版本即可播放（实机：14188 → 14191）。实现：`scripts/research_review.py::patch_protocol`
+

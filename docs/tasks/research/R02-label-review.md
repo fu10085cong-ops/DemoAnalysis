@@ -16,6 +16,10 @@
 - `install <名> --csgo <game/csgo 目录>`：把 demo（压缩包内的先解压）复制到 `replays/research/`，cfg 复制到 `cfg/`
 - `score <名>`：读取 `review.toml` 中已填的 `result`，与程序标签对比，输出一致率、混淆矩阵和不一致窗口的位移、路径距离变化、窗口秒数，写入 `score.md`
 
+## 旧 demo 的版本兼容
+
+CS2 更新后旧 demo 会提示"Demo 文件与当前游戏版本不兼容"。2026-10-19 查明：检查的是 demo 文件头（第一条 `DEM_FileHeader`，未压缩）的 `network_protocol`（protobuf 字段 2），值等于游戏 `steam.inf` 的 `PatchVersion` 去掉点（1.41.9.1 → 14191）。实机验证：FURIA vs Aurora（14188）改成 14191 后能正常加载播放。`install` 因此会把**复制到 CS2 目录的副本**的版本号改成当前游戏版本（只在编码长度相同时原地改 2 个字节），`data/` 中的原始 demo 不改。差距较大的版本（14141 → 14191）是否也能正常播放，待第 1 轮实机确认；如出现花屏、人物错乱，改用 2D 回放。
+
 ## 第 1 轮（`r02-1`）
 
 - 来源：`data/research/r01-v3`（45 场比赛、2845 个窗口），种子 20261019；20 个窗口来自 16 场比赛
