@@ -45,22 +45,27 @@ A_SITE = {1: {"last_place_name": "BombsiteA"}}
 
 @pytest.mark.parametrize("moves, expected", [
     ({CT[0]: A_SITE}, "stay"),
-    # 同一报点内远离交火对手（X=1000）300：仍算换位（区域没变）
-    ({CT[0]: {**A_SITE, 200: {"X": -300.0}}}, "move"),
-    # 后退一层：A 包点（防守区）→ CT 出生点（后方）
-    ({CT[0]: {**A_SITE, 200: {"X": -300.0, "last_place_name": "CTSpawn"}}}, "leave"),
-    # 离开所在防守区组（A → B 区），并且离对手远了 ≥ 250
-    ({CT[0]: {**A_SITE, 200: {"X": -300.0, "last_place_name": "Shop"}}}, "leave"),
-    # 往前一层：A 包点 → Middle（接触区），即使离对手没近多少
-    ({CT[0]: {**A_SITE, 200: {"Y": 150.0, "last_place_name": "Middle"}}}, "push"),
-    ({CT[0]: {**A_SITE, 200: {"X": 200.0}}}, "push"),          # 离对手近了 200
-    ({CT[0]: {**A_SITE, 200: {"Y": 150.0, "last_place_name": "Stairs"}}}, "move"),  # A 区组内换点
+    ({CT[0]: {**A_SITE, 200: {"Y": 140.0}}}, "stay"),                      # 挪动 < 150
+    ({CT[0]: {**A_SITE, 200: {"Y": 90.0, "Z": 45.0}}}, "move"),             # 爬上高处：高度变化 ≥ 40
+    ({CT[0]: {**A_SITE, 200: {"X": -300.0}}}, "move"),                      # 往后挪也算换位（第 4 版没有撤离）
+    ({CT[0]: {**A_SITE, 200: {"X": -300.0, "last_place_name": "CTSpawn"}}}, "move"),
+    ({CT[0]: {**A_SITE, 200: {"Y": 200.0, "last_place_name": "Middle"}}}, "push"),  # 往前一层
+    ({CT[0]: {**A_SITE, 200: {"X": 200.0}}}, "move"),                       # 没有导航网格时只按层级判断压
 ])
 def test_reposition_rule_baseline(moves, expected):
     result = reposition(fight_match(moves), CT[0], 1, 100, CFG)
     assert result.label == expected
     assert result.location_source == "opponent"
     assert result.observe_end == 100 + 3 * RATE
+
+
+def test_reposition_push_by_path_toward_t_spawn():
+    from tests.test_research_r01 import LineNav
+
+    near = reposition(fight_match({CT[0]: {**A_SITE, 200: {"X": 400.0}}}), CT[0], 1, 100, CFG, nav=LineNav())
+    assert near.closer == pytest.approx(400, abs=1) and near.label == "push"  # 沿路线离 T 出生点近了 400
+    short = reposition(fight_match({CT[0]: {**A_SITE, 200: {"X": 200.0}}}), CT[0], 1, 100, CFG, nav=LineNav())
+    assert short.label == "move"  # 近了 200 < 300
 
 
 def test_reposition_unknown_when_killed_right_after_fight():

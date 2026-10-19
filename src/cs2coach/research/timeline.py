@@ -67,7 +67,7 @@ def role_text(place: str | None, position, cfg: dict, map_name: str) -> str:
 
 
 def build_timeline(match: MatchData, window: dict, result: Reposition, sight, sounds: pd.DataFrame,
-                   pings: pd.DataFrame, cfg: dict) -> str:
+                   pings: pd.DataFrame, cfg: dict, nav=None) -> str:
     """window：研究表的一行（player_id、round_id、start_tick、start_place、first_kill_by 等）。"""
     limits = cfg["research"]["timeline"]
     rate = match.meta.tick_rate
@@ -104,14 +104,12 @@ def build_timeline(match: MatchData, window: dict, result: Reposition, sight, so
     if fight is not None:
         lines.append(f"程序判断的交火段：{rel(fight.start_tick)} 到 {rel(fight.end_tick)}（以你的开枪、命中、受伤、击杀计，"
                      f"间隔不超过 {cfg['research']['fight']['gap_seconds']} 秒的连成一段）。你可以不同意。")
-        if result.location is not None:
-            where = {"opponent": "交火对手在交火结束时的位置", "visible": "交火结束时你看到的最近的 T 的位置",
-                     "aim": "交火结束时你准星方向前方 1000 单位（没有可确定的对手）"}[result.location_source]
-            lines.append(f"\"离交火对手\"的距离以{where}为准（{_nearest_place(marks, result.location[0], result.location[1])} 附近）。")
-    lines.append("区域层级：后方（CT 出生点）< 防守区（包点和防守位）< 接触区（靠近 T 的区域）。")
+    lines.append("区域层级：后方（CT 出生点）< 防守区（包点和防守位）< 接触区（靠近 T 的区域）。"
+                 "\"离 T 出生点\"是沿可走路线到 T 出生点的路程，变小表示往 T 方向走。")
     lines.append("")
     p0 = match.state_at(sid, fight.end_tick if fight else trigger)
-    anchor = (float(p0["X"]), float(p0["Y"])) if p0 is not None and pd.notna(p0["X"]) else position[:2]
+    anchor = (float(p0["X"]), float(p0["Y"]), float(p0["Z"])) if p0 is not None and pd.notna(p0["X"]) else position
+    goal = cfg["research"]["fight"]["t_spawn"].get(map_name) if nav is not None else None
     anchor_name = "交火结束时位置" if fight else "0 秒时位置"
     prev = start - 1
     ticks = list(range(start, end + 1, step))
@@ -135,7 +133,7 @@ def build_timeline(match: MatchData, window: dict, result: Reposition, sight, so
             break
         min_observe = cfg["research"]["fight"]["min_observe_seconds"] * rate
         closing = fight is not None and tick == close and close - fight.end_tick >= min_observe
-        parts = [_self_text(me, tick, anchor, anchor_name, marks, match, sid, cfg, map_name, result.location)]
+        parts = [_self_text(me, tick, anchor, anchor_name, marks, match, sid, cfg, map_name, nav, goal)]
         seen = {}
         for enemy in enemies:
             st = match.state_at(enemy, tick)
@@ -175,7 +173,7 @@ def build_timeline(match: MatchData, window: dict, result: Reposition, sight, so
     return "\n".join(lines)
 
 
-def _self_text(me, tick, anchor, anchor_name, marks, match, sid, cfg, map_name, opponent=None) -> str:
+def _self_text(me, tick, anchor, anchor_name, marks, match, sid, cfg, map_name, nav=None, goal=None) -> str:
     limits = cfg["research"]["timeline"]
     speed = float(me["speed_xy"]) if pd.notna(me.get("speed_xy")) else 0.0
     if speed < limits["moving_speed"]:
@@ -200,8 +198,15 @@ def _self_text(me, tick, anchor, anchor_name, marks, match, sid, cfg, map_name, 
     away = math.hypot(float(me["X"]) - anchor[0], float(me["Y"]) - anchor[1])
     area = role_text(str(me["last_place_name"]) if pd.notna(me["last_place_name"]) else None,
                      (float(me["X"]), float(me["Y"]), float(me["Z"])), cfg, map_name)
-    foe = f"，离交火对手 {math.hypot(float(me['X']) - opponent[0], float(me['Y']) - opponent[1]):.0f}" if opponent else ""
-    return (f"你 在 {place_text(me, cfg, map_name)}（{area}），离{anchor_name} {away:.0f}{foe}，{move}，"
+    rise = float(me["Z"]) - anchor[2] if pd.notna(me["Z"]) else 0.0
+    path = None
+    if goal is not None:
+        from cs2coach.research.windows import _nav_distance
+
+        path = _nav_distance(nav, (float(me["X"]), float(me["Y"]), float(me["Z"])), tuple(goal),
+                             cfg["research"]["nav_snap_max_distance"])
+    to_t = f"，离 T 出生点 {path:.0f}" if path is not None else ""
+    return (f"你 在 {place_text(me, cfg, map_name)}（{area}），离{anchor_name} {away:.0f}（高度 {rise:+.0f}）{to_t}，{move}，"
             f"看向 {look or '（无对应报点）'}，{int(me['health'])}血/{int(me['armor_value'])}甲，{gun}"
             + (f"，{'、'.join(flags)}" if flags else ""))
 

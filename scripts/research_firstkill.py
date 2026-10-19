@@ -24,7 +24,7 @@ from cs2coach.config import load_config  # noqa: E402
 from cs2coach.parallel import default_jobs, map_ordered  # noqa: E402
 from cs2coach.research.fight import LABELS  # noqa: E402
 
-BEHAVIOURS = ["原位再架", "换位", "撤离", "继续压"]
+BEHAVIOURS = ["原位再架", "换位", "继续压"]  # R03 第 4 版：去掉撤离
 ROLES = ["A 主防", "B 主防", "中路 CT 侧", "后方", "接触区", "未知"]
 
 
@@ -40,14 +40,14 @@ def role_of(area: dict) -> str:
     return {0: "后方", 2: "接触区"}.get(area["layer"], "未知")
 
 
-def fight_row(match, row: dict, sight, cfg: dict) -> dict:
+def fight_row(match, row: dict, sight, cfg: dict, nav=None) -> dict:
     from cs2coach.research.fight import _death_tick, area_of, reposition
 
     rate = match.meta.tick_rate
     limits = cfg["research"]["fight"]
     sid, round_id, trigger = int(row["player_id"]), int(row["round_id"]), int(row["start_tick"])
     lead = round(cfg["research"]["timeline"]["lead_seconds"] * rate)
-    result = reposition(match, sid, round_id, trigger, cfg, sight=sight, lead_ticks=lead)
+    result = reposition(match, sid, round_id, trigger, cfg, sight=sight, lead_ticks=lead, nav=nav)
     fight = result.fight
     kills = match.kills
     first = kills[(kills["round"] == round_id) & (kills["tick"] == trigger) & (kills["attacker"] == sid)]
@@ -58,7 +58,7 @@ def fight_row(match, row: dict, sight, cfg: dict) -> dict:
            "start_place": row["start_place"],
            "role": role_of(area_of(state, cfg, match.meta.map_name)),
            "weapon": weapon, "sniper": weapon in limits["sniper_weapons"],
-           "behaviour": LABELS[result.label], "move": result.move, "closer": result.closer,
+           "behaviour": LABELS[result.label], "move": result.move, "height": result.height, "closer_to_t": result.closer,
            "fight_end_s": None, "hp_at_fight_end": None, "death_after_fight_s": None,
            "traded": None, "advantage_held": row.get("advantage_held"), "ct_won": row.get("ct_won")}
     if fight is None:
@@ -82,9 +82,12 @@ def _work(path: Path, member: str | None, rows: list[dict], cfg: dict) -> list[d
     from cs2coach.parsing.loader import resolve_demo
     from cs2coach.parsing.match import parse_match
 
+    from awpy.map_control import NavMesh
+
     match = parse_match(resolve_demo(path, member=member), cfg)
     sight = Sight(match, cfg)
-    return [fight_row(match, row, sight, cfg) for row in rows]
+    nav = NavMesh(str(Path.home() / ".awpy" / "2000930" / "navs" / f"{match.meta.map_name}.nav"))
+    return [fight_row(match, row, sight, cfg, nav) for row in rows]
 
 
 def cluster_ci(frame: pd.DataFrame, value: str, draws: int, seed: int) -> tuple[float, float]:
@@ -182,13 +185,20 @@ def run(source: str, name: str, jobs: int | None, root: Path = ROOT) -> Path:
 
 
 def review_pack(name: str, pack_name: str, per_behaviour: int, seed: int, source: str = "r01-v6",
-                root: Path = ROOT) -> Path:
+                root: Path = ROOT, exclude: list[str] = ()) -> Path:
     """从全量结果按行为分层抽首杀选手的窗口做盲审复核包；尽量每场比赛只取一条。"""
     from research_ai import NAMES
     from research_review import _write_review
 
     cfg = load_config()
     fights = pd.read_csv(root / "data" / "research" / "firstkill" / name / "fights.csv", dtype={"player_id": str})
+    seen = set()
+    for old in exclude:  # 已经复核过的回合不再抽（检验定义要用没看过的样本）
+        import tomllib
+
+        data = tomllib.loads((root / "data" / "research" / "review" / old / "review.toml").read_text(encoding="utf-8"))
+        seen |= {(i["demo_id"], int(i["round_id"])) for i in data["items"]}
+    fights = fights[[(d, int(r)) not in seen for d, r in zip(fights["demo_id"], fights["round_id"])]]
     rng = random.Random(seed)
     picked, used = [], set()
     for behaviour in BEHAVIOURS:
@@ -226,9 +236,10 @@ def main(argv=None) -> int:
     parser.add_argument("--review", metavar="复核包名", help="不重新分析，从已有结果抽首杀选手的复核包")
     parser.add_argument("--per-behaviour", type=int, default=3)
     parser.add_argument("--seed", type=int, default=20261020)
+    parser.add_argument("--exclude", nargs="*", default=[], help="已复核过的复核包名，其中的回合不再抽")
     args = parser.parse_args(argv)
     if args.review:
-        review_pack(args.name, args.review, args.per_behaviour, args.seed, args.source)
+        review_pack(args.name, args.review, args.per_behaviour, args.seed, args.source, exclude=args.exclude)
     else:
         run(args.source, args.name, args.jobs)
     return 0

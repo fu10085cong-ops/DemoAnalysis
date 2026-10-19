@@ -50,11 +50,25 @@ def test_review_pack_samples_each_behaviour_blind(tmp_path):
     rows = []
     for i in range(40):
         rows.append(dict(demo_id=f"m{i % 10}.dem", match_id=f"m{i % 10}", round_id=i, player_id=str(1000 + i),
-                         start_tick=100 * i, behaviour=fk.BEHAVIOURS[i % 4], fight_end_s=0.5))
+                         start_tick=100 * i, behaviour=fk.BEHAVIOURS[i % len(fk.BEHAVIOURS)], fight_end_s=0.5))
     out = tmp_path / "data" / "research" / "firstkill" / "x"
     out.mkdir(parents=True)
     pd.DataFrame(rows).to_csv(out / "fights.csv", index=False)
     pack = fk.review_pack("x", "kr", 2, 1, root=tmp_path)
     items = tomllib.loads((pack / "review.toml").read_text(encoding="utf-8"))["items"]
-    assert len(items) == 8 and len({i["match_id"] for i in items}) == 8
+    assert len(items) == 2 * len(fk.BEHAVIOURS) and len({i["match_id"] for i in items}) == len(items)
     assert items[0]["focus"] == [0.5, 3.5] and "behaviour" not in items[0]
+
+
+def test_review_pack_excludes_reviewed_rounds(tmp_path):
+    import tomllib
+
+    rows = [dict(demo_id="m.dem", match_id="m", round_id=i, player_id=str(i), start_tick=i,
+                 behaviour=fk.BEHAVIOURS[i % len(fk.BEHAVIOURS)], fight_end_s=0.5) for i in range(12)]
+    out = tmp_path / "data" / "research" / "firstkill" / "x"
+    out.mkdir(parents=True)
+    pd.DataFrame(rows).to_csv(out / "fights.csv", index=False)
+    first = fk.review_pack("x", "a", 2, 1, root=tmp_path)
+    second = fk.review_pack("x", "b", 2, 2, root=tmp_path, exclude=["a"])
+    rounds = lambda pack: {i["round_id"] for i in tomllib.loads((pack / "review.toml").read_text(encoding="utf-8"))["items"]}  # noqa: E731
+    assert not rounds(first) & rounds(second)

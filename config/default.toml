@@ -902,9 +902,10 @@ min_window_seconds = 1
 gap_seconds = 2            # 开枪 / 伤害 / 击杀事件间隔不超过这个值算同一段交火（r03-1 用 1 秒，断续开枪被切成多段）
 observe_seconds = 3        # 交火结束后看多久
 min_observe_seconds = 1.5  # 观察期（因阵亡或回合结束）短于这个值判"看不出"
-stay_max_move = 100        # 位置挪动小于这个值为"原位再架"
-push_min_closer = 150      # 离交火对手近了这么多为"继续压"
-leave_min_farther = 250    # 离交火对手远了这么多为"撤离"
+stay_max_move = 150        # 水平挪动小于这个值、且高度变化小于 stay_max_height 为"原位再架"（v3 为 100；k6 挪 103 人工判原位）
+stay_max_height = 40       # 爬上箱子 / 跳下二楼算换位（fk-review-1 的 k4 升高 45、k3 下降 128）
+push_min_closer = 300      # 沿可走路线离 T 出生点近了这么多为"继续压"（v3 以交火对手为参照，首杀时对手已死，改为 T 出生点）
+t_spawn = { de_mirage = [1216, -130, -164] }  # T 出生点参照位置（TSpawn 报点内玩家位置的中位数）
 trade_seconds = 5          # 首杀研究：交火结束后几秒内被打死算"被补"
 sniper_weapons = ["awp", "ssg08"]  # 首杀研究：按击杀武器（事件里的规范名）分狙击枪 / 其他
 bootstrap_draws = 2000     # 按比赛重抽样的次数（置信区间）
@@ -927,7 +928,7 @@ running_speed = 150        # 高于此为跑
 # R03 AI 判定试点；真实调用会产生费用，运行前先征得产品负责人同意
 model = "deepseek-flash"
 repeats = 2
-prompt_version = "r03-v3"   # v2：按区域层级定义；v3：判断顺序写死、标出观察期结束行、阵亡行不丢
+prompt_version = "r03-v4"   # v2：区域层级；v3：判断顺序写死、观察期结束行；v4：去掉撤离，前后以 T 出生点为参照，算高度
 temperature = 0            # 随机程度降到最低，减少同一条两遍答案不同
 concurrency = 10           # 同时发出的请求数（只是等网络，不占本机 CPU）
 retries = 4                # 网络或限流失败时重试几次（间隔 5、10、20、40 秒）

@@ -33,25 +33,22 @@ KEY = ["demo_id", "match_id", "round_id", "player_id", "start_tick"]
 
 SYSTEM = """你是 CS2 职业比赛的分析员。用户会给你一名 CT 选手的"选手视角时间线"：只包含他当时能看到、听到、从雷达和队友那里知道的信息。
 
-任务：判断他在【交火结束】之后的观察期内做了什么。时间线每行给出所在报点和区域层级（后方 < 防守区 < 接触区，
-防守区还分 A / B / 中路等组）、离交火结束时位置的距离、离交火对手的距离。观察期的最后一行标有【观察期结束】。
+任务：判断他在【交火结束】之后的观察期内做了什么。时间线每行给出所在报点和区域层级（后方 < 防守区 < 接触区）、
+离交火结束时位置的水平距离和高度变化、沿可走路线离 T 出生点的路程（变小 = 往 T 方向走）。观察期的最后一行标有【观察期结束】。
 
 只比较【观察期结束】那一行和【程序判断的交火结束】那一行，中途走出去又回来不算。按下面的顺序判断，第一条满足的就是答案：
 1. 看不出：交火结束时或之后 1.5 秒内你已阵亡、回合结束，或没有【观察期结束】行。只要满足就选它，不要拿交火之中的移动来判断
-2. 原位再架：【观察期结束】行"离交火结束时位置"小于 100（转头、原地调整都算）
-3. 撤离：区域层级后退了一层（接触区→防守区、防守区→后方）
-4. 继续压：区域层级前进了一层（后方→防守区、防守区→接触区）
-5. 继续压：离交火对手的距离比交火结束时近了 150 以上
-6. 撤离：离开了交火结束时所在的报点和防守区组，并且离交火对手远了 250 以上
-7. 换位：以上都不满足（在同一区域内换了点或角度）
+2. 原位再架：【观察期结束】行"离交火结束时位置"小于 150，并且高度变化绝对值小于 40（转头、原地调整都算）
+3. 继续压：区域层级前进了一层（后方→防守区、防守区→接触区），或离 T 出生点的路程比交火结束时少了 300 以上
+4. 换位：以上都不满足（换了点、换了高度，往后挪也算换位）
 
 要求：
 1. 交火结束默认以【程序判断的交火结束】为准；如果你认为交火在别的时刻结束，用你的判断，写进 fight_end_s，并说明原因
 2. 只根据时间线里的信息判断，不要猜测语音沟通或时间线以外的事
-3. 依据写明两行的数值（例如"交火结束 +0.5s 在 BombsiteA 离对手 358；观察期结束 +3.5s 在 Jungle 离对手 400、离交火结束位置 260，同一防守区组 A"）以及命中的是第几条
+3. 依据写明两行的数值（例如"交火结束 +0.5s 在 BombsiteA 离 T 出生点 3400；观察期结束 +3.5s 在 Jungle、离交火结束位置 260（高度 +0）、离 T 出生点 3550，层级不变"）以及命中的是第几条
 
 只输出一个 JSON 对象，不要输出其他文字：
-{"label": "换位|原位再架|撤离|继续压|看不出", "fight_end_s": 数字或 null, "evidence": "依据", "confidence": "高|中|低"}"""
+{"label": "换位|原位再架|继续压|看不出", "fight_end_s": 数字或 null, "evidence": "依据", "confidence": "高|中|低"}"""
 
 
 def _dir(root: Path, name: str) -> Path:
@@ -121,19 +118,22 @@ def _work(path: Path, member: str | None, rows: list[dict], cfg: dict) -> list[d
     from cs2coach.research.fight import reposition
     from cs2coach.research.timeline import build_timeline
 
+    from awpy.map_control import NavMesh
+
     demo = resolve_demo(path, member=member)
     match = parse_match(demo, cfg)
     sight = Sight(match, cfg)
+    nav = NavMesh(str(Path.home() / ".awpy" / "2000930" / "navs" / f"{match.meta.map_name}.nav"))
     sounds, pings = _events(demo)
-    return [timeline_record(match, row, sight, sounds, pings, cfg, reposition, build_timeline) for row in rows]
+    return [timeline_record(match, row, sight, sounds, pings, cfg, reposition, build_timeline, nav) for row in rows]
 
 
-def timeline_record(match, row: dict, sight, sounds, pings, cfg, reposition, build_timeline) -> dict:
+def timeline_record(match, row: dict, sight, sounds, pings, cfg, reposition, build_timeline, nav=None) -> dict:
     rate = match.meta.tick_rate
     lead = round(cfg["research"]["timeline"]["lead_seconds"] * rate)
     result = reposition(match, int(row["player_id"]), int(row["round_id"]), int(row["start_tick"]), cfg,
-                        sight=sight, lead_ticks=lead)
-    text = build_timeline(match, row, result, sight, sounds, pings, cfg)
+                        sight=sight, lead_ticks=lead, nav=nav)
+    text = build_timeline(match, row, result, sight, sounds, pings, cfg, nav=nav)
     fight = result.fight
     rel = lambda tick: None if tick is None else round((tick - int(row["start_tick"])) / rate, 2)  # noqa: E731
     return {"id": row["id"], **{k: row[k] for k in KEY}, "player_name": row["player_name"],

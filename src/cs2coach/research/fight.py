@@ -9,7 +9,9 @@ import pandas as pd
 
 from cs2coach.parsing.match import MatchData
 
-LABELS = {"push": "继续压", "leave": "撤离", "move": "换位", "stay": "原位再架", "unknown": "看不出"}
+# 第 4 版（2026-10-20 产品负责人复核 fk-review-1 后）：去掉"撤离"——职业选手很少头也不回地离开交火区，
+# 往后挪的都算换位；前后方向以 T 出生点为参照（首杀选手的对手已经死了，威胁来自 T 方其余的人）
+LABELS = {"push": "继续压", "move": "换位", "stay": "原位再架", "unknown": "看不出"}
 
 
 @dataclass
@@ -27,8 +29,9 @@ class Reposition:
     observe_end: int | None = None
     location: tuple[float, float, float] | None = None  # 交火位置 F
     location_source: str | None = None  # opponent / visible / aim
-    move: float | None = None
-    closer: float | None = None  # d(P0) - d(P3)，正数表示离交火位置更近
+    move: float | None = None  # 水平挪动
+    height: float | None = None  # 高度变化
+    closer: float | None = None  # 沿可走路线离 T 出生点近了多少（正数 = 更靠前）；没有导航网格时为空
 
 
 def fight_events(match: MatchData, sid: int, round_id: int, start: int, end: int) -> pd.DataFrame:
@@ -77,11 +80,11 @@ def find_fight(events: pd.DataFrame, trigger: int, gap_ticks: int) -> Fight | No
 
 
 def reposition(match: MatchData, sid: int, round_id: int, trigger: int, cfg: dict,
-               sight=None, lead_ticks: int = 0, window_end: int | None = None) -> Reposition:
-    """规则基线：交火结束后 observe_seconds 内的移动，按区域层级和离交火位置 F 的远近判断（R03 第 2 版定义）。
+               sight=None, lead_ticks: int = 0, window_end: int | None = None, nav=None) -> Reposition:
+    """规则基线（R03 第 4 版）：比较交火结束时与观察期结束时的位置，按顺序判断。
 
-    原位再架：挪动 < stay_max_move；撤离：往后退一层（接触区→防守区→后方），或离开所在区域且离 F 远了
-    leave_min_farther；继续压：往前进一层，或离 F 近了 push_min_closer；其余为换位（同一区域内换点）。
+    原位再架：水平挪动 < stay_max_move 且高度变化 < stay_max_height；继续压：区域层级前进一层，
+    或沿可走路线离 T 出生点近了 push_min_closer；其余为换位（含往后挪）。
     """
     limits = cfg["research"]["fight"]
     rate = match.meta.tick_rate
@@ -105,18 +108,23 @@ def reposition(match: MatchData, sid: int, round_id: int, trigger: int, cfg: dic
     if (stop - fight.end_tick) < limits["min_observe_seconds"] * rate or p0 is None or p3 is None or location is None:
         return result
     result.move = round(math.dist(p0[:2], p3[:2]), 1)
-    result.closer = round(math.dist(p0[:2], location[:2]) - math.dist(p3[:2], location[:2]), 1)
-    area0, area3 = area_of(s0, cfg, match.meta.map_name), area_of(s3, cfg, match.meta.map_name)
-    layer0, layer3 = area0["layer"], area3["layer"]
-    same_area = area0["place"] == area3["place"] or bool(area0["zones"] & area3["zones"])
-    if result.move < limits["stay_max_move"]:
+    result.height = round(p3[2] - p0[2], 1)
+    goal = limits["t_spawn"].get(match.meta.map_name)
+    if nav is not None and goal is not None:
+        from cs2coach.research.windows import _nav_distance
+
+        snap = cfg["research"]["nav_snap_max_distance"]
+        d0, d3 = _nav_distance(nav, p0, tuple(goal), snap), _nav_distance(nav, p3, tuple(goal), snap)
+        if d0 is not None and d3 is not None:
+            result.closer = round(d0 - d3, 1)
+    layer0 = area_of(s0, cfg, match.meta.map_name)["layer"]
+    layer3 = area_of(s3, cfg, match.meta.map_name)["layer"]
+    forward = layer0 is not None and layer3 is not None and layer3 > layer0
+    ahead = result.closer is not None and result.closer >= limits["push_min_closer"]
+    if result.move < limits["stay_max_move"] and abs(result.height) < limits["stay_max_height"]:
         result.label = "stay"
-    elif layer0 is not None and layer3 is not None and layer3 < layer0:
-        result.label = "leave"
-    elif (layer0 is not None and layer3 is not None and layer3 > layer0) or result.closer >= limits["push_min_closer"]:
+    elif forward or ahead:
         result.label = "push"
-    elif not same_area and -result.closer >= limits["leave_min_farther"]:
-        result.label = "leave"
     else:
         result.label = "move"
     return result
