@@ -95,6 +95,9 @@ def test_windows_death_navigation_and_outcomes():
     rows = behaviour_windows(match, situation, sight, LineNav(), CFG)
     assert len(rows) == 5
     by_id = {row.player_id: row for row in rows}
+    assert situation.first_killer_id == str(CT[0])
+    assert by_id[str(CT[0])].first_kill_by == "self"
+    assert all(row.first_kill_by == "teammate" for sid, row in by_id.items() if sid != str(CT[0]))
     assert by_id[str(CT[0])].nav_delta < 0
     assert by_id[str(CT[0])].main_label == "advance"
     assert by_id[str(CT[1])].end_tick == 200

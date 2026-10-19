@@ -75,7 +75,8 @@ def find_situations(match: MatchData) -> tuple[list[Situation], Counter[str]]:
                                round_id=rnd.number, tick=tick, map=match.meta.map_name,
                                alive_ct=5, alive_t=4,
                                round_time_s=round((tick - rnd.freeze_end_tick) / match.meta.tick_rate, 2),
-                               bomb_planted=planted))
+                               bomb_planted=planted,
+                               first_killer_id=str(int(kill["attacker"])) if pd.notna(kill["attacker"]) else None))
     return found, skipped
 
 

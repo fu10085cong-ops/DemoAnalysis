@@ -17,11 +17,13 @@ class Situation(BaseModel):
     round_time_s: float | None = None
     time_remaining_s: float | None = None
     bomb_planted: bool | None = None
+    first_killer_id: str | None = None  # 触发击杀的 CT（击杀者缺失时为空）
 
 
 class BehaviourWindow(Situation):
     player_id: str
     player_name: str
+    first_kill_by: str | None = None  # 第一个人头是谁拿的："self" 自己 / "teammate" 队友；击杀者缺失为空
     tick_rate: int | None = None
     start_tick: int
     end_tick: int

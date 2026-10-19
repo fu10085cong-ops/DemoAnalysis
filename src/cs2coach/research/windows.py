@@ -170,7 +170,9 @@ def behaviour_windows(match: MatchData, situation: Situation, sight, nav, cfg: d
         end_place = str(end_state["last_place_name"]) if end_state is not None \
             and pd.notna(end_state["last_place_name"]) else None
         regions = cfg["research"]["regions"].get(situation.map, {})
+        killer = situation.first_killer_id
         window = BehaviourWindow(**situation.model_dump(), player_id=str(sid), player_name=match.name_of(sid),
+                                 first_kill_by=None if killer is None else "self" if killer == str(sid) else "teammate",
                                  tick_rate=rate,
                                  start_tick=situation.tick, end_tick=end,
                                  start_position=start_position, end_position=end_position,

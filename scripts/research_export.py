@@ -124,6 +124,12 @@ def _label_lines(windows: list[BehaviourWindow]) -> list[str]:
     lines = ["## 主标签", ""]
     lines.extend(f"- {label}: {labels[label]}" for label in LABELS)
     lines.extend(["", f"unknown 比例：{labels['unknown'] / len(windows):.1%}" if windows else "unknown 比例：无窗口"])
+    lines.extend(["", "## 按第一个人头分（自己拿 / 队友拿）", "", "| 主标签 | 自己 | 队友 |", "|---|---:|---:|"])
+    split = Counter((window.first_kill_by, window.main_label) for window in windows)
+    lines.extend(f"| {label} | {split['self', label]} | {split['teammate', label]} |" for label in LABELS)
+    missing = sum(window.first_kill_by is None for window in windows)
+    if missing:
+        lines.extend(["", f"击杀者缺失：{missing} 个窗口"])
     return lines
 
 
