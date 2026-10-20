@@ -10,7 +10,9 @@
 from __future__ import annotations
 
 import bz2
+import hashlib
 import gzip
+import json
 import os
 import shutil
 import subprocess
@@ -46,9 +48,11 @@ def resolve_demo(path: Path, cache_dir: Path | None = None, member: str | None =
     cache_dir = Path(cache_dir) if cache_dir else path.parent / ".extracted"
 
     if name.endswith(".dem.bz2"):
-        return _decompress_stream(path, cache_dir / path.name[: -len(".bz2")], bz2.open)
+        dst = cache_dir / _source_cache_key(path) / path.name[: -len(".bz2")]
+        return _decompress_stream(path, dst, bz2.open)
     if name.endswith(".dem.gz"):
-        return _decompress_stream(path, cache_dir / path.name[: -len(".gz")], gzip.open)
+        dst = cache_dir / _source_cache_key(path) / path.name[: -len(".gz")]
+        return _decompress_stream(path, dst, gzip.open)
     if name.endswith(".zip"):
         return _extract_zip(path, cache_dir, member)
     if name.endswith(".rar"):
@@ -85,23 +89,75 @@ def _pick_member(src: Path, names: list[str], member: str | None) -> str:
     return matches[0]
 
 
-def _cache_target(src: Path, cache_dir: Path, member_name: str) -> Path:
-    # 按压缩包名分子目录，避免不同压缩包里同名 demo 互相复用缓存；只取文件名，避免路径穿越
-    return cache_dir / src.stem / PurePosixPath(member_name.replace("\\", "/")).name
+def _cache_target(src: Path, cache_dir: Path, member_name: str, *, duplicate_basename: bool = False) -> Path:
+    # 用归档身份和完整成员路径区分缓存；成员路径哈希可避免路径穿越及包内同名冲突。
+    member_path = member_name.replace("\\", "/")
+    member_key = hashlib.sha256(member_path.encode("utf-8")).hexdigest()[:16]
+    basename = PurePosixPath(member_path).name
+    stem = src.stem
+    if stem in {"", ".", ".."} or Path(stem).name != stem:
+        stem = hashlib.sha256(src.name.encode("utf-8")).hexdigest()[:16]
+    legacy = cache_dir / stem / basename
+    manifest = _cache_manifest(legacy)
+    if duplicate_basename:
+        return cache_dir / _source_cache_key(src) / member_key / basename
+    if legacy.is_file() and manifest.is_file():
+        try:
+            existing = json.loads(manifest.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            existing = {}
+        expected = {"source": _source_cache_key(src), "member": member_path}
+        if existing and existing != expected:
+            return cache_dir / _source_cache_key(src) / member_key / basename
+    return legacy
+
+
+def _source_cache_key(src: Path) -> str:
+    """让缓存随源文件路径或文件版本变化，避免旧解压结果被复用。"""
+    resolved = src.resolve()
+    stat = resolved.stat()
+    identity = f"{resolved}\0{stat.st_size}\0{stat.st_mtime_ns}\0{stat.st_ctime_ns}"
+    return hashlib.sha256(identity.encode("utf-8")).hexdigest()[:24]
+
+
+def _cache_manifest(dst: Path) -> Path:
+    return dst.with_name(dst.name + ".cache.json")
+
+
+def _cache_matches(dst: Path, src: Path, member_name: str) -> bool:
+    manifest = _cache_manifest(dst)
+    if not dst.is_file() or not manifest.is_file():
+        return False
+    try:
+        existing = json.loads(manifest.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return False
+    return existing == {"source": _source_cache_key(src), "member": member_name.replace("\\", "/")}
+
+
+def _write_cache_manifest(dst: Path, src: Path, member_name: str) -> None:
+    manifest = _cache_manifest(dst)
+    tmp = manifest.with_suffix(manifest.suffix + ".part")
+    payload = {"source": _source_cache_key(src), "member": member_name.replace("\\", "/")}
+    tmp.write_text(json.dumps(payload), encoding="utf-8")
+    tmp.replace(manifest)
 
 
 def _extract_zip(src: Path, cache_dir: Path, member: str | None) -> Path:
     with zipfile.ZipFile(src) as zf:
         names = [m.filename for m in zf.infolist() if m.filename.lower().endswith(".dem") and not m.is_dir()]
         chosen = _pick_member(src, names, member)
-        dst = _cache_target(src, cache_dir, chosen)
-        if dst.is_file():
+        basename = PurePosixPath(chosen.replace("\\", "/")).name
+        duplicate = sum(PurePosixPath(n.replace("\\", "/")).name == basename for n in names) > 1
+        dst = _cache_target(src, cache_dir, chosen, duplicate_basename=duplicate)
+        if _cache_matches(dst, src, chosen):
             return dst
         dst.parent.mkdir(parents=True, exist_ok=True)
         tmp = dst.with_suffix(".dem.part")
         with zf.open(chosen) as fin, open(tmp, "wb") as fout:
             shutil.copyfileobj(fin, fout, _CHUNK)
         tmp.replace(dst)
+        _write_cache_manifest(dst, src, chosen)
         return dst
 
 
@@ -122,8 +178,10 @@ def _extract_rar(src: Path, cache_dir: Path, member: str | None) -> Path:
     if PurePosixPath(chosen).name.startswith("-"):
         raise DemoLoadError(f"不支持以 '-' 开头的文件名: {chosen}")
 
-    dst = _cache_target(src, cache_dir, chosen)
-    if dst.is_file() and dst.stat().st_size == info.file_size:
+    basename = PurePosixPath(chosen.replace("\\", "/")).name
+    duplicate = sum(PurePosixPath(n.replace("\\", "/")).name == basename for n in infos) > 1
+    dst = _cache_target(src, cache_dir, chosen, duplicate_basename=duplicate)
+    if _cache_matches(dst, src, chosen) and dst.stat().st_size == info.file_size:
         return dst
     dst.parent.mkdir(parents=True, exist_ok=True)
 
@@ -140,6 +198,7 @@ def _extract_rar(src: Path, cache_dir: Path, member: str | None) -> Path:
             f"得到 {size} / 期望 {info.file_size} 字节）: {err}"
         )
     tmp.replace(dst)
+    _write_cache_manifest(dst, src, chosen)
     return dst
 
 

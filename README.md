@@ -4,9 +4,10 @@ CS2 demo 赛后复盘分析工具：找出玩家的决定性瞬间，用数据�
 
 - 产品定位与待定事项：[docs/product.md](docs/product.md)
 - demo 字段调研（哪些数据准确、哪些只能近似）：[docs/fields.md](docs/fields.md)
+- CS2 引擎数据边界与分析上限：[docs/engine_limits.md](docs/engine_limits.md)
 - 开发约定与架构原则：[CLAUDE.md](CLAUDE.md)
 
-当前阶段：字段调研完成，分析流程尚未实现（`analyze` 命令目前只解压 demo）。
+当前阶段：本地 CLI MVP。`analyze` 会按 SteamID64 解析 demo、生成事件时间线、确定性指标和 JSON/Markdown 报告；AI 主观诊断、地图视线重建和职业基准库尚未接入。
 
 ## 环境搭建
 
@@ -74,3 +75,17 @@ python scripts/explore_demo.py data/demos/xxx.rar --demo-member some-map.dem
 ```
 
 运行脚本时建议明确写出 demo 路径：不写路径时，脚本会取 `data/demos/` 下按文件名排序的第一个文件。
+
+### 生成复盘报告
+
+```powershell
+python -m cs2coach analyze data/demos/match.dem --player 76561198000000000 --out data/output
+```
+
+报告包含击杀/阵亡/助攻、伤害、队友补枪时间线、闪光效果、移动开火样本和证据 tick；默认同时写出 JSON 与 Markdown。所有可调阈值位于 `config/default.toml`，可用 `--config` 指定另一份 TOML。
+
+```powershell
+python -m cs2coach analyze data/demos/match.rar --demo-member map.dem --player 76561198000000000
+```
+
+`demo_gototick` 仅作为回放跳转候选命令写入报告，仍需在目标 CS2 版本中实测。移动开火判断使用 tick 间隔平均速度，不能作为 sub-tick 瞬时速度或单独的枪法结论。引擎数据边界见 [docs/engine_limits.md](docs/engine_limits.md)。
