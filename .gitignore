@@ -21,3 +21,6 @@ dist/
 .idea/
 .DS_Store
 Thumbs.db
+
+# 临时浏览器配置与缓存（含登录数据，不得入库）
+.tmp-*/
