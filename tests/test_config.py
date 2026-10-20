@@ -10,6 +10,26 @@ def test_default_config_loads():
     assert cfg["baseline"]["min_metric_samples"] == 20
 
 
+def test_research_config_is_merged_and_overridable(tmp_path):
+    import tomllib
+
+    from cs2coach.config import DEFAULT_CONFIG
+    assert load_config()["research"]["stance"]["stay_max_move"] > 0
+    assert "research" not in tomllib.loads(DEFAULT_CONFIG.read_text(encoding="utf-8"))
+    path = tmp_path / "my.toml"
+    path.write_text("[research.stance]\nstay_max_move = 150\n", encoding="utf-8")
+    assert load_config(path)["research"]["stance"]["stay_max_move"] == 150
+
+
+def test_duplicate_table_in_research_config_is_rejected(tmp_path, monkeypatch):
+    import cs2coach.config as config
+    research = tmp_path / "research.toml"
+    research.write_text("[tools]\njobs = 3\n", encoding="utf-8")
+    monkeypatch.setattr(config, "RESEARCH_CONFIG", research)
+    with pytest.raises(ConfigError, match="重复的表: tools"):
+        config.load_config()
+
+
 @pytest.mark.parametrize("value", ["0", "-1", "1.5", "true", '"20"'])
 def test_baseline_min_metric_samples_requires_positive_integer(tmp_path, value):
     path = tmp_path / "baseline.toml"

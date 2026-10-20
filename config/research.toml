@@ -1,0 +1,146 @@
+# 研究线的参数（docs/research_roadmap.md）。2026-10-21 从 default.toml 拆出；
+# 诊断程序（已冻结）的参数仍在 default.toml。两个文件由 cs2coach.config.load_config 合并读取，表名不能重复。
+# 所有数值都是待人工复核校准的工程假设，改动时在注释里写明日期和原因。
+
+[research]
+# 观察时长：R01 初版 5 秒；2026-10-19 产品负责人改为 10 秒（5 秒内常常只看到动作开头，换位在 Mirage 上往往要 5–15 秒）。
+# 5 秒的导出（data/research/r01-v3）保留作敏感性对照
+window_seconds = 10
+# 玩家位置不在任何导航区域内（站在箱子上、高度偏差）时，退回到最近的导航区域中心，
+# 超过这个距离（游戏单位）仍记为缺失（R01 审查：315 个窗口中 112 个因此缺路径距离）
+nav_snap_max_distance = 128
+
+[research.review]
+# R02 人工复核的分层抽样：每种主标签抽几个（unknown 中 short_unknown 个取 1 秒内结束的窗口）
+# 第 2 轮起加"转点"层、保持多抽 1 个（检验主防假设）；第 1 轮 unknown 多为阈值空档，按地点分组后从 19% 降到约 9%
+counts = { hold = 4, advance = 3, retreat = 3, lateral = 3, rotate = 3, unknown = 4 }
+short_unknown = 1
+# 顶级赛事；pro_mirage 清单中其余赛事算二三线，早期职业样本（pro_demos.toml）算顶级
+top_events = ["IEM Rio 2026", "PGL Bucharest 2026"]
+# 复盘包复制到 CS2 game/csgo 下的子目录；跳转到触发前几秒
+demo_subdir = "replays/research"
+# 回放从触发前几秒开始，便于看出他之前在做什么（是否只是原有动作的延续）
+lead_seconds = 3
+# 2D 回放页（scripts/research_replay.py）：每秒帧数、窗口结束后多放几秒
+replay_fps = 16
+replay_tail_seconds = 1
+
+[research.labels]
+# 以下游戏单位阈值均为待人工校准的工程假设
+hold_max_displacement = 150
+hold_max_nav_delta = 100
+move_min_nav_delta = 250
+lateral_min_displacement = 300
+regroup_min_distance = 300
+regroup_max_end_distance = 600
+min_window_seconds = 1
+
+[research.fight]
+# R03 交战后换位（docs/tasks/research/R03-ai-post-fight-reposition.md）；游戏单位与秒，均为待复核的工程假设
+gap_seconds = 2            # 开枪 / 伤害 / 击杀事件间隔不超过这个值算同一段交火（r03-1 用 1 秒，断续开枪被切成多段）
+observe_seconds = 3        # 交火结束后看多久
+min_observe_seconds = 1.5  # 观察期（因阵亡或回合结束）短于这个值判"看不出"
+stay_max_move = 150        # 水平挪动小于这个值、且高度变化小于 stay_max_height 为"原位再架"（v3 为 100；k6 挪 103 人工判原位）
+stay_max_height = 40       # 爬上箱子 / 跳下二楼算换位（fk-review-1 的 k4 升高 45、k3 下降 128）
+push_min_closer = 300      # 沿可走路线离 T 出生点近了这么多为"继续压"（v3 以交火对手为参照，首杀时对手已死，改为 T 出生点）
+t_spawn = { de_mirage = [1216, -130, -164] }  # T 出生点参照位置（TSpawn 报点内玩家位置的中位数）
+trade_seconds = 5          # 首杀研究：交火结束后几秒内被打死算"被补"
+sniper_weapons = ["awp", "ssg08"]  # 首杀研究：按击杀武器（事件里的规范名）分狙击枪 / 其他
+bootstrap_draws = 2000     # 按比赛重抽样的次数（置信区间）
+
+[research.stance]
+# R03 第 5 版：首杀选手拿完人头后是激进还是保守（docs/tasks/research/R03-ai-post-fight-reposition.md "第 5 版方向"）
+# 判定顺序：看不出 → 原位架枪（激进）→ 前压（激进）→ 保守；均为待标准答案集校准的工程假设
+streak_gap_seconds = 1.0     # 相邻两次击杀间隔不超过这个值并作一次连续击杀；观察从最后一个人头开始（产品负责人定）
+observe_seconds = 3.0        # 观察多久
+min_observe_seconds = 1.5    # 观察期因阵亡 / 回合结束 / 新交火短于这个值判"看不出"
+stay_max_move = 200          # 水平挪动小于这个值、且高度变化小于 stay_max_height 为"原位架枪"（产品负责人 2026-10-20：先试 200）
+stay_max_height = 60
+push_danger_ratio = 1.2      # 移动后所在位置危险度 ≥ 起点的这个倍数为"前压"；否则为保守（同等危险的横移也算保守，产品负责人定）
+retreat_danger_ratio = 0.8   # 保守中危险度降到起点的这个倍数以下，另记小类"后撤"（只记录，不单独比较）
+danger_after_seconds = 30    # 危险度地图：首杀之后多少秒内的 CT 阵亡与停留
+danger_shrink_seconds = 20   # 停留少的格子向本组平均收缩的强度（人·秒）
+
+[research.directions.de_mirage]
+# 首杀发生在哪个方向（按被击杀者的报点），用来选对应的危险度地图。2026-10-20 Claude 填写、产品负责人确认
+# Underpass（下水道）属中路。Catwalk、CTSpawn 范围太大，按坐标拆分，见下面的 [research.direction_splits.de_mirage]
+A = ["BombsiteA", "Stairs", "Scaffolding", "Jungle", "TRamp", "PalaceAlley", "PalaceInterior"]
+B = ["BombsiteB", "Truck", "Shop", "Apartments", "BackAlley", "House"]
+Mid = ["Middle", "TopofMid", "Connector", "SnipersNest", "Ladder", "Underpass", "SideAlley"]
+# SideAlley 算中路：首杀多是 T 从侧道探中路被守中路的 CT 打掉（产品负责人 2026-10-21）
+# TSpawn 不归类：只有 14 次，方向混杂（图 far_first_kills.png）
+
+[research.direction_splits.de_mirage]
+# 按坐标拆分的报点：按顺序取第一条满足的规则；条件可用 x_min / x_max / y_min / y_max（游戏坐标），不写条件即兜底；都不满足为不归类
+# 图：data/research/danger/figures/catwalk_split_corner2.png、ctspawn_split_v4.png（不入库）
+# Catwalk 以第二个拐角（竖段尽头往西拐进 B 包点处）为界，以北算 B，其余算中路（产品负责人 2026-10-20）
+Catwalk = [{ direction = "B", y_min = 50 }, { direction = "Mid" }]
+# CTSpawn（产品负责人 2026-10-21 在图上圈定）：通往 Jungle 的通道顶端角落算中路；通往 Jungle 的通道、出生点东侧小区域、
+# 通往 A 包点的南段算 A；以西的大片区域（通往 Shop 的通道、出生点西侧）不归类
+CTSpawn = [
+    { direction = "Mid", x_min = -1220, y_min = -860 },
+    { direction = "A", x_min = -1350, y_min = -1750 },
+    { direction = "A", y_max = -2150 },
+]
+
+[research.timeline]
+# 交给 AI 的选手视角时间线
+lead_seconds = 3           # 从触发前几秒开始
+step_seconds = 0.5         # 每行间隔
+teammate_every_seconds = 1 # 队友位置每隔几秒列一次
+look_max_angle = 35        # "看向某报点"：视线与报点中心的水平夹角上限（度）
+look_max_distance = 3000
+# 枪声没有游戏给的可听范围（player_sound 不含枪声），按距离近似；消音武器更短
+gunshot_radius = 2500
+silenced_gunshot_radius = 900
+silenced_weapons = ["m4a1_silencer", "usp_silencer"]  # 事件里的规范武器名（parsing/weapons.py）
+moving_speed = 10          # 水平速度（单位/秒）低于此为静止
+running_speed = 150        # 高于此为跑
+
+[research.ai]
+# R03 AI 判定试点；真实调用会产生费用，运行前先征得产品负责人同意
+model = "deepseek-flash"
+repeats = 2
+prompt_version = "r03-v4"   # v2：区域层级；v3：判断顺序写死、观察期结束行；v4：去掉撤离，前后以 T 出生点为参照，算高度
+temperature = 0            # 随机程度降到最低，减少同一条两遍答案不同
+concurrency = 10           # 同时发出的请求数（只是等网络，不占本机 CPU）
+retries = 4                # 网络或限流失败时重试几次（间隔 5、10、20、40 秒）
+
+[research.zones.de_mirage]
+# 防守区组：起点和终点在同一组内（含同一报点）判"保持"，从某组或纵深进入另一组判"转点"；先于距离阈值判断。
+# 一个地点可以属于多组。2026-10-19 产品负责人确认（R02 第 1 轮：主防在自己区域内换位仍算保持）
+A = ["BombsiteA", "Stairs", "Jungle", "Connector", "Scaffolding", "PalaceInterior/lower"]
+B = ["BombsiteB", "Truck", "Shop"]
+Mid = ["SnipersNest", "Ladder", "Connector"]
+
+[research.floors.de_mirage]
+# 按高度拆分的报点：Z 低于该值为 "<地点>/lower"，否则为 "<地点>/upper"。
+# PalaceInterior 的位置高度集中在约 -170（楼下，与 A 包点同层）和约 -40（楼上）；楼下算 A 区保持，楼上按距离规则（通常是前压）
+PalaceInterior = -100
+
+[research.regions.de_mirage]
+# 地点键来自真实 demo；纵深等级由人工填写，空字符串表示未复核。CT 视角：deep 深处 / hold 防守位 / contact 接触区。
+# 2026-10-19 Claude 填写 17 个；Truck、Ladder、Scaffolding（防守位）与 BackAlley、House、SideAlley（接触区）经产品负责人看图确认
+Apartments = "contact"
+BackAlley = "contact"
+BombsiteA = "hold"
+BombsiteB = "hold"
+CTSpawn = "deep"
+Catwalk = "contact"
+Connector = "hold"
+House = "contact"
+Jungle = "hold"
+Ladder = "hold"
+Middle = "contact"
+PalaceAlley = "contact"
+PalaceInterior = "contact"
+Scaffolding = "hold"
+Shop = "hold"
+SideAlley = "contact"
+SnipersNest = "hold"
+Stairs = "hold"
+TRamp = "contact"
+TSpawn = "contact"
+TopofMid = "contact"
+Truck = "hold"
+Underpass = "contact"

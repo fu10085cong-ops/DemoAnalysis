@@ -38,6 +38,6 @@
 
 - 和周围代码保持一致：中文注释和 docstring，注释密度、命名、写法照着同目录的文件来。
 - 路径用 `pathlib`，文本读写显式 `encoding="utf-8"`。
-- **阈值一律放进 `config/default.toml`。** 配置是严格校验的：新键必须先在默认配置中声明。
+- **阈值一律放进配置文件**：研究线（`[research.*]`）放 `config/research.toml`，诊断程序放 `config/default.toml`。配置是严格校验的：新键必须先在这两个默认配置中声明。
 - 每个指标计算和决定性瞬间识别都要有单元测试，造数据用 `tests/helpers/synthetic.py`。
 - 指标口径改动要同步更新 `docs/features.md`；数据层的新发现写进 `docs/fields.md`。

@@ -1,4 +1,4 @@
-"""阈值配置：读取 config/default.toml，再用用户配置文件逐项覆盖。"""
+"""阈值配置：读取 config/default.toml（诊断程序）和 config/research.toml（研究线），再用用户配置文件逐项覆盖。"""
 
 from __future__ import annotations
 
@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 DEFAULT_CONFIG = Path(__file__).resolve().parents[2] / "config" / "default.toml"
+RESEARCH_CONFIG = DEFAULT_CONFIG.with_name("research.toml")
 
 
 class ConfigError(Exception):
@@ -17,6 +18,11 @@ class ConfigError(Exception):
 
 def load_config(path: Path | None = None) -> dict[str, Any]:
     cfg = _read(DEFAULT_CONFIG)
+    research = _read(RESEARCH_CONFIG)
+    duplicated = sorted(cfg.keys() & research.keys())
+    if duplicated:
+        raise ConfigError(f"{RESEARCH_CONFIG.name} 与 {DEFAULT_CONFIG.name} 有重复的表: {', '.join(duplicated)}")
+    cfg.update(research)
     if path is not None:
         _merge(cfg, _read(Path(path)))
     _validate_checker(cfg["checker"])
