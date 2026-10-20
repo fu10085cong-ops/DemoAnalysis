@@ -13,7 +13,7 @@
 
 ## 背景（必须读）
 
-- `docs/research_roadmap.md` 第 4.1、4.2、5.2–5.5 节：分析单位、可追溯字段、`unknown` 原则、研究表字段
+- `docs/research_roadmap.md` 2026-10-19 初版第 4.1、4.2、5.2–5.5 节（现行版见第 2、4 节）：分析单位、可追溯字段、`unknown` 原则、研究表字段
 - `docs/research_inventory.md` 第二、七节：可复用的模块和缺口
 - `src/cs2coach/parsing/match.py`：`parse_match`、`MatchData`（`ticks`、`state_at`、`player_ticks`、`kills`、`damages`、`shots`、`grenades`、`rounds`、`spotted_bit`）
 - `src/cs2coach/features/visibility.py::Sight`（`sees`：几何视线 + 视野 + 烟雾 + 闪白）
@@ -35,7 +35,7 @@
 1. **`models.py`**：pydantic 模型
    - `Situation`：`demo_id`、`match_id`、`round_id`、`tick`、`map`、`trigger`（如 `"ct_first_5v4"`）、`alive_ct`、`alive_t`、`round_time_s`（冻结期结束后秒数）、`time_remaining_s`（按回合时长推算，不确定时为空）、`bomb_planted`
    - `BehaviourWindow`：`Situation` 的引用字段 + `player_id`（SteamID 字符串）、`player_name`、`start_tick`、`end_tick`、下面第 3 点的特征、第 4 点的标签、结果字段、`jump_command`、`review_status = "unreviewed"`
-   - 缺数据一律为 `None`，不编造（路线图 4.1 第 5 条）
+   - 缺数据一律为 `None`，不编造（路线图第 2 节第 5 条）
 
 2. **触发器 `triggers.py`**：`ct_first_man_advantage(match, cfg) -> list[Situation]`
    - 每回合最多一个：本回合（冻结期结束后、回合判定前）第一次敌对击杀的**被杀者是 T**，且击杀前双方各 5 人存活 → 触发点为该击杀的 tick
