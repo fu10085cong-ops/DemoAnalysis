@@ -25,6 +25,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
 from cs2coach.config import load_config  # noqa: E402
+from cs2coach.research.paths import research_dir  # noqa: E402
 from cs2coach.parallel import default_jobs, map_ordered  # noqa: E402
 from cs2coach.research.fight import LABELS  # noqa: E402
 
@@ -327,7 +328,7 @@ def compare(name: str, model: str | None = None, seed: int = 20261019, root: Pat
 def _human(root: Path, name: str) -> dict[str, str]:
     import tomllib
 
-    path = root / "data" / "research" / "review" / name / "review.toml"
+    path = research_dir("review", name, root) / "review.toml"
     if not path.exists():
         return {}
     return {item["id"]: item["result"] for item in tomllib.loads(path.read_text(encoding="utf-8"))["items"] if item.get("result")}
@@ -336,7 +337,7 @@ def _human(root: Path, name: str) -> dict[str, str]:
 def _write_pack(root: Path, name: str, records: list[dict], cfg: dict) -> None:
     from research_review import _write_review
 
-    pack = root / "data" / "research" / "review" / name
+    pack = research_dir("review", name, root)
     pack.mkdir(parents=True, exist_ok=True)
     if (pack / "review.toml").exists():
         return  # 不覆盖已作答的复核包

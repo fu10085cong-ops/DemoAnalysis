@@ -21,6 +21,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
 from cs2coach.config import load_config  # noqa: E402
+from cs2coach.research.paths import research_dir  # noqa: E402
 from cs2coach.parallel import default_jobs, map_ordered  # noqa: E402
 from cs2coach.research.fight import LABELS  # noqa: E402
 
@@ -196,7 +197,7 @@ def review_pack(name: str, pack_name: str, per_behaviour: int, seed: int, source
     for old in exclude:  # 已经复核过的回合不再抽（检验定义要用没看过的样本）
         import tomllib
 
-        data = tomllib.loads((root / "data" / "research" / "review" / old / "review.toml").read_text(encoding="utf-8"))
+        data = tomllib.loads((research_dir("review", old, root) / "review.toml").read_text(encoding="utf-8"))
         seen |= {(i["demo_id"], int(i["round_id"])) for i in data["items"]}
     fights = fights[[(d, int(r)) not in seen for d, r in zip(fights["demo_id"], fights["round_id"])]]
     rng = random.Random(seed)
@@ -219,7 +220,7 @@ def review_pack(name: str, pack_name: str, per_behaviour: int, seed: int, source
                       "replay_until_s": max(11.0, end + observe + 1), "focus": [end, end + observe],
                       "focus_note": f"他拿下首杀后，交火在 {end:+.1f} 秒结束（程序判断），看之后 {observe:g} 秒",
                       "result": "", "comment": ""})
-    pack = root / "data" / "research" / "review" / pack_name
+    pack = research_dir("review", pack_name, root)
     pack.mkdir(parents=True, exist_ok=True)
     header = {"source": source, "labels": NAMES,
               "note": "看拿下首杀的这名 CT：交火结束后约 3 秒内他做了什么（盲审：不显示程序的答案）"}

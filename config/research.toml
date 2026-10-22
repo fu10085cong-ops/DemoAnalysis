@@ -51,15 +51,114 @@ bootstrap_draws = 2000     # 按比赛重抽样的次数（置信区间）
 [research.stance]
 # R03 第 5 版：首杀选手拿完人头后是激进还是保守（docs/tasks/research/R03-ai-post-fight-reposition.md "第 5 版方向"）
 # 判定顺序：看不出 → 原位架枪（激进）→ 前压（激进）→ 保守；均为待标准答案集校准的工程假设
-streak_gap_seconds = 1.0     # 相邻两次击杀间隔不超过这个值并作一次连续击杀；观察从最后一个人头开始（产品负责人定）
-observe_seconds = 3.0        # 观察多久
-min_observe_seconds = 1.5    # 观察期因阵亡 / 回合结束 / 新交火短于这个值判"看不出"
+# 一次交战：从首杀开始，他与 T 之间的枪械伤害 / 击杀（不论谁打谁）相邻间隔不超过 fight_gap_seconds 的并作一次，
+# 交战结束后再观察（产品负责人 2026-10-21：连续击杀 1 秒并作一次，推广到整场交火）
+fight_gap_seconds = 1.0
+observe_seconds = 3.0        # 交战结束后观察多久
+min_observe_seconds = 1.0    # 2026-10-21 产品负责人：1.5 → 1.0，与 fight_gap_seconds 一致。观察期因阵亡 / 回合结束 / 又一次交战短于这个值判"看不出"；交战中阵亡也判看不出
 stay_max_move = 200          # 水平挪动小于这个值、且高度变化小于 stay_max_height 为"原位架枪"（产品负责人 2026-10-20：先试 200）
 stay_max_height = 60
 push_danger_ratio = 1.2      # 移动后所在位置危险度 ≥ 起点的这个倍数为"前压"；否则为保守（同等危险的横移也算保守，产品负责人定）
 retreat_danger_ratio = 0.8   # 保守中危险度降到起点的这个倍数以下，另记小类"后撤"（只记录，不单独比较）
-danger_after_seconds = 30    # 危险度地图：首杀之后多少秒内的 CT 阵亡与停留
-danger_shrink_seconds = 20   # 停留少的格子向本组平均收缩的强度（人·秒）
+# 判断移动是前压还是保守用哪种危险度："map" = 统计危险度地图（第 5 版）；"threat" = 这一回合的威胁热力图（第 6 版，[research.threat]）
+danger_method = "threat"
+# 判定方案："position" = 第 5/6 版（原位架枪 / 前压 / 保守，看位置；2026-10-21 第 7 版不如它，回退）；"seek" = 第 7 版（产品负责人 2026-10-21）：
+# 主动寻求对枪 / 被动寻求对枪 / 保守，看他在不在找人打（需要 danger_method = "threat"）
+scheme = "position"
+passive_min_danger = 0.05    # 第 7 版：观察结束时危险度至少这么多才算"暴露在威胁下"（门槛低：躲在掩体后只露一个窄角度架枪也算）
+facing_max_angle = 20        # 第 7 版：准星对着敌人出现点（拐角、门口）——左右各多少度以内（产品负责人：要对着具体拐角或门口；20 是先设的）
+facing_min_share = 0.5       # 第 7 版：观察期内敌人出现点的分量平均至少这么多落在准星前方
+fought_to_round_end_active = true  # 第 7 版：从首杀起一直对枪打到回合结束（没有交战结束后的时段）算主动寻求对枪
+# 第 6 版补丁（产品负责人 2026-10-21 要求分别 / 同时加上对比）
+patch_hide_when_danger_drops = false  # g20：挪动在原位界线内、但威胁危险度下降至少 |hide_max_delta|，算保守（躲起来）
+hide_max_delta = -0.5
+patch_fought_to_round_end = true      # g54：从首杀起一直对枪打到回合结束，算激进（前压 ≈ 主动寻求对枪）
+patch_smoked_hold = false             # g35、g46：原地不动，且和威胁之间（按权重）至少 smoked_min_share 被生效中的烟隔开，算保守
+smoked_min_share = 0.5
+patch_own_smoke = false               # g35、g46：观察期内至少 own_smoke_min_share 的时间，他身边 own_smoke_radius 以内有生效中的烟，算保守（先于原位判断）
+own_smoke_radius = 250                # 开发集：判保守的人身边的烟都在 250 以内，判激进的离烟最近约 325
+own_smoke_min_share = 0.4             # g46 的烟在观察期后段才展开（约 0.43）；只靠两条样本定的，待新样本检验
+patch_sideways_toward_t = true        # g52、g53、g59：判成横移（威胁危险度变化在前压与后撤界线之间）时，沿导航路线往 T 出生点缩短至少 sideways_min_progress，算前压
+sideways_min_progress = 50
+exclude_after_plant = true   # 首杀之前已经下包的回合不算（产品负责人看 gold-1 g31 后定）
+# 以下只记录、不参与判定（第一版只看位置）
+track_seconds = 12.0         # 提取时保存首杀后多少秒的轨迹与交火事件（交战结束 + 观察期不能超过这个值）
+track_lead_seconds = 1.0     # 轨迹从首杀前多少秒开始
+track_step_seconds = 0.125   # 轨迹采样间隔
+mainline_lookback_seconds = 3.0  # "是不是主攻"线索：首杀前多少秒到首杀，本队雷达发现了首杀方向的几名 T
+view_toward_max_angle = 45   # 视线补丁：观察期结束时视线与"自己 → 交战中最后一个死者"方向的水平夹角小于此值，记为仍朝那个方向
+
+[research.threat]
+# R03 第 6 版：这一回合的威胁热力图（src/cs2coach/research/threat.py）。只用 CT 当时能知道的：本队雷达、
+# 任一 CT 听得到的 T 声音与枪声（队友听到也算，会报点；产品负责人 2026-10-21 定）、交战中打死的 T 的位置
+memory_seconds = 3.0         # 发现 / 听到之后多少秒内仍算威胁；每名 T 只保留最新一条（产品负责人：先按 3 秒）
+eye_height = 64              # 视线两端都按站立眼睛高度
+full_weight_distance = 0     # 2026-10-21 开发集比较后：从 0 开始随距离线性递减，走近威胁危险度才会升高（原 1500）
+zero_weight_distance = 2000  # 超过这个距离不算（原 3500）
+hidden_weight = 0.3          # 看不到他（墙或烟挡住）的威胁按这个比例计入（拐角后的敌人也有危险）
+# 可能威胁（src/cs2coach/research/potential.py；产品负责人 2026-10-21 定：A 为基础、C 修正）
+# A：同一首杀方向、同一回合阶段，历史上 T 通常在哪（其他比赛统计）；C：本队最近 clear_seconds 秒内看得到的格子算已清
+# **potential_weight 和 clear_seconds 是先估的，之后要提醒产品负责人调整**
+use_potential = true
+potential_weight = 0.7       # 一名"可能在那"的 T 按已知威胁的多少倍计入（2026-10-21 产品负责人：0.3 → 0.7）
+clear_seconds = 5.0          # 本队多久内看过的格子算已清
+clear_fov = 90               # "看过"= 在他视野内：朝向左右各 45 度（只按能看到算，等于人人 360 度视野，自己站的位置永远算已清）
+potential_cell = 80          # 可能威胁的地面格子边长（游戏单位）；格子间视线预先算好缓存
+corner_max_path = 3000       # 第 7 版：敌人出现点按通道路程找；路程越远分量越小，超过这个值不算
+adjacency_max_step = 80      # 第 7 版：相邻地面格子高度差不超过这个值算走得通（台阶、坡）
+potential_bucket_seconds = 1 # 回合阶段分档：冻结结束后每多少秒一档（2026-10-21 5 → 1，产品负责人要更准）
+potential_time_sigma = 1.5  # 查询时按时间高斯平滑（秒）：离当前时刻越近的档权重越大，避免每秒样本少而跳动
+push_min_delta = 0.1         # 移动后危险度至少高这么多为"前压"（原 0.5）
+retreat_max_delta = -0.5     # 至少少这么多另记小类"后撤"
+
+[research.stance_review]
+# 第 5 版标准答案集（research_stance.py review）：按程序标签分层抽样、盲审；每场比赛尽量只取一条；
+# 抽到的一半做开发集（用来调阈值）、一半做留出集（定稿时只测一次）
+counts = { aggressive_hold = 25, aggressive_push = 15, conservative = 25, unknown = 5 }
+holdout_share = 0.5
+tail_seconds = 2             # 回放在观察期结束后再多放几秒
+# 已经复核过的复盘包：这些回合不再抽
+exclude_packs = ["r02-1", "r02-2", "r02-3", "r03-1", "fk-review-1", "fk-review-2", "gold-1", "w07-check", "p6c-check", "p6d-check"]
+
+[research.outcome]
+# R03 第 2 步（research_outcome.py）：从观察截止时刻起看后果；回合结束时还活着的算截断
+horizon_seconds = 10.0       # "被补"与"又拿到击杀"都看截止后这么多秒
+bootstrap_reps = 1000        # 按比赛整场重抽的次数（95% 区间）
+# 血量分组（左闭右开）按 AK-47 打穿护甲的胸口伤害约 28（36 × 77.5%）：< 56 身体两枪就死，56–83 三枪，≥ 84 要四枪（与满血相同）
+# 爆头带头盔 AK 都是一枪（111），血量只影响被打身体时能扛几枪。< 28（一枪）只有约 5%，并入 < 56
+hp_bins = [0, 56, 84, 101]
+# 首杀时刻（冻结期结束后的秒数）分段：开局烟约 20 秒散，首杀集中在 10–30 秒、30 秒后明显变少；三段样本数接近（约 716 / 728 / 642）
+time_bins = [0, 20, 35, 1000]
+# 经济（每队人均"回合开始时带的装备 + 本回合花的钱"，与谁死了无关）：全起 = 步枪 + 全甲
+# T：AK 2700 + 1000 = 3700；CT：M4A1-S 2900 + 1000 = 3900；低于 eco_max 为经济局 / 手枪局。数据里人均装备是两个峰（500–1000、4500–6000），分界都在峰谷
+eco_max = 1500
+full_min_t = 3700
+full_min_ct = 3900
+
+[research.screen]
+# 先筛选、再确认（research_screen.py）；规则见 R03 文档"事先定好的规则"，看数据之前定
+seed = 20261022
+min_group = 40               # 子组里激进、保守各至少这么多窗口才筛选
+min_deviation = 0.08         # 与全体的激进 − 保守之差偏离至少这么多，列为候选
+confirm_share = 0.5          # 确认集里同方向偏离至少是筛选集的这个比例
+
+[research.archive]
+# research_stance.py extract 顺带保存的整场数据（data/research/stance/<名>/archive/），留作以后研究，不必再解析 demo
+tick_step_seconds = 0.125    # 回合进行中所有玩家完整状态的采样间隔
+
+[research.danger]
+# 危险度地图：按首杀方向（A / B / 中路）分组，CT 在某位置每停留 1 分钟被打死的次数，相对本组平均的倍数
+# 判定某场比赛时只用其他比赛的数据（留一场）。图与推导见 R03 文档"第 5 版方向"
+after_seconds = 30           # 首杀之后多少秒内的 CT 停留与阵亡
+# 2026-10-21 产品负责人要求画得更细：格子 30 → 15、平滑 90 → 60（少溢出到墙里）；收缩强度按格子面积同比 20 → 5
+cell_size = 15               # 格子边长（游戏单位）
+smooth_radius = 60           # 高斯平滑的标准差（游戏单位）
+shrink_seconds = 5           # 停留少的格子向本组平均收缩的强度（人·秒，每个格子）
+walkable_min_samples = 2     # 全部比赛中所有玩家在某格子出现过至少这么多次才算可走区域（只在可走区域显示危险度）
+# 停留少的格子向哪里收缩："layer" = 所在区域层级（research.regions 的深处 / 防守位 / 接触区）在本组的平均；"group" = 本组全图平均
+# 2026-10-21 产品负责人同意改为 layer：T 方深处 CT 很少去，按全图平均会显得不危险，压进去会被判成保守
+shrink_toward = "layer"
+sample_seconds = 0.25        # 位置采样间隔（每个样本代表的停留时间）
 
 [research.directions.de_mirage]
 # 首杀发生在哪个方向（按被击杀者的报点），用来选对应的危险度地图。2026-10-20 Claude 填写、产品负责人确认
@@ -134,6 +233,7 @@ Ladder = "hold"
 Middle = "contact"
 PalaceAlley = "contact"
 PalaceInterior = "contact"
+"PalaceInterior/lower" = "hold"  # 楼下与 A 包点同层（危险度地图的收缩目标用；其余代码按报点名查表）
 Scaffolding = "hold"
 Shop = "hold"
 SideAlley = "contact"

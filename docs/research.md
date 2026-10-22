@@ -35,3 +35,15 @@
 ## 研究表
 
 `situations.csv` 每个触发回合一行，存 demo、比赛、回合、地图、触发 tick、触发后人数、已过时间、下包状态。`windows.csv` 每名 CT 一行，复制局势字段，增加 SteamID 字符串、选手名、tick rate、tick 区间、上述行为特征、初版标签、短期与回合结果、跳转命令、`review_status`。列表与坐标在 CSV 中编码为 JSON 字符串，缺数据留空。`summary.md` 列样本数量、主标签分布与跳过原因。结果字段仅用于后续研究，不参与行为标签判定。
+
+## 研究数据目录（`data/research/`，2026-10-21 分类）
+
+脚本按名字查找（`src/cs2coach/research/paths.py::research_dir`）：先找顶层，再找一级分类子文件夹，所以命令里只写名字（`gold-1`、`st-6c`），不写分类。新建的包和判定结果放在顶层，定期归档到分类里；同名不能出现在两个分类中。
+
+- `review/`（复盘包，含 `review.toml`）
+  - `gold/`：标准答案集及其裁定包（`<包>-adj` 人工与程序的裁定、`<包>-ai` AI 与程序的裁定，评分时按这个顺序覆盖原答案）
+  - `checks/`：补丁和参数的抽查包（如 `p6c-check`、`p6c-smoke`、`w07-check`；`w07-check` 里的 3 条是 AI 提示词的样例）
+  - `old/`：旧定义下的复核（r02、r03、fk-review），只用来在抽新样本时排除看过的回合（`[research.stance_review] exclude_packs`）
+- `stance/`（判定结果，含 `windows.csv` 或 `facts.csv`）
+  - 顶层：原始提取 `st-1`、`st-2`（复盘包条目里的 `archive = "stance/st-2/archive/..."` 指向这里，**不能搬**），当前版本和上一版（现在是 `st-6d`；`st-6c` 是开着身边有烟补丁的版本，`st-6b` 是两个新补丁之前）
+  - `patch-tests/`：补丁对比；`v7/`：已放弃的第 7 版；`old/`：第 5、6 版开发过程

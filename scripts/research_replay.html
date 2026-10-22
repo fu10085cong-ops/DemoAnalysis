@@ -33,6 +33,10 @@ textarea { width: 100%; height: 70px; background: #262b34; color: var(--fg); bor
 .legend span { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin: 0 4px 0 0; vertical-align: middle }
 .export { width: 100%; margin-top: 12px; padding: 10px; border: 0; border-radius: 8px; background: var(--accent); color: #0d2018; font-weight: 700; cursor: pointer }
 .hint { color: var(--muted); font-size: 12px; margin-top: 6px }
+.criteria { margin-top: 12px; font-size: 12px; color: var(--muted) }
+.criteria summary { cursor: pointer; color: var(--fg); font-weight: 700 }
+.criteria ol { margin: 6px 0 0; padding-left: 18px } .criteria li { margin: 4px 0 }
+.heatbar { display: inline-block; width: 90px; height: 8px; border-radius: 4px; vertical-align: middle; margin: 0 4px; background: linear-gradient(90deg, rgb(55,140,255), rgb(255,232,150), rgb(235,55,55)) }
 </style>
 </head>
 <body>
@@ -43,6 +47,7 @@ textarea { width: 100%; height: 70px; background: #262b34; color: var(--fg); bor
     <div class="controls">
       <button id="play">▶ 播放</button>
       <button id="speed">1x</button>
+      <button id="heat" hidden>危险度：开</button>
       <input type="range" id="seek" min="0" max="1000" value="0">
       <div class="clock" id="clock"></div>
     </div>
@@ -55,8 +60,11 @@ textarea { width: 100%; height: 70px; background: #262b34; color: var(--fg); bor
     <div class="legend">
       <div><span style="background:var(--ct)"></span>CT <span style="background:var(--t);margin-left:10px"></span>T <span style="background:var(--me);margin-left:10px"></span>要看的 CT（白圈 + 视角方向 + 轨迹）</div>
       <div>✕ 阵亡 · 灰圈 烟 · 黄 闪 · 红 雷/火 · 白点闪 = 他开枪</div>
+      <div id="threat-legend" hidden>威胁：<b style="color:#ff9f1a">◇</b> 雷达发现 · <b style="color:#ffd84d">◌</b> 听到声音 · <b style="color:#ffd84d">+</b> 听到枪声 · <b style="color:#ff4d4d">✕</b> 交战中打死的 T。「实时威胁」= 播放到的这一刻 CT 方知道的（3 秒内最新的）加上可能威胁；白色扇形 = 他准星前方（第 7 版判断"对着拐角"用的范围）；青色圈 = 程序算出的这一刻敌人最可能出现的拐角 / 门口（越大越可能）；「可能威胁」= 只看可能威胁：橙点越大表示这一阶段 T 越常在那（不含本场，本队 5 秒内视野里看过的格子为 0）；「程序用的威胁」= 交战结束前 3 秒到观察结束合在一起（程序比较起点和终点用的那组）；热力：蓝 = 没有威胁看得到 → 红 = 近处多个威胁看得到</div>
+      <div id="heat-legend" hidden>统计地图：危险度 <span class="heatbar"></span> 安全（1/3 倍）→ 平均 → 危险（3 倍）；按本回合首杀方向，不含本场比赛</div>
       <div id="window-note"></div>
     </div>
+    <details class="criteria" id="criteria" hidden open><summary>程序的判断依据</summary><ol id="criteria-list"></ol></details>
     <button class="export" id="export">导出结果</button>
     <div class="hint" id="progress"></div>
     <div class="hint">答案自动保存在本浏览器。导出后把文件位置告诉 Claude。</div>
@@ -76,7 +84,80 @@ const ns = "http://www.w3.org/2000/svg";
 const el = (tag, attrs, parent) => { const n = document.createElementNS(ns, tag); for (const k in attrs) n.setAttribute(k, attrs[k]); if (parent) parent.append(n); return n; };
 const px = (x, y) => [(x - data.map.pos_x) / data.map.scale, (data.map.pos_y - y) / data.map.scale];
 
-let current = 0, t = 0, playing = false, speed = 1, last = null;
+let current = 0, t = 0, playing = false, speed = 1, last = null, heat = "live";
+const HEAT_NAMES = { live: "实时威胁", potential: "可能威胁", threat: "程序用的威胁", map: "统计地图", off: "关" };
+let potVis = null;
+const floorImg = new Image();
+if (data.floor) { floorImg.onload = () => draw(); floorImg.src = `data:image/png;base64,${data.floor}`; }
+const liveCache = {};
+const bits64 = b64 => { const s = atob(b64); const a = new Uint8Array(s.length); for (let i = 0; i < s.length; i++) a[i] = s.charCodeAt(i); return a; };
+function segDist(ax, ay, az, bx, by, bz, cx, cy, cz) {
+  const dx = bx - ax, dy = by - ay, dz = bz - az, L = dx * dx + dy * dy + dz * dz;
+  let u = L ? ((cx - ax) * dx + (cy - ay) * dy + (cz - az) * dz) / L : 0; u = Math.max(0, Math.min(1, u));
+  return Math.hypot(ax + u * dx - cx, ay + u * dy - cy, az + u * dz - cz);
+}
+function liveFrame(item) {
+  const L = item.live; if (!L || !L.frames.length) return null;
+  const step = L.frames.length > 1 ? L.frames[1][0] - L.frames[0][0] : 0.25;
+  return Math.max(0, Math.min(L.frames.length - 1, Math.round((t - L.frames[0][0]) / step)));
+}
+// 某一帧的威胁热力图：与程序同样的算法（能看到的威胁按距离加权，烟挡住或墙后按 hidden 比例）
+// 可能威胁（与程序同算法）：显示格子 → 所在的可能威胁格子 k；Σ 能从 k 看到的格子 j 的可能 T 数 × 距离权重 × 权重
+function potentialAt(item, time) {
+  const P = data.potential, frames = item.live && item.live.potential;
+  if (!P || !frames || !frames.length) return null;
+  if (!potVis) potVis = bits64(P.vis);
+  let best = frames[0]; frames.forEach(f => { if (Math.abs(f[0] - time) < Math.abs(best[0] - time)) best = f; });
+  if (!best._v) { const raw = bits64(best[2]); best._v = Array.from(raw, b => b / 255 * best[1]); best._nz = best._v.map((v, j) => v > 0 ? j : -1).filter(j => j >= 0); }
+  return best;
+}
+function liveImage(item, fi, mode) {
+  const key = `${item.id}:${fi}:${mode}`; if (liveCache[key]) return liveCache[key];
+  if (!floorImg.complete || !floorImg.naturalWidth) return null;
+  const L = item.live, fr = L.frames[fi], q = data.threat_cfg, n = data.cells.rows;
+  const P = data.potential, pf = potentialAt(item, fr[0]), N = P ? P.centers.length : 0;
+  if (!L._bits) L._bits = L.vis.map(bits64);
+  const smokes = L.smokes.filter(sm => fr[0] >= sm[0] && fr[0] <= sm[1]);
+  const active = [...new Set(fr[1].map(r => r[0]))];
+  const can = document.createElement("canvas"); can.width = can.height = n;
+  const ctx = can.getContext("2d"), img = ctx.createImageData(n, n);
+  const cold = [90, 150, 255], mid = [255, 232, 150], hot = [235, 55, 55];
+  data.cells.cells.forEach(([r, c, x, y, z], i) => {
+    let v = 0; const ez = z + q.eye;
+    if (pf) {
+      const k = P.map[i];
+      pf._nz.forEach(j => {
+        const bit = k * N + j;
+        if (!((potVis[bit >> 3] >> (7 - (bit & 7))) & 1)) return;
+        if (smokes.length && smokes.some(sm => segDist(x, y, ez, P.centers[j][0], P.centers[j][1], (P.centers[j][2] ?? z) + q.eye, sm[2], sm[3], sm[4]) <= q.smoke_r)) return;
+        const d = Math.hypot(x - P.centers[j][0], y - P.centers[j][1]);
+        const w = d <= q.near ? 1 : Math.max(0, 1 - (d - q.near) / (q.far - q.near));
+        v += P.weight * pf._v[j] * w;
+      });
+    }
+    if (mode === "live") active.forEach(pi => {
+      const p = L.points[pi], sz = p[2] + q.eye, d = Math.hypot(x - p[0], y - p[1], ez - sz);
+      const w = d <= q.near ? 1 : Math.max(0, 1 - (d - q.near) / (q.far - q.near)); if (w <= 0) return;
+      let seen = (L._bits[pi][i >> 3] >> (7 - (i & 7))) & 1;
+      if (seen && smokes.some(sm => segDist(p[0], p[1], sz, x, y, ez, sm[2], sm[3], sm[4]) <= q.smoke_r)) seen = 0;
+      v += seen ? w : w * q.hidden;
+    });
+    const k = Math.min(1, v / 1.5), o = (r * n + c) * 4;
+    const col = k < 0.5 ? cold.map((a, j) => a * (1 - 2 * k) + mid[j] * 2 * k) : mid.map((a, j) => a * (2 - 2 * k) + hot[j] * (2 * k - 1));
+    img.data[o] = col[0]; img.data[o + 1] = col[1]; img.data[o + 2] = col[2]; img.data[o + 3] = 25 + 205 * k;
+  });
+  ctx.putImageData(img, 0, 0);
+  const big = document.createElement("canvas"); big.width = big.height = 512;
+  const b = big.getContext("2d"); b.imageSmoothingEnabled = true; b.drawImage(can, 0, 0, 512, 512);
+  b.globalCompositeOperation = "destination-in"; b.drawImage(floorImg, 0, 0, 512, 512);
+  return (liveCache[key] = big.toDataURL());
+}
+function marker(svg, source, a, b) {
+  if (source === "radar") el("path", { d: `M${a} ${b - 9}L${a + 9} ${b}L${a} ${b + 9}L${a - 9} ${b}Z`, fill: "none", stroke: "#ff9f1a", "stroke-width": 2.5 }, svg);
+  else if (source === "sound") el("circle", { cx: a, cy: b, r: 9, fill: "none", stroke: "#ffd84d", "stroke-width": 2.5, "stroke-dasharray": "3 2" }, svg);
+  else if (source === "gunshot") el("path", { d: `M${a - 8} ${b}L${a + 8} ${b}M${a} ${b - 8}L${a} ${b + 8}`, stroke: "#ffd84d", "stroke-width": 3 }, svg);
+  else el("path", { d: `M${a - 8} ${b - 8}L${a + 8} ${b + 8}M${a + 8} ${b - 8}L${a - 8} ${b + 8}`, stroke: "#ff4d4d", "stroke-width": 3.5 }, svg);
+}
 const replay = () => data.replays[data.items[current].id];
 const span = () => { const f = replay()?.frames || []; return f.length ? [f[0][0], f[f.length - 1][0]] : [0, 0]; };
 
@@ -101,7 +182,9 @@ function select(i) {
   $("title").textContent = `${item.id} · 第 ${item.round} 回合`;
   $("info").innerHTML = `<div>比赛：<b>${item.match}</b></div><div>要看：<b>${item.player}</b>（CT）</div>`
     + `<div>T 阵亡时他在：<b>${item.place || "未知"}</b></div><div>冻结期结束后第 ${item.round_time} 秒</div>`
+    + (item.direction !== undefined ? `<div>首杀方向：<b>${{A: "A", B: "B", Mid: "中路"}[item.direction] || "不归类（没有危险度）"}</b></div>` : "")
     + (item.focus ? `<div>${item.focus_note}：<b style="color:var(--accent)">${item.focus[0].toFixed(1)} 到 ${item.focus[1].toFixed(1)} 秒</b></div>` : "")
+    + (item.reveal ? `<div style="margin-top:8px;padding:8px;border:1px solid #f2a33a;border-radius:8px;color:var(--fg)">${item.reveal.map(x => `<div>${x}</div>`).join("")}</div>` : "")
     + (replay() ? "" : `<div style="color:#f77">这个窗口没有取到数据</div>`);
   const box = $("answers"); box.replaceChildren();
   LABELS.forEach(label => {
@@ -125,6 +208,34 @@ function frameAt(time) {
 function draw() {
   const svg = $("board"); svg.replaceChildren();
   el("image", { href: radar, width: 1024, height: 1024 }, svg);
+  const item = data.items[current];
+  const mode = (heat === "threat" || heat === "live" || heat === "potential") && !item.threat_png ? "map" : (heat === "live" || heat === "potential") && !item.live ? "threat" : heat;
+  if (mode === "live") {
+    const fi = liveFrame(item), url = fi === null ? null : liveImage(item, fi, "live");
+    if (url) el("image", { href: url, width: 1024, height: 1024, preserveAspectRatio: "none" }, svg);
+    if (fi !== null) item.live.frames[fi][1].forEach(([pi, source]) => { const p = item.live.points[pi]; marker(svg, source, p[3], p[4]); });
+  }
+  if ((mode === "live" || mode === "potential") && item.live && item.live.corners && item.live.corners.length) {
+    // 程序算出的"敌人会从这里出现"的拐角 / 门口：青色圈，越大分量越重
+    const cs = item.live.corners; let best = cs[0];
+    cs.forEach(f => { if (Math.abs(f[0] - t) < Math.abs(best[0] - t)) best = f; });
+    if (Math.abs(best[0] - t) <= 0.3) best[1].forEach(([a, b, w]) => el("circle", { cx: a, cy: b, r: 6 + 16 * w, fill: "none", stroke: "#2fe0d4", "stroke-width": 3 }, svg));
+  }
+  if (mode === "potential") {
+    const fi = liveFrame(item), url = fi === null ? null : liveImage(item, fi, "potential");
+    if (url) el("image", { href: url, width: 1024, height: 1024, preserveAspectRatio: "none" }, svg);
+    const pf = fi === null ? null : potentialAt(item, item.live.frames[fi][0]);
+    if (pf) { // 每个格子可能有几名 T：半透明橙点，越大越可能（已清的格子为 0，不画）
+      const P = data.potential, top = Math.max(...pf._v, 1e-9);
+      pf._nz.forEach(j => { const [a, b] = px(P.centers[j][0], P.centers[j][1]); el("circle", { cx: a, cy: b, r: 2 + 9 * Math.sqrt(pf._v[j] / top), fill: "#ff9f1a", "fill-opacity": .45 }, svg); });
+    }
+  }
+  const layer = (data.danger || {})[item.direction];
+  if (mode === "map" && layer) el("image", { href: `data:image/png;base64,${layer}`, width: 1024, height: 1024 }, svg);
+  if (mode === "threat") {
+    el("image", { href: `data:image/png;base64,${item.threat_png}`, width: 1024, height: 1024, preserveAspectRatio: "none" }, svg);
+    (item.threats || []).forEach(([source, a, b]) => marker(svg, source, a, b));
+  }
   const r = replay();
   if (!r) return;
   // 要看的 CT 的轨迹（到当前时刻）
@@ -151,6 +262,12 @@ function draw() {
     }
     const rad = yaw * Math.PI / 180;
     const len = me ? 46 : 22;
+    if (me && data.threat_cfg && heat !== "off") { // 第 7 版：准星前方 ±facing_angle 的扇形
+      const half = data.threat_cfg.facing_angle * Math.PI / 180, R = 170;
+      const a1 = rad - half, a2 = rad + half;
+      el("path", { d: `M${a} ${b}L${a + Math.cos(a1) * R} ${b - Math.sin(a1) * R}A${R} ${R} 0 0 0 ${a + Math.cos(a2) * R} ${b - Math.sin(a2) * R}Z`,
+                   fill: "#ffffff", "fill-opacity": .12, stroke: "#ffffff", "stroke-opacity": .5, "stroke-width": 1 }, svg);
+    }
     el("line", { x1: a, y1: b, x2: a + Math.cos(rad) * len, y2: b - Math.sin(rad) * len, stroke: me ? "#fff" : fill, "stroke-width": me ? 3 : 2 }, svg);
     el("circle", { cx: a, cy: b, r: me ? 11 : 7, fill, stroke: me ? "#fff" : "#000", "stroke-width": me ? 3 : 1 }, svg);
     if (me && firing) el("circle", { cx: a, cy: b, r: 17, fill: "none", stroke: "#fff", "stroke-width": 2 }, svg);
@@ -203,8 +320,24 @@ $("export").onclick = () => {
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob); a.download = `${data.pack}-results.json`; a.click();
 };
+if (data.danger && Object.keys(data.danger).length) {
+  $("heat").hidden = false; $("heat-legend").hidden = false;
+  const modes = data.items.some(i => i.live) ? (data.potential ? ["live", "potential", "threat", "map", "off"] : ["live", "threat", "map", "off"]) : data.items.some(i => i.threat_png) ? ["threat", "map", "off"] : ["map", "off"];
+  heat = modes[0]; $("heat").textContent = `危险度：${HEAT_NAMES[heat]}`;
+  $("heat").onclick = () => { heat = modes[(modes.indexOf(heat) + 1) % modes.length]; $("heat").textContent = `危险度：${HEAT_NAMES[heat]}`; draw(); };
+  if (data.items.some(i => i.threat_png)) $("threat-legend").hidden = false;
+}
+if (data.criteria) {
+  $("criteria").hidden = false;
+  data.criteria.forEach(line => { const li = document.createElement("li"); li.textContent = line; $("criteria-list").append(li); });
+}
 $("window-note").textContent = data.note ? `时间 0 = T 方第一个人阵亡。${data.note}` : `时间 0 = T 方第一个人阵亡；绿色时段是要判断的 ${data.window} 秒（判断他知道有人阵亡之后的动作；之前的几秒用来看他原来在做什么）`;
-select(0);
+// 地址后加 #i=条目序号&t=秒 可直接打开到某一条的某个时刻（检查用）
+const hash = new URLSearchParams(location.hash.slice(1));
+select(Math.max(0, Math.min(data.items.length - 1, Number(hash.get("i") || 0))));
+if (hash.has("h") && HEAT_NAMES[hash.get("h")]) { heat = hash.get("h"); $("heat").textContent = `危险度：${HEAT_NAMES[heat]}`; }
+if (hash.has("t")) t = Number(hash.get("t"));
+draw();
 requestAnimationFrame(tick);
 </script>
 </body>

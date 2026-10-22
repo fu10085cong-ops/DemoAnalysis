@@ -26,6 +26,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from cs2coach.config import load_config  # noqa: E402
+from cs2coach.research.paths import research_dir  # noqa: E402
 from cs2coach.parsing.loader import resolve_demo  # noqa: E402
 
 LABELS = {"保持": "hold", "前压": "advance", "后撤": "retreat", "横向调整": "lateral", "转点": "rotate", "看不出": "unknown"}
@@ -34,13 +35,13 @@ KEY = ["demo_id", "round_id", "player_id", "start_tick"]
 
 
 def _name(value: str) -> str:
-    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]*", value):
+    if not all(re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]*", part) for part in value.split("/")):
         raise ValueError(f"目录名无效：{value}")
     return value
 
 
 def _pack_dir(root: Path, name: str) -> Path:
-    return root / "data" / "research" / "review" / _name(name)
+    return research_dir("review", _name(name), root)
 
 
 def _windows(root: Path, source: str) -> pd.DataFrame:
