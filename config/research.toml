@@ -1,4 +1,4 @@
-# 研究线的参数（docs/research_roadmap.md）。2026-10-21 从 default.toml 拆出；
+# 研究线的参数（原研究路线图，已归档 docs/history/2026-10-research-roadmap.md；现方向见 docs/tactical-roadmap.md）。2026-10-21 从 default.toml 拆出；
 # 诊断程序（已冻结）的参数仍在 default.toml。两个文件由 cs2coach.config.load_config 合并读取，表名不能重复。
 # 所有数值都是待人工复核校准的工程假设，改动时在注释里写明日期和原因。
 

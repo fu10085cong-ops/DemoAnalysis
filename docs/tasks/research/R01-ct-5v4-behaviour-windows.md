@@ -7,13 +7,13 @@
 
 ## 目标
 
-研究路线图（`docs/research_roadmap.md`）第一个最小研究闭环的**数据层**：从职业 demo 中找出"CT 首次从 5v5 变为 5v4"的时刻，为当时存活的每名 CT 抽取 5 秒行为窗口，算出可复核的特征和初版行为标签，导出研究表。每一行都能追溯到原始 demo 和 tick 区间，并带游戏内跳转命令。
+研究路线图（已归档 `docs/history/2026-10-research-roadmap.md`）第一个最小研究闭环的**数据层**：从职业 demo 中找出"CT 首次从 5v5 变为 5v4"的时刻，为当时存活的每名 CT 抽取 5 秒行为窗口，算出可复核的特征和初版行为标签，导出研究表。每一行都能追溯到原始 demo 和 tick 区间，并带游戏内跳转命令。
 
 本任务**只产出数据和初版标签**，不做结果比较和结论（R02 起由 Claude 与产品负责人人工复核、校准后再做）。
 
 ## 背景（必须读）
 
-- `docs/research_roadmap.md` 2026-10-19 初版第 4.1、4.2、5.2–5.5 节（现行版见第 2、4 节）：分析单位、可追溯字段、`unknown` 原则、研究表字段
+- `docs/history/2026-10-research-roadmap.md` 2026-10-19 初版第 4.1、4.2、5.2–5.5 节（现行版见第 2、4 节）：分析单位、可追溯字段、`unknown` 原则、研究表字段
 - `docs/research_inventory.md` 第二、七节：可复用的模块和缺口
 - `src/cs2coach/parsing/match.py`：`parse_match`、`MatchData`（`ticks`、`state_at`、`player_ticks`、`kills`、`damages`、`shots`、`grenades`、`rounds`、`spotted_bit`）
 - `src/cs2coach/features/visibility.py::Sight`（`sees`：几何视线 + 视野 + 烟雾 + 闪白）

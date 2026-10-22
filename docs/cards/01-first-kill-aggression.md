@@ -1,6 +1,6 @@
 # 行为规律 01：拿下首杀后继续找人打——多换人，也多送人
 
-- **状态**：有初步证据（典型片段待人工确认：`data/research/review/checks/card-1`）
+- **状态**：有初步证据（典型片段 10/12 已由产品负责人确认；替换的 2 段待确认：`data/research/review/checks/card-1b`）
 - **研究记录**：`docs/tasks/research/R03-ai-post-fight-reposition.md`；路线图第 4 节
 
 ## 表述（可证伪）
@@ -82,14 +82,14 @@ Mirage，CT 拿下本回合首杀（5 打 4）后，这一波交战结束后的�
 
 ## 典型片段 / 反例
 
-12 段，全部来自顶级赛事，每段都是程序与 AI 同意的行为判断。回放页：`data/research/review/checks/card-1/replay.html`，跳转命令在页面里。
+12 段，全部来自顶级赛事，每段都是程序与 AI 同意的行为判断。回放页：`data/research/review/checks/card-1/replay.html`（第一批）、`card-1b`（替换），跳转命令在页面里。产品负责人确认 10 段合适；反例中 Matheos、alex 两段不合适，换成 donk、Grim（待确认）。
 
 | 类别 | 选手 | 位置 | 后果 |
 |---|---|---|---|
 | 激进且换到人 | Jame（狙）、kensizor、phzy | 接触区、B 主防、A 主防 | 10 秒内又击杀，回合 CT 赢 |
 | 激进但白送 | tN1R、insani、onic | A 主防、中路、接触区 | 很快阵亡，没有再击杀 |
 | 保守、活下来后又拿到击杀 | woxic（狙）、dex、b1t | 接触区、中路、后方 | 活到回合结束 |
-| 保守也没躲过（反例） | Matheos、alex、kyxsan | 接触区、中路、A 主防 | 仍然阵亡 |
+| 保守也没躲过（反例） | kyxsan；donk、Grim（待确认） | A 主防；中路、接触区 | 仍然阵亡 |
 
 ## 给普通玩家
 
